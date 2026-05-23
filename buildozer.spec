@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,json
 source.main = main.py
 
 # Dependências — requests já vem com certifi e urllib3
-requirements = python3==3.11,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
+requirements = python3==3.11,hostpython3==3.11,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
 
 # Orientação e tela
 orientation = portrait
