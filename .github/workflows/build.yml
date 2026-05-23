@@ -13,32 +13,31 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Instalar Python 3.11 e dependencias
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar dependencias
       run: |
         sudo apt-get update
-        sudo apt-get install -y python3.11 python3.11-dev python3.11-venv python3-pip \
+        sudo apt-get install -y \
           git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
-        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
-    - name: Instalar Buildozer e Cython
+    - name: Instalar Buildozer mais recente e Cython
       run: |
-        python3.11 -m pip install --upgrade pip
-        python3.11 -m pip install buildozer==1.5.0 cython==0.29.33
+        pip install --upgrade pip
+        pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Instalar build-tools 37 e aceitar licencas
+    - name: Aceitar licencas SDK
       run: |
-        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        # Aceita todas as licencas
-        yes | $SDKMANAGER --licenses || true
-        # Instala exatamente o que o Buildozer pede
-        $SDKMANAGER \
+        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
           "platforms;android-33" \
-          "build-tools;37.0.0" \
-          "platform-tools"
-        # Verifica que o aidl existe
-        find $ANDROID_SDK_ROOT/build-tools -name "aidl" 2>/dev/null
+          "build-tools;33.0.2" \
+          "build-tools;34.0.0" \
+          "platform-tools" || true
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -51,13 +50,11 @@ jobs:
       env:
         ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
         ANDROIDNDK: ${{ env.ANDROID_NDK_ROOT }}
-        ANDROIDAPI: "33"
-        ANDROIDMINAPI: "24"
       run: |
-        python3.11 -m buildozer android debug 2>&1 | tee build.log
-        find . -name "*.apk" 2>/dev/null || echo "Nenhum APK gerado"
+        buildozer android debug 2>&1 | tee build.log
+        find bin/ -name "*.apk" 2>/dev/null && echo "APK GERADO!" || echo "Sem APK"
 
-    - name: Salvar APK
+    - name: Salvar resultado
       uses: actions/upload-artifact@v4
       if: always()
       with:
