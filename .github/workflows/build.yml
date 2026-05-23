@@ -23,18 +23,8 @@ jobs:
 
     - name: Forcar python3 -> 3.11 em todo o sistema
       run: |
-        # Cria wrappers com prioridade maxima
-        echo '#!/bin/bash' | sudo tee /usr/local/bin/python3
-        echo 'exec /usr/bin/python3.11 "$@"' | sudo tee -a /usr/local/bin/python3
-        sudo chmod +x /usr/local/bin/python3
-        
-        echo '#!/bin/bash' | sudo tee /usr/local/bin/python
-        echo 'exec /usr/bin/python3.11 "$@"' | sudo tee -a /usr/local/bin/python
-        sudo chmod +x /usr/local/bin/python
-        
-        # Substitui o python3 do sistema diretamente
-        sudo cp /usr/bin/python3.11 /usr/bin/python3
-        
+        sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
+        sudo ln -sf /usr/bin/python3.11 /usr/bin/python
         python3 --version
         python --version
 
