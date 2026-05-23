@@ -20,6 +20,7 @@ android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL
 # Android SDK
 android.minapi = 24
 android.sdk = 33
+android.build_tools_version = 33.0.2
 android.ndk = 25b
 android.ndk_api = 21
 android.archs = arm64-v8a
