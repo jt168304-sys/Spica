@@ -30,11 +30,24 @@ jobs:
         pip install --upgrade pip
         pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Aceitar licencas SDK
+    - name: Aceitar licencas SDK do sistema
       run: |
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-33" "build-tools;33.0.2" "platform-tools" || true
+
+    - name: Pre-aceitar licencas do Buildozer
+      run: |
+        # Cria os arquivos de licenca que o Buildozer vai precisar
+        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
+        # Licenca padrao do Android SDK
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo -e "\n859f317696f67ef3d7f30a50a5560e7834b43903" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        # Licenca do Android SDK Preview
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        # Licenca do NDK
+        echo -e "\n504667f4c0de7af1a06de9f4b1727b84351f2910" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
+        echo "Licencas criadas!"
+        ls ~/.buildozer/android/platform/android-sdk/licenses/
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -47,14 +60,15 @@ jobs:
       run: |
         buildozer android debug 2>&1 | tee build.log
 
-    - name: Encontrar e copiar APK
+    - name: Encontrar APK
       if: always()
       run: |
-        echo "=== Buscando APKs ==="
-        find . -name "*.apk" 2>/dev/null
         mkdir -p bin
-        find . -name "*.apk" -exec cp {} bin/ \; 2>/dev/null || true
-        ls -la bin/ || echo "Pasta bin vazia"
+        find . -name "*.apk" 2>/dev/null | while read f; do
+          echo "APK encontrado: $f"
+          cp "$f" bin/
+        done
+        ls -lh bin/ || echo "Nenhum APK"
 
     - name: Salvar APK
       uses: actions/upload-artifact@v4
