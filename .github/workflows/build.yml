@@ -25,7 +25,7 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
-    - name: Instalar Buildozer mais recente e Cython
+    - name: Instalar Buildozer e Cython
       run: |
         pip install --upgrade pip
         pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
@@ -34,10 +34,7 @@ jobs:
       run: |
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-33" \
-          "build-tools;33.0.2" \
-          "build-tools;34.0.0" \
-          "platform-tools" || true
+          "platforms;android-33" "build-tools;33.0.2" "platform-tools" || true
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -47,19 +44,24 @@ jobs:
         restore-keys: buildozer-
 
     - name: Compilar APK
-      env:
-        ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
-        ANDROIDNDK: ${{ env.ANDROID_NDK_ROOT }}
       run: |
         buildozer android debug 2>&1 | tee build.log
-        find bin/ -name "*.apk" 2>/dev/null && echo "APK GERADO!" || echo "Sem APK"
 
-    - name: Salvar resultado
+    - name: Encontrar e copiar APK
+      if: always()
+      run: |
+        echo "=== Buscando APKs ==="
+        find . -name "*.apk" 2>/dev/null
+        mkdir -p bin
+        find . -name "*.apk" -exec cp {} bin/ \; 2>/dev/null || true
+        ls -la bin/ || echo "Pasta bin vazia"
+
+    - name: Salvar APK
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: WindIA-APK
         path: |
-          bin/*.apk
+          bin/
           build.log
         retention-days: 7
