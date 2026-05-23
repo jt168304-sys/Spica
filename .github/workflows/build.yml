@@ -27,17 +27,18 @@ jobs:
         python3.11 -m pip install --upgrade pip
         python3.11 -m pip install buildozer==1.5.0 cython==0.29.33
 
-    - name: Configurar Android SDK completo
+    - name: Instalar build-tools 37 e aceitar licencas
       run: |
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        # Aceita TODAS as licencas de uma vez
-        yes | $SDKMANAGER --licenses
-        # Instala build-tools na versao que o Buildozer vai usar
+        # Aceita todas as licencas
+        yes | $SDKMANAGER --licenses || true
+        # Instala exatamente o que o Buildozer pede
         $SDKMANAGER \
           "platforms;android-33" \
-          "build-tools;30.0.3" \
-          "build-tools;33.0.2" \
+          "build-tools;37.0.0" \
           "platform-tools"
+        # Verifica que o aidl existe
+        find $ANDROID_SDK_ROOT/build-tools -name "aidl" 2>/dev/null
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -54,8 +55,7 @@ jobs:
         ANDROIDMINAPI: "24"
       run: |
         python3.11 -m buildozer android debug 2>&1 | tee build.log
-        echo "=== APKs gerados ==="
-        find . -name "*.apk" 2>/dev/null || echo "Nenhum APK encontrado"
+        find . -name "*.apk" 2>/dev/null || echo "Nenhum APK gerado"
 
     - name: Salvar APK
       uses: actions/upload-artifact@v4
