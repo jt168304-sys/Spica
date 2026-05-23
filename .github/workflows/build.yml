@@ -17,6 +17,13 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Configurar git sem prompt de credenciais
+      run: |
+        git config --global credential.helper ""
+        git config --global url."https://github.com/".insteadOf "git://github.com/"
+        git config --global core.askPass ""
+        git config --global GIT_TERMINAL_PROMPT 0
+
     - name: Instalar dependencias
       run: |
         sudo apt-get update
@@ -30,24 +37,17 @@ jobs:
         pip install --upgrade pip
         pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Aceitar licencas SDK do sistema
+    - name: Aceitar licencas SDK
       run: |
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
     - name: Pre-aceitar licencas do Buildozer
       run: |
-        # Cria os arquivos de licenca que o Buildozer vai precisar
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        # Licenca padrao do Android SDK
         echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo -e "\n859f317696f67ef3d7f30a50a5560e7834b43903" >> ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        # Licenca do Android SDK Preview
         echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        # Licenca do NDK
-        echo -e "\n504667f4c0de7af1a06de9f4b1727b84351f2910" > ~/.buildozer/android/platform/android-sdk/licenses/android-googletv-license
-        echo "Licencas criadas!"
-        ls ~/.buildozer/android/platform/android-sdk/licenses/
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -57,6 +57,9 @@ jobs:
         restore-keys: buildozer-
 
     - name: Compilar APK
+      env:
+        GIT_TERMINAL_PROMPT: "0"
+        GIT_ASKPASS: "echo"
       run: |
         buildozer android debug 2>&1 | tee build.log
 
@@ -65,10 +68,10 @@ jobs:
       run: |
         mkdir -p bin
         find . -name "*.apk" 2>/dev/null | while read f; do
-          echo "APK encontrado: $f"
+          echo "APK: $f"
           cp "$f" bin/
         done
-        ls -lh bin/ || echo "Nenhum APK"
+        ls -lh bin/ || echo "Sem APK"
 
     - name: Salvar APK
       uses: actions/upload-artifact@v4
