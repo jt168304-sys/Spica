@@ -13,31 +13,36 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Instalar Python 3.11 e remover versoes mais novas
+    - name: Instalar Python 3.11
       run: |
         sudo apt-get update
         sudo apt-get install -y python3.11 python3.11-dev python3.11-venv \
           git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
-        # Remove versoes Python mais novas que possam interferir
-        sudo apt-get remove -y python3.12 python3.13 python3.14 2>/dev/null || true
-        # Define python3 como 3.11 com prioridade maxima
-        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 999
-        sudo update-alternatives --set python3 /usr/bin/python3.11
-        sudo ln -sf /usr/bin/python3.11 /usr/bin/python
-        hash -r
+
+    - name: Forcar python3 -> 3.11 em todo o sistema
+      run: |
+        # Cria wrappers com prioridade maxima
+        echo '#!/bin/bash' | sudo tee /usr/local/bin/python3
+        echo 'exec /usr/bin/python3.11 "$@"' | sudo tee -a /usr/local/bin/python3
+        sudo chmod +x /usr/local/bin/python3
+        
+        echo '#!/bin/bash' | sudo tee /usr/local/bin/python
+        echo 'exec /usr/bin/python3.11 "$@"' | sudo tee -a /usr/local/bin/python
+        sudo chmod +x /usr/local/bin/python
+        
+        # Substitui o python3 do sistema diretamente
+        sudo cp /usr/bin/python3.11 /usr/bin/python3
+        
         python3 --version
-        which python3
+        python --version
 
-    - name: Instalar pip para python3.11
+    - name: Instalar pip e ferramentas
       run: |
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-        python3.11 -m pip install --upgrade pip
-
-    - name: Instalar Buildozer e Cython
-      run: |
-        python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+        pip install --upgrade pip
+        pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
     - name: Aceitar licencas SDK
       run: |
@@ -61,8 +66,7 @@ jobs:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
       run: |
-        python3.11 -m buildozer --profile android android debug 2>&1 | tee build.log || \
-        python3.11 ~/.local/bin/buildozer android debug 2>&1 | tee build.log
+        buildozer android debug 2>&1 | tee build.log
 
     - name: Encontrar APK
       if: always()
