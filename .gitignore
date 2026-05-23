@@ -1,0 +1,9 @@
+# Ignorar arquivos que não devem ir para o GitHub
+__pycache__/
+*.pyc
+*.pyo
+.buildozer/
+bin/
+data/
+.kivy/
+*.log
