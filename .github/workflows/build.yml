@@ -8,54 +8,37 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    container:
+      image: kivy/buildozer:latest
     timeout-minutes: 90
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Instalar Python 3.11 como padrao do sistema
+    - name: Verificar ambiente
       run: |
-        sudo apt-get update
-        sudo apt-get install -y python3.11 python3.11-dev python3.11-venv \
-          python3-pip git zip unzip openjdk-17-jdk autoconf libtool \
-          pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
-          cmake libffi-dev libssl-dev build-essential ccache
-        # Forca python3 e python apontarem para 3.11
-        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2
-        sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 2
-        sudo ln -sf /usr/bin/python3.11 /usr/local/bin/python3
-        sudo ln -sf /usr/bin/python3.11 /usr/local/bin/python
         python3 --version
-        python --version
+        buildozer --version
 
-    - name: Instalar Buildozer e Cython
+    - name: Pre-aceitar licencas
       run: |
-        python3.11 -m pip install --upgrade pip
-        python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
-
-    - name: Aceitar licencas SDK
-      run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-    - name: Pre-aceitar licencas do Buildozer
-      run: |
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n859f317696f67ef3d7f30a50a5560e7834b43903" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        printf "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        mkdir -p /root/.buildozer/android/platform/android-sdk/licenses
+        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n859f317696f67ef3d7f30a50a5560e7834b43903" > /root/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        printf "\n84831b9409646a918e30573bab4c9c91346d8abd" > /root/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
     - name: Cache Buildozer
       uses: actions/cache@v4
       with:
-        path: ~/.buildozer
-        key: buildozer-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-
+        path: /root/.buildozer
+        key: buildozer-docker-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-docker-
 
     - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
       run: |
-        python3.11 -m buildozer android debug 2>&1 | tee build.log
+        buildozer android debug 2>&1 | tee build.log
 
     - name: Encontrar APK
       if: always()
