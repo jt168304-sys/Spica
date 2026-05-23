@@ -13,28 +13,31 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Instalar Python 3.11 do sistema
+    - name: Instalar Python 3.11 e dependencias
       run: |
         sudo apt-get update
         sudo apt-get install -y python3.11 python3.11-dev python3.11-venv python3-pip \
-          git zip unzip openjdk-17-jdk \
-          autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev \
-          libtinfo5 cmake libffi-dev libssl-dev \
-          build-essential ccache
+          git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
+          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
+          cmake libffi-dev libssl-dev build-essential ccache
         sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-        python3 --version
 
     - name: Instalar Buildozer e Cython
       run: |
         python3.11 -m pip install --upgrade pip
         python3.11 -m pip install buildozer==1.5.0 cython==0.29.33
 
-    - name: Aceitar licencas SDK
+    - name: Configurar Android SDK completo
       run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-33" "build-tools;33.0.2" "platform-tools" || true
+        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        # Aceita TODAS as licencas de uma vez
+        yes | $SDKMANAGER --licenses
+        # Instala build-tools na versao que o Buildozer vai usar
+        $SDKMANAGER \
+          "platforms;android-33" \
+          "build-tools;30.0.3" \
+          "build-tools;33.0.2" \
+          "platform-tools"
 
     - name: Cache Buildozer
       uses: actions/cache@v4
@@ -51,6 +54,8 @@ jobs:
         ANDROIDMINAPI: "24"
       run: |
         python3.11 -m buildozer android debug 2>&1 | tee build.log
+        echo "=== APKs gerados ==="
+        find . -name "*.apk" 2>/dev/null || echo "Nenhum APK encontrado"
 
     - name: Salvar APK
       uses: actions/upload-artifact@v4
