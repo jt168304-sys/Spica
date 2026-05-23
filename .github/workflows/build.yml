@@ -17,13 +17,6 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Configurar git sem prompt de credenciais
-      run: |
-        git config --global credential.helper ""
-        git config --global url."https://github.com/".insteadOf "git://github.com/"
-        git config --global core.askPass ""
-        git config --global GIT_TERMINAL_PROMPT 0
-
     - name: Instalar dependencias
       run: |
         sudo apt-get update
