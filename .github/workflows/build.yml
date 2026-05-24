@@ -21,18 +21,12 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
-    - name: Criar wrapper python3 que aponta para 3.11
+    - name: Criar wrapper python3 -> 3.11
       run: |
-        # Nao toca no binario em uso — cria wrapper no inicio do PATH
         sudo mkdir -p /opt/python311-wrapper
         printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python3
         printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python
-        sudo chmod +x /opt/python311-wrapper/python3
-        sudo chmod +x /opt/python311-wrapper/python
-        # Coloca no INICIO do PATH para ter prioridade maxima
-        echo 'export PATH="/opt/python311-wrapper:$PATH"' >> $GITHUB_ENV
-        export PATH="/opt/python311-wrapper:$PATH"
-        python3 --version
+        sudo chmod +x /opt/python311-wrapper/python3 /opt/python311-wrapper/python
 
     - name: Instalar pip e buildozer
       run: |
@@ -64,25 +58,27 @@ jobs:
         GIT_ASKPASS: "echo"
       run: |
         export PATH="/opt/python311-wrapper:$PATH"
-        python3 --version
         python3 -m buildozer android debug 2>&1 | tee build.log
 
-    - name: Encontrar APK
+    - name: Localizar e copiar APK
       if: always()
       run: |
-        mkdir -p bin
-        find . -name "*.apk" 2>/dev/null | while read f; do
-          echo "APK encontrado: $f"
-          cp "$f" bin/
-        done
-        ls -lh bin/ || echo "Sem APK"
+        echo "=== Todos os APKs no sistema ==="
+        find /home/runner /root 2>/dev/null -name "*.apk" -ls
+        echo "=== APKs no workspace ==="
+        find $GITHUB_WORKSPACE -name "*.apk" -ls 2>/dev/null
+        # Copia qualquer APK encontrado para artifacts/
+        mkdir -p artifacts
+        find /home/runner -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
+        find $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
+        cp build.log artifacts/
+        echo "=== Conteudo de artifacts/ ==="
+        ls -lh artifacts/
 
-    - name: Salvar resultado
+    - name: Salvar artefatos
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: WindIA-APK
-        path: |
-          bin/
-          build.log
+        path: artifacts/
         retention-days: 7
