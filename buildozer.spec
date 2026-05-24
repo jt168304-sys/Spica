@@ -7,7 +7,8 @@ source.dir = .
 source.include_exts = py,png,jpg,json
 source.main = main.py
 
-requirements = python3==3.11.0,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
+# Sem pinagem de python3 — p4a usa automaticamente a versao do host
+requirements = python3,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
 
 orientation = portrait
 fullscreen = 0
