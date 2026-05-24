@@ -21,19 +21,22 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
-    - name: Forcar python3 -> 3.11 em todo o sistema
+    - name: Criar wrapper python3 que aponta para 3.11
       run: |
-        # Copia o binario (mais confiavel que symlink)
-        sudo cp /usr/bin/python3.11 /usr/bin/python3
-        sudo cp /usr/bin/python3.11 /usr/bin/python
-        sudo cp /usr/bin/python3.11 /usr/local/bin/python3
-        sudo cp /usr/bin/python3.11 /usr/local/bin/python
-        hash -r
+        # Nao toca no binario em uso — cria wrapper no inicio do PATH
+        sudo mkdir -p /opt/python311-wrapper
+        printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python3
+        printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python
+        sudo chmod +x /opt/python311-wrapper/python3
+        sudo chmod +x /opt/python311-wrapper/python
+        # Coloca no INICIO do PATH para ter prioridade maxima
+        echo 'export PATH="/opt/python311-wrapper:$PATH"' >> $GITHUB_ENV
+        export PATH="/opt/python311-wrapper:$PATH"
         python3 --version
-        /usr/bin/python3 --version
 
     - name: Instalar pip e buildozer
       run: |
+        export PATH="/opt/python311-wrapper:$PATH"
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3
         pip install --upgrade pip
         pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
@@ -60,7 +63,8 @@ jobs:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
       run: |
-        # Usa python3.11 explicitamente para garantir versao correta
+        export PATH="/opt/python311-wrapper:$PATH"
+        python3 --version
         python3 -m buildozer android debug 2>&1 | tee build.log
 
     - name: Encontrar APK
