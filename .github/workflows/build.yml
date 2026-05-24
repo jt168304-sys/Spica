@@ -23,12 +23,16 @@ jobs:
 
     - name: Forcar python3 -> 3.11 em todo o sistema
       run: |
-        sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
-        sudo ln -sf /usr/bin/python3.11 /usr/bin/python
+        # Copia o binario (mais confiavel que symlink)
+        sudo cp /usr/bin/python3.11 /usr/bin/python3
+        sudo cp /usr/bin/python3.11 /usr/bin/python
+        sudo cp /usr/bin/python3.11 /usr/local/bin/python3
+        sudo cp /usr/bin/python3.11 /usr/local/bin/python
+        hash -r
         python3 --version
-        python --version
+        /usr/bin/python3 --version
 
-    - name: Instalar pip e ferramentas
+    - name: Instalar pip e buildozer
       run: |
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3
         pip install --upgrade pip
@@ -56,19 +60,20 @@ jobs:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
       run: |
-        buildozer android debug 2>&1 | tee build.log
+        # Usa python3.11 explicitamente para garantir versao correta
+        python3 -m buildozer android debug 2>&1 | tee build.log
 
     - name: Encontrar APK
       if: always()
       run: |
         mkdir -p bin
         find . -name "*.apk" 2>/dev/null | while read f; do
-          echo "APK: $f"
+          echo "APK encontrado: $f"
           cp "$f" bin/
         done
         ls -lh bin/ || echo "Sem APK"
 
-    - name: Salvar APK
+    - name: Salvar resultado
       uses: actions/upload-artifact@v4
       if: always()
       with:
