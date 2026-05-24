@@ -10,6 +10,10 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+# 🛠️ CORREÇÃO AQUI: Força o teclado a empurrar o app mantendo o foco visível
+from kivy.core.window import Window
+Window.softinput_mode = 'below_target'
+
 from src.core.app_manager import WindApp
 
 if __name__ == "__main__":
