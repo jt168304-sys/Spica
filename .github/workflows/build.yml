@@ -46,56 +46,43 @@ jobs:
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
         python3.11 -m pip install git+https://github.com/kivy/python-for-android.git@develop
 
+    - name: Criar script de patch
+      run: |
+        cat > /usr/local/bin/patch_grp.py << 'PYEOF'
+        import glob, re
+        files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
+        for fname in files:
+            with open(fname, 'r') as f:
+                content = f.read()
+            if 'setgrent' in content and '__ANDROID__' not in content:
+                content = content.replace('setgrent();', '/* setgrent(); */')
+                content = re.sub(r'while \(\(gr = getgrent\(\)\) != NULL\)', 'while (0)', content)
+                content = content.replace('endgrent();', '/* endgrent(); */')
+                with open(fname, 'w') as f:
+                    f.write(content)
+                print(f"Patched: {fname}")
+        PYEOF
+        chmod +x /usr/local/bin/patch_grp.py
+
     - name: Cache p4a
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v14-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v14-
+        key: buildozer-v15-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v15-
 
-    - name: Compilar APK - fase 1 download
+    - name: Download dependencias p4a
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
         ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
         ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
-      run: |
-        python3.11 -m buildozer android debug 2>&1 | tee build.log || true
+      run: python3.11 -m buildozer android debug 2>&1 | tee build.log || true
 
-    - name: Patch grpmodule.c
-      run: |
-        find ~/.buildozer -name "grpmodule.c" 2>/dev/null | while read f; do
-          echo "Patchando: $f"
-          python3.11 - << 'PYEOF'
-import sys
-fname = sys.argv[1] if len(sys.argv) > 1 else None
-import glob
-files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
-for fname in files:
-    with open(fname, 'r') as f:
-        content = f.read()
-    patched = content.replace(
-        '#include "grpmodule.c"', '#include "grpmodule.c"'
-    )
-    # Adicionar guard no inicio do arquivo
-    if '#ifdef __ANDROID__' not in content:
-        patched = content.replace(
-            'setgrent();',
-            '/* setgrent(); - not available on Android */'
-        ).replace(
-            'while ((gr = getgrent()) != NULL)',
-            'while (0 && (gr = NULL))'
-        ).replace(
-            'endgrent();',
-            '/* endgrent(); - not available on Android */'
-        )
-        with open(fname, 'w') as f:
-            f.write(patched)
-        print(f"Patched: {fname}")
-PYEOF
-        done
+    - name: Aplicar patch grpmodule
+      run: python3.11 /usr/local/bin/patch_grp.py
 
-    - name: Compilar APK - fase 2 build final
+    - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
