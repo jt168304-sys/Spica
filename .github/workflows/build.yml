@@ -29,44 +29,40 @@ jobs:
 
     - name: Preparar Android SDK
       run: |
-        SDK=$ANDROID_SDK_ROOT
+        SDK=/usr/local/lib/android/sdk
         SDKMANAGER=$SDK/cmdline-tools/latest/bin/sdkmanager
 
         # Aceitar todas as licencas
         yes | $SDKMANAGER --licenses || true
 
-        # Instalar build-tools 33.0.2 e platform-tools
+        # Instalar build-tools e plataforma
         $SDKMANAGER "build-tools;33.0.2" "platforms;android-33" "platform-tools" || true
 
-        # Fake 'android' binary (nao existe no SDK moderno)
+        # Fake 'android' binary
         mkdir -p $SDK/tools/bin
         printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/android
         printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/bin/android
         sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
 
-        # Symlink aidl para PATH
-        AIDL=$(find $SDK/build-tools -name "aidl" 2>/dev/null | head -1)
-        echo "aidl encontrado: $AIDL"
-        sudo ln -sf $AIDL /usr/local/bin/aidl 2>/dev/null || true
+        # Symlink aidl
+        AIDL=$(find $SDK/build-tools/33.0.2 -name "aidl" 2>/dev/null | head -1)
+        echo "aidl: $AIDL"
+        sudo ln -sf $AIDL /usr/local/bin/aidl
 
-        echo "Build-tools instalados:"
+        echo "Pronto. build-tools:"
         ls $SDK/build-tools/
 
-    - name: Cache Buildozer
+    - name: Cache p4a
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v6-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v6-
+        key: buildozer-v7-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v7-
 
     - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
-        ANDROIDSDK: "/usr/local/lib/android/sdk"
-        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/27.3.13750724"
-        ANDROIDAPI: "33"
-        ANDROIDMINAPI: "24"
       run: |
         set -o pipefail
         python3.11 -m buildozer android debug 2>&1 | tee build.log
