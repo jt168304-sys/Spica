@@ -42,7 +42,6 @@ jobs:
     - name: Pre-aceitar licencas Buildozer
       run: |
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        cp -r $ANDROID_SDK_ROOT/licenses/. ~/.buildozer/android/platform/android-sdk/licenses/ 2>/dev/null || true
         printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n859f317696f67ef3d7f30a50a5560e7834b43903" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         printf "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
 
@@ -50,21 +49,27 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v3-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v3-
+        key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v4-
+
+    - name: Preparar sdkmanager para buildozer
+      run: |
+        # Buildozer espera sdkmanager em tools/bin/ mas no runner fica em cmdline-tools/
+        SDK_DIR=~/.buildozer/android/platform/android-sdk
+        mkdir -p $SDK_DIR/tools/bin
+        # Symlink do sdkmanager do sistema para onde buildozer espera
+        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
+        # Copiar licencas do SDK do sistema
+        cp -r $ANDROID_SDK_ROOT/licenses/. $SDK_DIR/licenses/ 2>/dev/null || true
+        echo "sdkmanager OK: $(ls -la $SDK_DIR/tools/bin/sdkmanager)"
 
     - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
-        ANDROIDSDK: ${{ env.ANDROID_SDK_ROOT }}
-        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/27.3.13750724"
-        ANDROIDAPI: "33"
-        ANDROIDMINAPI: "24"
       run: |
         export PATH="/opt/python311-wrapper:$PATH"
-        export ANDROIDSDK="$ANDROID_SDK_ROOT"
-        export ANDROIDNDK="/usr/local/lib/android/sdk/ndk/27.3.13750724"
+        export ANDROIDSDK=~/.buildozer/android/platform/android-sdk
         set -o pipefail
         python3 -m buildozer android debug 2>&1 | tee build.log
 
