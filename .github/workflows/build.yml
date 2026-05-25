@@ -27,27 +27,37 @@ jobs:
         python3.11 -m pip install --upgrade pip
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Preparar Android SDK para buildozer
+    - name: Preparar Android SDK
       run: |
         SDK=$ANDROID_SDK_ROOT
-        # Buildozer precisa do binario 'android' que nao existe no SDK moderno
+        SDKMANAGER=$SDK/cmdline-tools/latest/bin/sdkmanager
+
+        # Aceitar todas as licencas
+        yes | $SDKMANAGER --licenses || true
+
+        # Instalar build-tools 33.0.2 e platform-tools
+        $SDKMANAGER "build-tools;33.0.2" "platforms;android-33" "platform-tools" || true
+
+        # Fake 'android' binary (nao existe no SDK moderno)
         mkdir -p $SDK/tools/bin
-        # Fake 'android' binary
         printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/android
         printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/bin/android
         sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
-        # Symlink sdkmanager
-        ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager 2>/dev/null || true
-        # Aceitar licencas
-        yes | $SDK/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        echo "SDK pronto: $(ls $SDK/tools/)"
+
+        # Symlink aidl para PATH
+        AIDL=$(find $SDK/build-tools -name "aidl" 2>/dev/null | head -1)
+        echo "aidl encontrado: $AIDL"
+        sudo ln -sf $AIDL /usr/local/bin/aidl 2>/dev/null || true
+
+        echo "Build-tools instalados:"
+        ls $SDK/build-tools/
 
     - name: Cache Buildozer
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v5-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v5-
+        key: buildozer-v6-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v6-
 
     - name: Compilar APK
       env:
