@@ -21,43 +21,25 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
+    - name: Configurar Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        cmdline-tools-version: latest
+        accept-android-sdk-licenses: true
+        packages: "build-tools;33.0.2 platforms;android-33 platform-tools ndk;25.2.9519653"
+
     - name: Instalar pip e buildozer
       run: |
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
         python3.11 -m pip install --upgrade pip
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Preparar Android SDK
-      run: |
-        SDK=/usr/local/lib/android/sdk
-        SDKMANAGER=$SDK/cmdline-tools/latest/bin/sdkmanager
-
-        # Aceitar todas as licencas
-        yes | $SDKMANAGER --licenses || true
-
-        # Instalar build-tools e plataforma
-        $SDKMANAGER "build-tools;33.0.2" "platforms;android-33" "platform-tools" || true
-
-        # Fake 'android' binary
-        mkdir -p $SDK/tools/bin
-        printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/android
-        printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/bin/android
-        sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
-
-        # Symlink aidl
-        AIDL=$(find $SDK/build-tools/33.0.2 -name "aidl" 2>/dev/null | head -1)
-        echo "aidl: $AIDL"
-        sudo ln -sf $AIDL /usr/local/bin/aidl
-
-        echo "Pronto. build-tools:"
-        ls $SDK/build-tools/
-
     - name: Cache p4a
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v7-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v7-
+        key: buildozer-v8-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v8-
 
     - name: Compilar APK
       env:
