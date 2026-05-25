@@ -7,17 +7,13 @@ source.dir = .
 source.include_exts = py,png,jpg,json
 source.main = main.py
 
-# Dependências
 requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
 
-# Orientação e tela
 orientation = portrait
 fullscreen = 0
 
-# Permissões necessárias
 android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE
 
-# Android SDK
 android.sdk_path = /usr/local/lib/android/sdk
 android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653
 android.skip_update = True
@@ -29,8 +25,9 @@ android.build_tools_version = 33.0.2
 android.ndk = 25b
 android.ndk_api = 21
 android.archs = arm64-v8a
-
 android.allow_backup = True
+
+p4a.branch = develop
 
 [buildozer]
 log_level = 2
