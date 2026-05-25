@@ -50,7 +50,7 @@ jobs:
       with:
         path: ~/.buildozer
         key: buildozer-v2-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-
+        restore-keys: buildozer-v2-
 
     - name: Compilar APK
       env:
@@ -58,20 +58,17 @@ jobs:
         GIT_ASKPASS: "echo"
       run: |
         export PATH="/opt/python311-wrapper:$PATH"
+        set -o pipefail
         python3 -m buildozer android debug 2>&1 | tee build.log
 
     - name: Localizar e copiar APK
       if: always()
       run: |
-        echo "=== Todos os APKs no sistema ==="
-        find /home/runner /root 2>/dev/null -name "*.apk" -ls
-        echo "=== APKs no workspace ==="
-        find $GITHUB_WORKSPACE -name "*.apk" -ls 2>/dev/null
-        # Copia qualquer APK encontrado para artifacts/
         mkdir -p artifacts
-        find /home/runner -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
-        find $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
-        cp build.log artifacts/
+        cp build.log artifacts/ 2>/dev/null || true
+        echo "=== APKs encontrados ==="
+        find /home/runner $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null | tee -a artifacts/apk_list.txt
+        find /home/runner $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
         echo "=== Conteudo de artifacts/ ==="
         ls -lh artifacts/
 
