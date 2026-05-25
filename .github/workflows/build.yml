@@ -44,13 +44,14 @@ jobs:
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
         python3.11 -m pip install --upgrade pip
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
-        python3.11 -m pip install git+https://github.com/kivy/python-for-android.git@develop
 
     - name: Criar script de patch
       run: |
         cat > /usr/local/bin/patch_grp.py << 'PYEOF'
-        import glob, re
+        import glob, re, os
         files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
+        if not files:
+            print("grpmodule.c nao encontrado ainda")
         for fname in files:
             with open(fname, 'r') as f:
                 content = f.read()
@@ -68,8 +69,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v15-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v15-
+        key: buildozer-v16-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v16-
 
     - name: Download dependencias p4a
       env:
