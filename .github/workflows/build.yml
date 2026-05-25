@@ -28,6 +28,19 @@ jobs:
         accept-android-sdk-licenses: true
         packages: "build-tools;33.0.2 platforms;android-33 platform-tools ndk;25.2.9519653"
 
+    - name: Corrigir paths do SDK para buildozer
+      run: |
+        SDK=/usr/local/lib/android/sdk
+        # Buildozer procura sdkmanager em tools/bin/ (caminho legado)
+        sudo mkdir -p $SDK/tools/bin
+        sudo ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager
+        sudo ln -sf $SDK/cmdline-tools/latest/bin/avdmanager $SDK/tools/bin/avdmanager
+        # Fake 'android' binary
+        printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/android
+        printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/bin/android
+        sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
+        echo "Verificando: $(ls $SDK/tools/bin/)"
+
     - name: Instalar pip e buildozer
       run: |
         curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
@@ -38,8 +51,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v8-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v8-
+        key: buildozer-v9-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v9-
 
     - name: Compilar APK
       env:
