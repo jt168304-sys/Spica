@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,json
 source.main = main.py
 
 # Fixado em python3==3.11 para evitar conflito com versões alpha (ex: 3.14) no GitHub Actions
-requirements = python3==3.11,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
+requirements = python3==3.11.0,hostpython3==3.11.0,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3
 
 orientation = portrait
 fullscreen = 0
