@@ -46,67 +46,56 @@ jobs:
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
         python3.11 -m pip install git+https://github.com/kivy/python-for-android.git@develop
 
-    - name: Patch grpmodule para Android
-      run: |
-        # Criar script que aplica o patch no grpmodule.c quando ele aparecer
-        cat > /usr/local/bin/patch_grp.sh << 'PATCH'
-        #!/bin/bash
-        FILE="$1"
-        if [ -f "$FILE" ]; then
-          # Comentar as funcoes que nao existem no bionic
-          sed -i 's/setgrent();//g' "$FILE"
-          sed -i 's/getgrent()//g' "$FILE"
-          sed -i 's/endgrent();//g' "$FILE"
-          echo "Patched: $FILE"
-        fi
-        PATCH
-        chmod +x /usr/local/bin/patch_grp.sh
-
-        # Criar wrapper do ccache que aplica patch automaticamente
-        # Alternativa: criar um p4a hook
-        mkdir -p p4a-recipes/python3
-        cat > p4a-recipes/python3/__init__.py << 'RECIPE'
-        from pythonforandroid.recipes.python3 import Python3Recipe
-        from pythonforandroid.util import current_directory
-        import os
-
-        class Python3RecipePatch(Python3Recipe):
-            def prebuild_arch(self, arch):
-                super().prebuild_arch(arch)
-                # Patch grpmodule to disable functions not in Android bionic
-                grpmodule = os.path.join(
-                    self.get_build_dir(arch.arch),
-                    'Modules', 'grpmodule.c'
-                )
-                if os.path.exists(grpmodule):
-                    with open(grpmodule, 'r') as f:
-                        content = f.read()
-                    # Wrap the problematic functions with #ifdef
-                    content = content.replace(
-                        'setgrent();',
-                        '#if !defined(__ANDROID__)\n    setgrent();\n#endif'
-                    ).replace(
-                        'while ((gr = getgrent()) != NULL) {',
-                        '#if !defined(__ANDROID__)\n    while ((gr = getgrent()) != NULL) {'
-                    ).replace(
-                        'endgrent();',
-                        'endgrent();\n#endif'
-                    )
-                    with open(grpmodule, 'w') as f:
-                        f.write(content)
-                    print(f"Patched grpmodule.c for Android")
-
-        recipe = Python3RecipePatch()
-        RECIPE
-
     - name: Cache p4a
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v13-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v13-
+        key: buildozer-v14-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v14-
 
-    - name: Compilar APK
+    - name: Compilar APK - fase 1 download
+      env:
+        GIT_TERMINAL_PROMPT: "0"
+        GIT_ASKPASS: "echo"
+        ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
+        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
+      run: |
+        python3.11 -m buildozer android debug 2>&1 | tee build.log || true
+
+    - name: Patch grpmodule.c
+      run: |
+        find ~/.buildozer -name "grpmodule.c" 2>/dev/null | while read f; do
+          echo "Patchando: $f"
+          python3.11 - << 'PYEOF'
+import sys
+fname = sys.argv[1] if len(sys.argv) > 1 else None
+import glob
+files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
+for fname in files:
+    with open(fname, 'r') as f:
+        content = f.read()
+    patched = content.replace(
+        '#include "grpmodule.c"', '#include "grpmodule.c"'
+    )
+    # Adicionar guard no inicio do arquivo
+    if '#ifdef __ANDROID__' not in content:
+        patched = content.replace(
+            'setgrent();',
+            '/* setgrent(); - not available on Android */'
+        ).replace(
+            'while ((gr = getgrent()) != NULL)',
+            'while (0 && (gr = NULL))'
+        ).replace(
+            'endgrent();',
+            '/* endgrent(); - not available on Android */'
+        )
+        with open(fname, 'w') as f:
+            f.write(patched)
+        print(f"Patched: {fname}")
+PYEOF
+        done
+
+    - name: Compilar APK - fase 2 build final
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
@@ -114,7 +103,7 @@ jobs:
         ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
       run: |
         set -o pipefail
-        python3.11 -m buildozer android debug 2>&1 | tee build.log
+        python3.11 -m buildozer android debug 2>&1 | tee -a build.log
 
     - name: Localizar e copiar APK
       if: always()
