@@ -28,6 +28,7 @@ android.archs = arm64-v8a
 android.allow_backup = True
 
 p4a.branch = develop
+p4a.local_recipes = ./p4a-recipes
 
 [buildozer]
 log_level = 2

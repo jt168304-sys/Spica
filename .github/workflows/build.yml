@@ -38,7 +38,6 @@ jobs:
         printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/bin/android
         sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
         sudo rm -rf $SDK/ndk/27.3.13750724 2>/dev/null || true
-        echo "NDKs: $(ls $SDK/ndk/)"
 
     - name: Instalar pip e buildozer
       run: |
@@ -47,12 +46,65 @@ jobs:
         python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
         python3.11 -m pip install git+https://github.com/kivy/python-for-android.git@develop
 
+    - name: Patch grpmodule para Android
+      run: |
+        # Criar script que aplica o patch no grpmodule.c quando ele aparecer
+        cat > /usr/local/bin/patch_grp.sh << 'PATCH'
+        #!/bin/bash
+        FILE="$1"
+        if [ -f "$FILE" ]; then
+          # Comentar as funcoes que nao existem no bionic
+          sed -i 's/setgrent();//g' "$FILE"
+          sed -i 's/getgrent()//g' "$FILE"
+          sed -i 's/endgrent();//g' "$FILE"
+          echo "Patched: $FILE"
+        fi
+        PATCH
+        chmod +x /usr/local/bin/patch_grp.sh
+
+        # Criar wrapper do ccache que aplica patch automaticamente
+        # Alternativa: criar um p4a hook
+        mkdir -p p4a-recipes/python3
+        cat > p4a-recipes/python3/__init__.py << 'RECIPE'
+        from pythonforandroid.recipes.python3 import Python3Recipe
+        from pythonforandroid.util import current_directory
+        import os
+
+        class Python3RecipePatch(Python3Recipe):
+            def prebuild_arch(self, arch):
+                super().prebuild_arch(arch)
+                # Patch grpmodule to disable functions not in Android bionic
+                grpmodule = os.path.join(
+                    self.get_build_dir(arch.arch),
+                    'Modules', 'grpmodule.c'
+                )
+                if os.path.exists(grpmodule):
+                    with open(grpmodule, 'r') as f:
+                        content = f.read()
+                    # Wrap the problematic functions with #ifdef
+                    content = content.replace(
+                        'setgrent();',
+                        '#if !defined(__ANDROID__)\n    setgrent();\n#endif'
+                    ).replace(
+                        'while ((gr = getgrent()) != NULL) {',
+                        '#if !defined(__ANDROID__)\n    while ((gr = getgrent()) != NULL) {'
+                    ).replace(
+                        'endgrent();',
+                        'endgrent();\n#endif'
+                    )
+                    with open(grpmodule, 'w') as f:
+                        f.write(content)
+                    print(f"Patched grpmodule.c for Android")
+
+        recipe = Python3RecipePatch()
+        RECIPE
+
     - name: Cache p4a
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v12-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v12-
+        key: buildozer-v13-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v13-
 
     - name: Compilar APK
       env:
