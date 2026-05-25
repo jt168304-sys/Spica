@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Instalar Python 3.11
+    - name: Instalar dependencias
       run: |
         sudo apt-get update
         sudo apt-get install -y python3.11 python3.11-dev python3.11-venv \
@@ -21,67 +21,52 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
-    - name: Criar wrapper python3 -> 3.11
-      run: |
-        sudo mkdir -p /opt/python311-wrapper
-        printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python3
-        printf '#!/bin/sh\nexec /usr/bin/python3.11 "$@"\n' | sudo tee /opt/python311-wrapper/python
-        sudo chmod +x /opt/python311-wrapper/python3 /opt/python311-wrapper/python
-
     - name: Instalar pip e buildozer
       run: |
-        export PATH="/opt/python311-wrapper:$PATH"
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3
-        pip install --upgrade pip
-        pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+        python3.11 -m pip install --upgrade pip
+        python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
 
-    - name: Aceitar licencas SDK
+    - name: Preparar Android SDK para buildozer
       run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses || true
-
-    - name: Pre-aceitar licencas Buildozer
-      run: |
-        mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n859f317696f67ef3d7f30a50a5560e7834b43903" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        printf "\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        SDK=$ANDROID_SDK_ROOT
+        # Buildozer precisa do binario 'android' que nao existe no SDK moderno
+        mkdir -p $SDK/tools/bin
+        # Fake 'android' binary
+        printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/android
+        printf '#!/bin/sh\necho "Android SDK Tool"\nexit 0\n' | sudo tee $SDK/tools/bin/android
+        sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
+        # Symlink sdkmanager
+        ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager 2>/dev/null || true
+        # Aceitar licencas
+        yes | $SDK/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        echo "SDK pronto: $(ls $SDK/tools/)"
 
     - name: Cache Buildozer
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v4-
-
-    - name: Preparar sdkmanager para buildozer
-      run: |
-        # Buildozer espera sdkmanager em tools/bin/ mas no runner fica em cmdline-tools/
-        SDK_DIR=~/.buildozer/android/platform/android-sdk
-        mkdir -p $SDK_DIR/tools/bin
-        # Symlink do sdkmanager do sistema para onde buildozer espera
-        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_DIR/tools/bin/sdkmanager
-        # Copiar licencas do SDK do sistema
-        cp -r $ANDROID_SDK_ROOT/licenses/. $SDK_DIR/licenses/ 2>/dev/null || true
-        echo "sdkmanager OK: $(ls -la $SDK_DIR/tools/bin/sdkmanager)"
+        key: buildozer-v5-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v5-
 
     - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
+        ANDROIDSDK: "/usr/local/lib/android/sdk"
+        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/27.3.13750724"
+        ANDROIDAPI: "33"
+        ANDROIDMINAPI: "24"
       run: |
-        export PATH="/opt/python311-wrapper:$PATH"
-        export ANDROIDSDK=~/.buildozer/android/platform/android-sdk
         set -o pipefail
-        python3 -m buildozer android debug 2>&1 | tee build.log
+        python3.11 -m buildozer android debug 2>&1 | tee build.log
 
     - name: Localizar e copiar APK
       if: always()
       run: |
         mkdir -p artifacts
         cp build.log artifacts/ 2>/dev/null || true
-        echo "=== APKs encontrados ==="
-        find /home/runner $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null
         find /home/runner $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
-        echo "=== Conteudo de artifacts/ ==="
         ls -lh artifacts/
 
     - name: Salvar artefatos
