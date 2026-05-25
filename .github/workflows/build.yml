@@ -49,7 +49,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-v2-${{ hashFiles('buildozer.spec') }}
         restore-keys: buildozer-
 
     - name: Compilar APK
