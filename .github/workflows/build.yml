@@ -37,7 +37,9 @@ jobs:
         printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/android
         printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/bin/android
         sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
-        echo "NDK 25b: $(ls $SDK/ndk/)"
+        # Remover NDK 27 para forcar uso do 25b
+        sudo rm -rf $SDK/ndk/27.3.13750724 2>/dev/null || true
+        echo "NDKs disponiveis: $(ls $SDK/ndk/)"
 
     - name: Instalar pip e buildozer
       run: |
@@ -49,13 +51,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v10-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v10-
+        key: buildozer-v11-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v11-
 
     - name: Compilar APK
       env:
         GIT_TERMINAL_PROMPT: "0"
         GIT_ASKPASS: "echo"
+        ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
         ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
       run: |
         set -o pipefail

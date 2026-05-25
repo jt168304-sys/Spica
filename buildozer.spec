@@ -17,9 +17,9 @@ fullscreen = 0
 # Permissões necessárias
 android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE
 
-# Android SDK - usar SDK do sistema
+# Android SDK - forcar NDK 25b
 android.sdk_path = /usr/local/lib/android/sdk
-android.ndk_path = /usr/local/lib/android/sdk/ndk/27.3.13750724
+android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653
 android.skip_update = True
 android.accept_sdk_license = True
 
