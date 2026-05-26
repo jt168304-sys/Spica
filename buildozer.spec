@@ -23,7 +23,7 @@ android.minapi = 24
 android.sdk = 33
 android.build_tools_version = 33.0.2
 android.ndk = 25b
-android.ndk_api = 21
+android.ndk_api = 24
 android.archs = arm64-v8a
 android.allow_backup = True
 
