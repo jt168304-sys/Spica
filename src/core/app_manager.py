@@ -10,7 +10,7 @@ from src.database.storage import Storage
 
 
 class WindApp(MDApp):
-    title = "WindIA"
+    title = "Spica"
 
     def build(self):
         self.logger = WindLogger()

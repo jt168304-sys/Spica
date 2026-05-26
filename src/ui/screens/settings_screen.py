@@ -34,14 +34,14 @@ class SettingsScreen(MDScreen):
             {"icone": "theme-light-dark", "titulo": "Modo Escuro",
              "sub": "Alternar tema claro/escuro", "chave": "theme_mode", "valor_on": "Dark"},
             {"icone": "microphone", "titulo": "Ativar por Voz",
-             "sub": "Hey Wind para ativar (em breve)", "chave": "voice_activation", "valor_on": True},
+             "sub": "Hey Spica para ativar (em breve)", "chave": "voice_activation", "valor_on": True},
         ]
         for cfg in itens:
             lista.add_widget(self._item_switch(cfg))
 
         # ── Itens de ação ─────────────────────────────────────────────────
         item_sobre = TwoLineIconListItem(
-            text="Sobre o WindIA", secondary_text="v1.0 — Python + KivyMD + Groq"
+            text="Sobre o Spica", secondary_text="v1.0 — Python + KivyMD + Groq"
         )
         item_sobre.add_widget(IconLeftWidget(icon="information-outline"))
         lista.add_widget(item_sobre)

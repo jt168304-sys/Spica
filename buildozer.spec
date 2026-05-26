@@ -1,7 +1,7 @@
 [app]
-title = WindIA
-package.name = windia
-package.domain = com.windia
+title = Spica
+package.name = spica
+package.domain = com.spica
 version = 1.0
 source.dir = .
 source.include_exts = py,png,jpg,json

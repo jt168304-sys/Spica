@@ -39,8 +39,8 @@ class HomeScreen(MDScreen):
                       padding=dp(16), spacing=dp(12), radius=[dp(16)], elevation=4)
         card.add_widget(MDLabel(text="W", font_size=dp(36), size_hint=(None, None), size=(dp(50), dp(50))))
         col = MDBoxLayout(orientation="vertical")
-        self.label_status = MDLabel(text="WindIA esta pronto!", font_style="Subtitle1")
-        self.label_status_sub = MDLabel(text="Toque na bolha ou diga 'Hey Wind'",
+        self.label_status = MDLabel(text="Spica esta pronta!", font_style="Subtitle1")
+        self.label_status_sub = MDLabel(text="Toque na bolha ou diga 'Hey Spica'",
                                         font_style="Caption", theme_text_color="Secondary")
         col.add_widget(self.label_status)
         col.add_widget(self.label_status_sub)
@@ -54,7 +54,7 @@ class HomeScreen(MDScreen):
         grade = GridLayout(cols=2, spacing=dp(10))
         atalhos = [
             ("microphone",       "Assistente de Voz", "chat"),
-            ("chat-outline",     "Chat com Wind",     "chat"),
+            ("chat-outline",     "Chat com Spica",     "chat"),
             ("notebook-outline", "Minhas Notas",      "notas"),
             ("calculator",       "Calculadora",       "chat"),
             ("translate",        "Tradutor",          "chat"),
