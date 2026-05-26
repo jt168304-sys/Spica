@@ -12,6 +12,8 @@ requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,kivymd==1.2.0,req
 orientation = portrait
 fullscreen = 0
 
+icon.filename = %(source.dir)s/Spica.png
+
 android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE
 
 android.sdk_path = /usr/local/lib/android/sdk
