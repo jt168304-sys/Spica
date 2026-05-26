@@ -21,6 +21,13 @@ jobs:
           zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
           cmake libffi-dev libssl-dev build-essential ccache
 
+    - name: Configurar Java 17
+      run: |
+        sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+        sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
+        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+        java -version
+
     - name: Configurar Android SDK
       uses: android-actions/setup-android@v3
       with:
@@ -48,7 +55,7 @@ jobs:
     - name: Criar script de patch
       run: |
         cat > /usr/local/bin/patch_grp.py << 'PYEOF'
-        import glob, re, os
+        import glob, re
         files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
         if not files:
             print("grpmodule.c nao encontrado ainda")
@@ -69,8 +76,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: buildozer-v16-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v16-
+        key: buildozer-v17-${{ hashFiles('buildozer.spec') }}
+        restore-keys: buildozer-v17-
 
     - name: Download dependencias p4a
       env:
@@ -78,6 +85,7 @@ jobs:
         GIT_ASKPASS: "echo"
         ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
         ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
+        JAVA_HOME: "/usr/lib/jvm/java-17-openjdk-amd64"
       run: python3.11 -m buildozer android debug 2>&1 | tee build.log || true
 
     - name: Aplicar patch grpmodule
@@ -89,6 +97,7 @@ jobs:
         GIT_ASKPASS: "echo"
         ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
         ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
+        JAVA_HOME: "/usr/lib/jvm/java-17-openjdk-amd64"
       run: |
         set -o pipefail
         python3.11 -m buildozer android debug 2>&1 | tee -a build.log
