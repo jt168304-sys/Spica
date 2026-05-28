@@ -1,4 +1,4 @@
-# chat_screen.py — Chat com Spica: comandos locais + IA Groq Visão + Histórico SQLite
+# chat_screen.py — Chat com Spica + Histórico SQLite
 import os
 import sqlite3
 from datetime import datetime
@@ -18,25 +18,34 @@ from src.modules.commands import CommandProcessor
 from src.utils.logger import WindLogger
 
 
-DB_PATH = os.path.join(os.path.expanduser("~"), ".spica_historico.db")
+def _get_db_path():
+    # No Android usa o diretório do app, no desktop usa home
+    try:
+        from android.storage import app_storage_path
+        base = app_storage_path()
+    except Exception:
+        base = os.path.expanduser("~")
+    return os.path.join(base, "spica_historico.db")
 
 
-def _init_db():
-    con = sqlite3.connect(DB_PATH)
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sessao TEXT NOT NULL,
-            autor TEXT NOT NULL,
-            mensagem TEXT NOT NULL,
-            ts TEXT NOT NULL
-        )
-    """)
-    con.commit()
-    con.close()
-
-
-_init_db()
+def _init_db(db_path):
+    try:
+        con = sqlite3.connect(db_path)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sessao TEXT NOT NULL,
+                autor TEXT NOT NULL,
+                mensagem TEXT NOT NULL,
+                ts TEXT NOT NULL
+            )
+        """)
+        con.commit()
+        con.close()
+        return True
+    except Exception as e:
+        print(f"DB init error: {e}")
+        return False
 
 
 class ChatScreen(MDScreen):
@@ -47,6 +56,8 @@ class ChatScreen(MDScreen):
         self._bolha_digitando = None
         self.caminho_imagem_selecionada = None
         self.sessao_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.db_path = _get_db_path()
+        self.db_ok = _init_db(self.db_path)
 
         self.file_manager = MDFileManager(
             exit_manager=self._fechar_gerenciador,
@@ -68,11 +79,7 @@ class ChatScreen(MDScreen):
             ],
         ))
 
-        # ScrollView com always_overscroll=False para rolagem suave
-        self.scroll = ScrollView(
-            always_overscroll=False,
-            do_scroll_x=False,
-        )
+        self.scroll = ScrollView(always_overscroll=False, do_scroll_x=False)
         self.msgs = MDBoxLayout(
             orientation="vertical",
             size_hint_y=None,
@@ -83,7 +90,6 @@ class ChatScreen(MDScreen):
         self.scroll.add_widget(self.msgs)
         raiz.add_widget(self.scroll)
 
-        # Barra inferior com anexo, campo de texto e enviar
         entrada = MDBoxLayout(
             size_hint_y=None,
             height=dp(60),
@@ -122,15 +128,15 @@ class ChatScreen(MDScreen):
         if extensao in ['.png', '.jpg', '.jpeg']:
             self.caminho_imagem_selecionada = caminho_arquivo
             self.btn_anexo.icon = "image-check"
-            self.campo.hint_text = "Imagem pronta! Faça sua pergunta..."
+            self.campo.hint_text = "Imagem pronta! Faca sua pergunta..."
         else:
-            self.campo.hint_text = "Formato inválido! Escolha JPG ou PNG."
+            self.campo.hint_text = "Formato invalido! Escolha JPG ou PNG."
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         tem_key = GroqService.get_instance().disponivel
         if tem_key:
-            self._wind("Ola! Sou a Spica, pronta para ajudar.\nAgora você pode anexar fotos pelo clipe de papel!")
+            self._wind("Ola! Sou a Spica, pronta para ajudar.\nAgora voce pode anexar fotos pelo clipe de papel!")
         else:
             self._wind("Ola! Sou a Spica.\n\nPara respostas inteligentes, va em Configuracoes e insira sua API key da Groq.")
 
@@ -148,7 +154,7 @@ class ChatScreen(MDScreen):
 
         if imagem:
             nome_foto = os.path.basename(imagem)
-            msg_usuario = f"📸 [Imagem: {nome_foto}]\n{texto}"
+            msg_usuario = f"[Imagem: {nome_foto}]\n{texto}"
             self._usuario(msg_usuario)
             self._salvar_db("usuario", msg_usuario)
             self._mostrar_digitando()
@@ -166,8 +172,10 @@ class ChatScreen(MDScreen):
         self._salvar_db("spica", resposta)
 
     def _salvar_db(self, autor, mensagem):
+        if not self.db_ok:
+            return
         try:
-            con = sqlite3.connect(DB_PATH)
+            con = sqlite3.connect(self.db_path)
             con.execute(
                 "INSERT INTO chats (sessao, autor, mensagem, ts) VALUES (?,?,?,?)",
                 (self.sessao_id, autor, mensagem, datetime.now().isoformat())
