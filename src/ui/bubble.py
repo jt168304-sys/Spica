@@ -1,4 +1,4 @@
-# bubble.py — Bolha flutuante arrastável + painel de navegação
+# bubble.py — Bolha flutuante com threshold de drag correto
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.clock import Clock
@@ -13,6 +13,7 @@ class FloatingBubble(MDCard):
     BUBBLE_SIZE = dp(60)
     MARGEM = dp(10)
     ANIM_DURACAO = 0.3
+    DRAG_THRESHOLD = dp(10)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -25,7 +26,6 @@ class FloatingBubble(MDCard):
         self._dragging = False
         self._touch_start = (0, 0)
         self._last_pos = (0, 0)
-        self._drag_threshold = dp(8)
         self.panel_aberto = False
 
         self._icon = MDIconButton(
@@ -42,10 +42,7 @@ class FloatingBubble(MDCard):
         self._painel = PainelPrincipal()
 
         self.opacity = 0
-        Clock.schedule_once(self._animar_entrada, 0.1)
-
-    def _animar_entrada(self, dt):
-        Animation(opacity=1, duration=0.4, t="out_back").start(self)
+        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4, t="out_back").start(self), 0.1)
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
@@ -58,10 +55,9 @@ class FloatingBubble(MDCard):
 
     def on_touch_move(self, touch):
         if touch.grab_current is self:
-            dx = touch.pos[0] - self._touch_start[0]
-            dy = touch.pos[1] - self._touch_start[1]
-            # Só considera drag se passou do threshold
-            if abs(dx) > self._drag_threshold or abs(dy) > self._drag_threshold:
+            dx = abs(touch.pos[0] - self._touch_start[0])
+            dy = abs(touch.pos[1] - self._touch_start[1])
+            if dx > self.DRAG_THRESHOLD or dy > self.DRAG_THRESHOLD:
                 self._dragging = True
             if self._dragging:
                 mdx = touch.pos[0] - self._last_pos[0]
@@ -89,7 +85,10 @@ class FloatingBubble(MDCard):
         Animation(x=destino_x, duration=self.ANIM_DURACAO, t="out_cubic").start(self)
 
     def _toggle_painel(self):
-        self._fechar_painel() if self.panel_aberto else self._abrir_painel()
+        if self.panel_aberto:
+            self._fechar_painel()
+        else:
+            self._abrir_painel()
 
     def _abrir_painel(self):
         self._painel.abrir(self.pos)
@@ -114,7 +113,7 @@ class FloatingBubble(MDCard):
 
 class PainelPrincipal(MDCard):
     LARGURA = dp(300)
-    ALTURA = dp(400)
+    ALTURA = dp(380)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -161,6 +160,11 @@ class PainelPrincipal(MDCard):
     def _navegar(self, tela):
         MDApp.get_running_app().navigate_to(tela)
         self.fechar()
+        # Fechar o painel na bolha tambem
+        app = MDApp.get_running_app()
+        if hasattr(app, "bubble"):
+            app.bubble.panel_aberto = False
+            app.bubble._icon.icon = "weather-windy"
 
     def _ativar_voz(self, *args):
         from src.services.voice_service import VoiceService
@@ -186,7 +190,13 @@ class PainelPrincipal(MDCard):
         Animation(opacity=1, duration=0.25, t="out_quad").start(self)
 
     def fechar(self):
+        def _remover(*a):
+            if self._na_window:
+                try:
+                    Window.remove_widget(self)
+                except Exception:
+                    pass
+                self._na_window = False
         anim = Animation(opacity=0, duration=0.2, t="in_quad")
-        anim.bind(on_complete=lambda *a: Window.remove_widget(self) if self._na_window else None)
+        anim.bind(on_complete=_remover)
         anim.start(self)
-        self._na_window = False

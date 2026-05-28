@@ -19,7 +19,6 @@ from src.utils.logger import WindLogger
 
 
 def _get_db_path():
-    # No Android usa o diretório do app, no desktop usa home
     try:
         from android.storage import app_storage_path
         base = app_storage_path()
@@ -44,7 +43,6 @@ def _init_db(db_path):
         con.close()
         return True
     except Exception as e:
-        print(f"DB init error: {e}")
         return False
 
 
@@ -64,22 +62,29 @@ class ChatScreen(MDScreen):
             select_path=self._imagem_selecionada,
             preview=True
         )
-
         self._construir_layout()
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
 
-        raiz.add_widget(MDTopAppBar(
+        self._toolbar = MDTopAppBar(
             title="Spica",
             left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("home")]],
             right_action_items=[
+                ["history", lambda x: MDApp.get_running_app().navigate_to("historico")],
                 ["delete-sweep", lambda x: self._limpar_chat()],
-                ["microphone",   lambda x: self._ativar_voz()],
+                ["microphone", lambda x: self._ativar_voz()],
             ],
-        ))
+        )
+        raiz.add_widget(self._toolbar)
 
-        self.scroll = ScrollView(always_overscroll=False, do_scroll_x=False)
+        # ScrollView - touch_multiselect permite rolar sobre os textos
+        self.scroll = ScrollView(
+            always_overscroll=False,
+            do_scroll_x=False,
+            scroll_type=["bars", "content"],
+            bar_width=dp(4),
+        )
         self.msgs = MDBoxLayout(
             orientation="vertical",
             size_hint_y=None,
@@ -96,7 +101,6 @@ class ChatScreen(MDScreen):
             padding=[dp(8), dp(4)],
             spacing=dp(4)
         )
-
         self.btn_anexo = MDIconButton(icon="paperclip", on_release=self._abrir_gerenciador)
         entrada.add_widget(self.btn_anexo)
 
@@ -108,7 +112,6 @@ class ChatScreen(MDScreen):
         )
         self.campo.bind(on_text_validate=self._enviar)
         entrada.add_widget(self.campo)
-
         entrada.add_widget(MDIconButton(icon="send", on_release=self._enviar))
         raiz.add_widget(entrada)
 
@@ -116,34 +119,52 @@ class ChatScreen(MDScreen):
         Clock.schedule_once(self._boas_vindas, 0.5)
 
     def _abrir_gerenciador(self, *args):
-        pasta_inicial = "/sdcard" if os.path.exists("/sdcard") else os.path.expanduser("~")
-        self.file_manager.show(pasta_inicial)
+        pasta = "/sdcard" if os.path.exists("/sdcard") else os.path.expanduser("~")
+        self.file_manager.show(pasta)
 
     def _fechar_gerenciador(self, *args):
         self.file_manager.close()
 
-    def _imagem_selecionada(self, caminho_arquivo):
+    def _imagem_selecionada(self, caminho):
         self._fechar_gerenciador()
-        extensao = os.path.splitext(caminho_arquivo)[1].lower()
-        if extensao in ['.png', '.jpg', '.jpeg']:
-            self.caminho_imagem_selecionada = caminho_arquivo
+        ext = os.path.splitext(caminho)[1].lower()
+        if ext in ['.png', '.jpg', '.jpeg']:
+            self.caminho_imagem_selecionada = caminho
             self.btn_anexo.icon = "image-check"
             self.campo.hint_text = "Imagem pronta! Faca sua pergunta..."
         else:
-            self.campo.hint_text = "Formato invalido! Escolha JPG ou PNG."
+            self.campo.hint_text = "Formato invalido! Use JPG ou PNG."
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
-        tem_key = GroqService.get_instance().disponivel
-        if tem_key:
-            self._wind("Ola! Sou a Spica, pronta para ajudar.\nAgora voce pode anexar fotos pelo clipe de papel!")
+        if GroqService.get_instance().disponivel:
+            self._wind("Ola! Sou a Spica, pronta para ajudar!")
         else:
-            self._wind("Ola! Sou a Spica.\n\nPara respostas inteligentes, va em Configuracoes e insira sua API key da Groq.")
+            self._wind("Ola! Sou a Spica.\n\nVa em Configuracoes e insira sua API key da Groq.")
+
+    def carregar_sessao(self, sessao_id):
+        """Carrega mensagens de uma sessão anterior."""
+        self.msgs.clear_widgets()
+        self.sessao_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        try:
+            con = sqlite3.connect(self.db_path)
+            rows = con.execute(
+                "SELECT autor, mensagem FROM chats WHERE sessao=? ORDER BY ts ASC",
+                (sessao_id,)
+            ).fetchall()
+            con.close()
+            for autor, mensagem in rows:
+                if autor == "usuario":
+                    self.msgs.add_widget(Bolha(texto=mensagem, autor="usuario"))
+                else:
+                    self.msgs.add_widget(Bolha(texto=mensagem, autor="wind"))
+            self._scroll_baixo()
+        except Exception as e:
+            self.logger.error(f"Erro ao carregar sessao: {e}")
 
     def _enviar(self, *args):
         texto = self.campo.text.strip()
         imagem = self.caminho_imagem_selecionada
-
         if not texto and not imagem:
             return
 
@@ -153,10 +174,10 @@ class ChatScreen(MDScreen):
         self.campo.hint_text = "Mensagem..."
 
         if imagem:
-            nome_foto = os.path.basename(imagem)
-            msg_usuario = f"[Imagem: {nome_foto}]\n{texto}"
-            self._usuario(msg_usuario)
-            self._salvar_db("usuario", msg_usuario)
+            nome = os.path.basename(imagem)
+            msg = f"[Imagem: {nome}]\n{texto}"
+            self._usuario(msg)
+            self._salvar_db("usuario", msg)
             self._mostrar_digitando()
             from src.services.groq_service import GroqService
             GroqService.get_instance().perguntar(texto, self._receber_resposta, caminho_imagem=imagem)
@@ -166,7 +187,7 @@ class ChatScreen(MDScreen):
             self._mostrar_digitando()
             self.processor.processar(texto, callback=self._receber_resposta)
 
-    def _receber_resposta(self, resposta: str):
+    def _receber_resposta(self, resposta):
         self._remover_digitando()
         self._wind(resposta)
         self._salvar_db("spica", resposta)
@@ -183,7 +204,7 @@ class ChatScreen(MDScreen):
             con.commit()
             con.close()
         except Exception as e:
-            self.logger.error(f"Erro ao salvar no DB: {e}")
+            self.logger.error(f"DB error: {e}")
 
     def _usuario(self, texto):
         self.msgs.add_widget(Bolha(texto=texto, autor="usuario"))

@@ -28,7 +28,7 @@ class HomeScreen(MDScreen):
         layout = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(100),
                              padding=[dp(8), dp(16), dp(8), dp(8)])
         self.label_saudacao = MDLabel(text=self._gerar_saudacao(), font_style="H5", halign="center")
-        self.label_sub = MDLabel(text="Como posso ajudar você hoje?", font_style="Caption",
+        self.label_sub = MDLabel(text="Como posso ajudar voce hoje?", font_style="Caption",
                                  halign="center", theme_text_color="Secondary")
         layout.add_widget(self.label_saudacao)
         layout.add_widget(self.label_sub)
@@ -37,7 +37,7 @@ class HomeScreen(MDScreen):
     def _criar_card_status(self):
         card = MDCard(orientation="horizontal", size_hint_y=None, height=dp(80),
                       padding=dp(16), spacing=dp(12), radius=[dp(16)], elevation=4)
-        card.add_widget(MDLabel(text="W", font_size=dp(36), size_hint=(None, None), size=(dp(50), dp(50))))
+        card.add_widget(MDLabel(text="✦", font_size=dp(36), size_hint=(None, None), size=(dp(50), dp(50))))
         col = MDBoxLayout(orientation="vertical")
         self.label_status = MDLabel(text="Spica esta pronta!", font_style="Subtitle1")
         self.label_status_sub = MDLabel(text="Toque na bolha ou diga 'Hey Spica'",
@@ -54,7 +54,7 @@ class HomeScreen(MDScreen):
         grade = GridLayout(cols=2, spacing=dp(10))
         atalhos = [
             ("microphone",       "Assistente de Voz", "chat"),
-            ("chat-outline",     "Chat com Spica",     "chat"),
+            ("chat-outline",     "Chat com Spica",    "chat"),
             ("notebook-outline", "Minhas Notas",      "notas"),
             ("calculator",       "Calculadora",       "chat"),
             ("translate",        "Tradutor",          "chat"),
@@ -76,9 +76,9 @@ class HomeScreen(MDScreen):
 
     def _gerar_saudacao(self):
         hora = datetime.datetime.now().hour
-        if 5 <= hora < 12:   return "Bom dia!"
+        if 5 <= hora < 12:    return "Bom dia!"
         elif 12 <= hora < 18: return "Boa tarde!"
-        else:                 return "Boa noite!"
+        else:                  return "Boa noite!"
 
     def _atualizar_saudacao(self, dt):
         self.label_saudacao.text = self._gerar_saudacao()
