@@ -1,4 +1,4 @@
-# chat_screen.py — Chat com Spica + Histórico SQLite
+# chat_screen.py — Chat com Spica + câmera + galeria + histórico SQLite
 import os
 import sqlite3
 from datetime import datetime
@@ -12,7 +12,6 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.button import MDIconButton
 from kivymd.uix.toolbar import MDTopAppBar
-from kivymd.uix.filemanager import MDFileManager
 from kivymd.app import MDApp
 from src.modules.commands import CommandProcessor
 from src.utils.logger import WindLogger
@@ -42,7 +41,7 @@ def _init_db(db_path):
         con.commit()
         con.close()
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -56,29 +55,21 @@ class ChatScreen(MDScreen):
         self.sessao_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.db_path = _get_db_path()
         self.db_ok = _init_db(self.db_path)
-
-        self.file_manager = MDFileManager(
-            exit_manager=self._fechar_gerenciador,
-            select_path=self._imagem_selecionada,
-            preview=True
-        )
         self._construir_layout()
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
 
-        self._toolbar = MDTopAppBar(
+        raiz.add_widget(MDTopAppBar(
             title="Spica",
             left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("home")]],
             right_action_items=[
-                ["history", lambda x: MDApp.get_running_app().navigate_to("historico")],
+                ["history",      lambda x: MDApp.get_running_app().navigate_to("historico")],
                 ["delete-sweep", lambda x: self._limpar_chat()],
-                ["microphone", lambda x: self._ativar_voz()],
+                ["microphone",   lambda x: self._ativar_voz()],
             ],
-        )
-        raiz.add_widget(self._toolbar)
+        ))
 
-        # ScrollView - touch_multiselect permite rolar sobre os textos
         self.scroll = ScrollView(
             always_overscroll=False,
             do_scroll_x=False,
@@ -95,13 +86,23 @@ class ChatScreen(MDScreen):
         self.scroll.add_widget(self.msgs)
         raiz.add_widget(self.scroll)
 
+        # Barra inferior: câmera | galeria | campo | enviar
         entrada = MDBoxLayout(
-            size_hint_y=None,
-            height=dp(60),
-            padding=[dp(8), dp(4)],
-            spacing=dp(4)
+            size_hint_y=None, height=dp(60),
+            padding=[dp(4), dp(4)], spacing=dp(4)
         )
-        self.btn_anexo = MDIconButton(icon="paperclip", on_release=self._abrir_gerenciador)
+
+        # Botão câmera
+        entrada.add_widget(MDIconButton(
+            icon="camera",
+            on_release=self._abrir_camera
+        ))
+
+        # Botão galeria/arquivos
+        self.btn_anexo = MDIconButton(
+            icon="image-plus",
+            on_release=self._abrir_picker
+        )
         entrada.add_widget(self.btn_anexo)
 
         self.campo = MDTextField(
@@ -118,32 +119,32 @@ class ChatScreen(MDScreen):
         self.add_widget(raiz)
         Clock.schedule_once(self._boas_vindas, 0.5)
 
-    def _abrir_gerenciador(self, *args):
-        pasta = "/sdcard" if os.path.exists("/sdcard") else os.path.expanduser("~")
-        self.file_manager.show(pasta)
+    def _abrir_camera(self, *args):
+        from src.ui.image_picker import ImagePicker
+        ImagePicker(on_image=self._imagem_selecionada).open()
 
-    def _fechar_gerenciador(self, *args):
-        self.file_manager.close()
+    def _abrir_picker(self, *args):
+        from src.ui.image_picker import ImagePicker
+        picker = ImagePicker(on_image=self._imagem_selecionada)
+        # Abre direto na galeria
+        picker._abrir_galeria()
 
     def _imagem_selecionada(self, caminho):
-        self._fechar_gerenciador()
-        ext = os.path.splitext(caminho)[1].lower()
-        if ext in ['.png', '.jpg', '.jpeg']:
-            self.caminho_imagem_selecionada = caminho
-            self.btn_anexo.icon = "image-check"
-            self.campo.hint_text = "Imagem pronta! Faca sua pergunta..."
-        else:
-            self.campo.hint_text = "Formato invalido! Use JPG ou PNG."
+        if not caminho:
+            return
+        self.caminho_imagem_selecionada = caminho
+        self.btn_anexo.icon = "image-check"
+        nome = os.path.basename(caminho)
+        self.campo.hint_text = f"📸 {nome} — digite sua pergunta"
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._wind("Ola! Sou a Spica, pronta para ajudar!")
+            self._wind("Ola! Sou a Spica, pronta para ajudar!\nUse 📷 para tirar foto ou 🖼️ para escolher da galeria.")
         else:
             self._wind("Ola! Sou a Spica.\n\nVa em Configuracoes e insira sua API key da Groq.")
 
     def carregar_sessao(self, sessao_id):
-        """Carrega mensagens de uma sessão anterior."""
         self.msgs.clear_widgets()
         self.sessao_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         try:
@@ -154,10 +155,7 @@ class ChatScreen(MDScreen):
             ).fetchall()
             con.close()
             for autor, mensagem in rows:
-                if autor == "usuario":
-                    self.msgs.add_widget(Bolha(texto=mensagem, autor="usuario"))
-                else:
-                    self.msgs.add_widget(Bolha(texto=mensagem, autor="wind"))
+                self.msgs.add_widget(Bolha(texto=mensagem, autor=autor))
             self._scroll_baixo()
         except Exception as e:
             self.logger.error(f"Erro ao carregar sessao: {e}")
@@ -170,17 +168,21 @@ class ChatScreen(MDScreen):
 
         self.campo.text = ""
         self.caminho_imagem_selecionada = None
-        self.btn_anexo.icon = "paperclip"
+        self.btn_anexo.icon = "image-plus"
         self.campo.hint_text = "Mensagem..."
 
         if imagem:
             nome = os.path.basename(imagem)
-            msg = f"[Imagem: {nome}]\n{texto}"
+            msg = f"📸 [{nome}]\n{texto}" if texto else f"📸 [{nome}]"
             self._usuario(msg)
             self._salvar_db("usuario", msg)
             self._mostrar_digitando()
             from src.services.groq_service import GroqService
-            GroqService.get_instance().perguntar(texto, self._receber_resposta, caminho_imagem=imagem)
+            GroqService.get_instance().perguntar(
+                texto or "Analise e descreva esta imagem.",
+                self._receber_resposta,
+                caminho_imagem=imagem
+            )
         else:
             self._usuario(texto)
             self._salvar_db("usuario", texto)
