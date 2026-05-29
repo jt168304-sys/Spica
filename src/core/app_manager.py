@@ -22,7 +22,6 @@ class WindApp(MDApp):
         self.screen_manager = ScreenManager()
         self._register_screens()
         Clock.schedule_once(self._create_bubble, 0.5)
-        self.logger.info("Interface construida com sucesso!")
         return self.screen_manager
 
     def _apply_theme(self):
@@ -36,10 +35,21 @@ class WindApp(MDApp):
         from src.ui.screens.chat_screen import ChatScreen
         from src.ui.screens.settings_screen import SettingsScreen
         from src.ui.screens.history_screen import HistoryScreen
+        from src.ui.screens.voice_screen import VoiceScreen
+        from src.ui.screens.translator_screen import TranslatorScreen
+        from src.ui.screens.calculator_screen import CalculatorScreen
 
-        for tela in [HomeScreen(name="home"), NotesScreen(name="notas"),
-                     ChatScreen(name="chat"), SettingsScreen(name="configuracoes"),
-                     HistoryScreen(name="historico")]:
+        telas = [
+            HomeScreen(name="home"),
+            NotesScreen(name="notas"),
+            ChatScreen(name="chat"),
+            SettingsScreen(name="configuracoes"),
+            HistoryScreen(name="historico"),
+            VoiceScreen(name="voz"),
+            TranslatorScreen(name="tradutor"),
+            CalculatorScreen(name="calculadora"),
+        ]
+        for tela in telas:
             self.screen_manager.add_widget(tela)
         self.screen_manager.current = "home"
 

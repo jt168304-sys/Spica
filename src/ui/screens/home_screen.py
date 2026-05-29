@@ -1,4 +1,4 @@
-# home_screen.py — Tela inicial com saudação, status e atalhos
+# home_screen.py
 import datetime
 from kivy.clock import Clock
 from kivy.metrics import dp
@@ -37,7 +37,7 @@ class HomeScreen(MDScreen):
     def _criar_card_status(self):
         card = MDCard(orientation="horizontal", size_hint_y=None, height=dp(80),
                       padding=dp(16), spacing=dp(12), radius=[dp(16)], elevation=4)
-        card.add_widget(MDLabel(text="✦", font_size=dp(36), size_hint=(None, None), size=(dp(50), dp(50))))
+        card.add_widget(MDLabel(text="✦", font_size=dp(32), size_hint=(None, None), size=(dp(50), dp(50))))
         col = MDBoxLayout(orientation="vertical")
         self.label_status = MDLabel(text="Spica esta pronta!", font_style="Subtitle1")
         self.label_status_sub = MDLabel(text="Toque na bolha ou diga 'Hey Spica'",
@@ -53,11 +53,12 @@ class HomeScreen(MDScreen):
                                      size_hint_y=None, height=dp(30), theme_text_color="Secondary"))
         grade = GridLayout(cols=2, spacing=dp(10))
         atalhos = [
-            ("microphone",       "Assistente de Voz", "chat"),
             ("chat-outline",     "Chat com Spica",    "chat"),
+            ("history",          "Historico",         "historico"),
+            ("microphone",       "Assistente de Voz", "voz"),
+            ("translate",        "Tradutor",          "tradutor"),
+            ("calculator",       "Calculadora",       "calculadora"),
             ("notebook-outline", "Minhas Notas",      "notas"),
-            ("calculator",       "Calculadora",       "chat"),
-            ("translate",        "Tradutor",          "chat"),
             ("cog-outline",      "Configuracoes",     "configuracoes"),
         ]
         for icon, nome, destino in atalhos:

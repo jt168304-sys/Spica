@@ -1,4 +1,4 @@
-# bubble.py — Bolha flutuante com threshold de drag correto
+# bubble.py — Bolha flutuante corrigida
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.clock import Clock
@@ -12,8 +12,7 @@ from kivymd.app import MDApp
 class FloatingBubble(MDCard):
     BUBBLE_SIZE = dp(60)
     MARGEM = dp(10)
-    ANIM_DURACAO = 0.3
-    DRAG_THRESHOLD = dp(10)
+    DRAG_THRESHOLD = dp(12)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -23,9 +22,10 @@ class FloatingBubble(MDCard):
         self.elevation = 8
         self.md_bg_color = MDApp.get_running_app().theme_cls.primary_color
 
-        self._dragging = False
-        self._touch_start = (0, 0)
+        self._touch_down_pos = (0, 0)
         self._last_pos = (0, 0)
+        self._dragging = False
+        self._touch_active = False
         self.panel_aberto = False
 
         self._icon = MDIconButton(
@@ -42,47 +42,53 @@ class FloatingBubble(MDCard):
         self._painel = PainelPrincipal()
 
         self.opacity = 0
-        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4, t="out_back").start(self), 0.1)
+        Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self), 0.2)
 
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
-            self._touch_start = touch.pos
-            self._last_pos = touch.pos
-            self._dragging = False
             touch.grab(self)
+            self._touch_down_pos = (touch.x, touch.y)
+            self._last_pos = (touch.x, touch.y)
+            self._dragging = False
+            self._touch_active = True
             return True
+        # Clique fora fecha o painel
+        if self.panel_aberto:
+            if not self._painel.collide_point(*touch.pos):
+                self._fechar_painel()
         return super().on_touch_down(touch)
 
     def on_touch_move(self, touch):
-        if touch.grab_current is self:
-            dx = abs(touch.pos[0] - self._touch_start[0])
-            dy = abs(touch.pos[1] - self._touch_start[1])
-            if dx > self.DRAG_THRESHOLD or dy > self.DRAG_THRESHOLD:
+        if touch.grab_current is self and self._touch_active:
+            dx = touch.x - self._touch_down_pos[0]
+            dy = touch.y - self._touch_down_pos[1]
+            if abs(dx) > self.DRAG_THRESHOLD or abs(dy) > self.DRAG_THRESHOLD:
                 self._dragging = True
             if self._dragging:
-                mdx = touch.pos[0] - self._last_pos[0]
-                mdy = touch.pos[1] - self._last_pos[1]
-                nova_x = max(self.MARGEM, min(self.x + mdx, Window.width - self.BUBBLE_SIZE - self.MARGEM))
-                nova_y = max(self.MARGEM, min(self.y + mdy, Window.height - self.BUBBLE_SIZE - self.MARGEM))
-                self.pos = (nova_x, nova_y)
-            self._last_pos = touch.pos
+                move_x = touch.x - self._last_pos[0]
+                move_y = touch.y - self._last_pos[1]
+                nx = max(self.MARGEM, min(self.x + move_x, Window.width - self.BUBBLE_SIZE - self.MARGEM))
+                ny = max(self.MARGEM, min(self.y + move_y, Window.height - self.BUBBLE_SIZE - self.MARGEM))
+                self.pos = (nx, ny)
+            self._last_pos = (touch.x, touch.y)
             return True
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
-        if touch.grab_current is self:
+        if touch.grab_current is self and self._touch_active:
             touch.ungrab(self)
+            self._touch_active = False
             if self._dragging:
                 self._grudar_na_borda()
             else:
-                self._toggle_painel()
+                Clock.schedule_once(lambda dt: self._toggle_painel(), 0.05)
             return True
         return super().on_touch_up(touch)
 
     def _grudar_na_borda(self):
-        centro_x = self.x + self.BUBBLE_SIZE / 2
-        destino_x = self.MARGEM if centro_x < Window.width / 2 else Window.width - self.BUBBLE_SIZE - self.MARGEM
-        Animation(x=destino_x, duration=self.ANIM_DURACAO, t="out_cubic").start(self)
+        cx = self.x + self.BUBBLE_SIZE / 2
+        dx = self.MARGEM if cx < Window.width / 2 else Window.width - self.BUBBLE_SIZE - self.MARGEM
+        Animation(x=dx, duration=0.3, t="out_cubic").start(self)
 
     def _toggle_painel(self):
         if self.panel_aberto:
@@ -112,17 +118,17 @@ class FloatingBubble(MDCard):
 
 
 class PainelPrincipal(MDCard):
-    LARGURA = dp(300)
-    ALTURA = dp(380)
+    LARGURA = dp(260)
+    ALTURA = dp(320)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.size = (self.LARGURA, self.ALTURA)
-        self.radius = [dp(20)]
+        self.radius = [dp(16)]
         self.elevation = 12
         self.opacity = 0
-        self.padding = dp(16)
+        self.padding = dp(12)
         self.spacing = dp(8)
         self.orientation = "vertical"
         self._na_window = False
@@ -130,53 +136,65 @@ class PainelPrincipal(MDCard):
 
     def _construir_ui(self):
         from kivymd.uix.boxlayout import MDBoxLayout
-        from kivymd.uix.button import MDIconButton, MDRaisedButton
-        from kivymd.uix.textfield import MDTextField
+        from kivymd.uix.button import MDRaisedButton
 
         self.add_widget(MDLabel(
             text="Spica", font_style="H6", halign="center",
-            size_hint_y=None, height=dp(40),
+            size_hint_y=None, height=dp(36),
         ))
 
-        nav = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(60), spacing=dp(8))
-        for icon, tela in [("home", "home"), ("chat-outline", "chat"),
-                           ("notebook", "notas"), ("cog", "configuracoes")]:
-            nav.add_widget(MDIconButton(icon=icon, on_release=lambda x, t=tela: self._navegar(t)))
+        # Nav com 5 botões
+        nav = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(56), spacing=dp(4))
+        botoes = [
+            ("home",         "home"),
+            ("chat-outline", "chat"),
+            ("history",      "historico"),
+            ("notebook",     "notas"),
+            ("cog",          "configuracoes"),
+        ]
+        for icon, tela in botoes:
+            nav.add_widget(MDIconButton(
+                icon=icon,
+                icon_size=dp(22),
+                on_release=lambda x, t=tela: self._navegar(t)
+            ))
         self.add_widget(nav)
 
-        self.campo_texto = MDTextField(
-            hint_text="Digite um comando...",
-            mode="round",
-            size_hint_y=None,
-            height=dp(50)
-        )
-        self.add_widget(self.campo_texto)
+        # Botão novo chat
+        from kivymd.uix.button import MDRaisedButton
+        self.add_widget(MDRaisedButton(
+            text="+ Novo Chat",
+            size_hint_y=None, height=dp(40),
+            on_release=lambda x: self._novo_chat()
+        ))
 
-        acoes = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(50), spacing=dp(8))
-        acoes.add_widget(MDIconButton(icon="microphone", icon_size=dp(28), on_release=self._ativar_voz))
-        acoes.add_widget(MDRaisedButton(text="Enviar", on_release=self._enviar_comando))
-        self.add_widget(acoes)
+        # Atalhos rápidos
+        atalhos = MDBoxLayout(orientation="vertical", size_hint_y=None, height=dp(140), spacing=dp(6))
+        for icon, label, tela in [
+            ("microphone", "Assistente de Voz", "voz"),
+            ("translate",  "Tradutor",          "tradutor"),
+            ("calculator", "Calculadora",       "calculadora"),
+        ]:
+            btn = MDRaisedButton(
+                text=f"  {label}",
+                icon=icon,
+                size_hint_y=None, height=dp(38),
+                on_release=lambda x, t=tela: self._navegar(t)
+            )
+            atalhos.add_widget(btn)
+        self.add_widget(atalhos)
 
     def _navegar(self, tela):
-        MDApp.get_running_app().navigate_to(tela)
-        self.fechar()
-        # Fechar o painel na bolha tambem
         app = MDApp.get_running_app()
-        if hasattr(app, "bubble"):
-            app.bubble.panel_aberto = False
-            app.bubble._icon.icon = "weather-windy"
+        app.navigate_to(tela)
+        app.bubble._fechar_painel()
 
-    def _ativar_voz(self, *args):
-        from src.services.voice_service import VoiceService
-        MDApp.get_running_app().bubble.pulsar()
-        VoiceService.get_instance().ouvir()
-
-    def _enviar_comando(self, *args):
-        from src.modules.commands import CommandProcessor
-        texto = self.campo_texto.text.strip()
-        if texto:
-            CommandProcessor.get_instance().processar(texto)
-            self.campo_texto.text = ""
+    def _novo_chat(self):
+        app = MDApp.get_running_app()
+        chat = app.screen_manager.get_screen("chat")
+        chat._limpar_chat()
+        app.navigate_to("chat")
+        app.bubble._fechar_painel()
 
     def abrir(self, pos_bolha):
         if not self._na_window:
@@ -184,19 +202,19 @@ class PainelPrincipal(MDCard):
             self._na_window = True
         px, py = pos_bolha
         self.pos = (
-            max(dp(10), min(px - self.LARGURA / 2, Window.width - self.LARGURA - dp(10))),
-            min(py + dp(70), Window.height - self.ALTURA - dp(10)),
+            max(dp(8), min(px - self.LARGURA / 2, Window.width - self.LARGURA - dp(8))),
+            min(py + dp(66), Window.height - self.ALTURA - dp(8)),
         )
-        Animation(opacity=1, duration=0.25, t="out_quad").start(self)
+        Animation(opacity=1, duration=0.2).start(self)
 
     def fechar(self):
-        def _remover(*a):
+        def _rm(*a):
             if self._na_window:
                 try:
                     Window.remove_widget(self)
                 except Exception:
                     pass
                 self._na_window = False
-        anim = Animation(opacity=0, duration=0.2, t="in_quad")
-        anim.bind(on_complete=_remover)
+        anim = Animation(opacity=0, duration=0.15)
+        anim.bind(on_complete=_rm)
         anim.start(self)
