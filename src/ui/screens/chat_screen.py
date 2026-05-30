@@ -45,8 +45,21 @@ def _init_db(db_path):
         return False
 
 
-def _abrir_seletor_android(callback):
-    """Abre o seletor de imagem nativo do Android (qualquer app: Files, Galeria, Zarchiver...)"""
+def _pedir_permissoes():
+    try:
+        from android.permissions import request_permissions, Permission
+        request_permissions([
+            Permission.CAMERA,
+            Permission.READ_EXTERNAL_STORAGE,
+            Permission.WRITE_EXTERNAL_STORAGE,
+            Permission.READ_MEDIA_IMAGES,
+        ])
+    except Exception:
+        pass
+
+
+def _abrir_seletor_arquivos(callback):
+    """Abre o seletor de arquivos nativo do Android."""
     try:
         from jnius import autoclass
         from android.activity import bind as activity_bind, unbind as activity_unbind
@@ -57,49 +70,89 @@ def _abrir_seletor_android(callback):
         intent = Intent(Intent.ACTION_GET_CONTENT)
         intent.setType("image/*")
         intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY, True)
+
+        _cb_ref = [callback]
 
         def on_result(request_code, result_code, data):
             activity_unbind(on_activity_result=on_result)
+            cb = _cb_ref[0]
             if result_code == -1 and data:
                 uri = data.getData()
                 caminho = _uri_para_caminho(uri)
-                Clock.schedule_once(lambda dt: callback(caminho), 0)
+                Clock.schedule_once(lambda dt: cb(caminho), 0.1)
             else:
-                Clock.schedule_once(lambda dt: callback(None), 0)
+                Clock.schedule_once(lambda dt: cb(None), 0.1)
 
         activity_bind(on_activity_result=on_result)
-        PythonActivity.mActivity.startActivityForResult(intent, 101)
-    except Exception:
+        chooser = Intent.createChooser(intent, "Selecionar imagem")
+        PythonActivity.mActivity.startActivityForResult(chooser, 101)
+    except Exception as e:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
-def _abrir_camera_android(callback):
+def _abrir_camera(callback):
     """Abre a câmera nativa do Android."""
     try:
         import time
         from jnius import autoclass
         from android.activity import bind as activity_bind, unbind as activity_unbind
+        from android.permissions import request_permissions, check_permission, Permission
+
+        # Pede permissão de câmera
+        if not check_permission(Permission.CAMERA):
+            request_permissions([Permission.CAMERA, Permission.WRITE_EXTERNAL_STORAGE])
 
         Intent = autoclass("android.content.Intent")
         MediaStore = autoclass("android.provider.MediaStore")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Environment = autoclass("android.os.Environment")
+        File = autoclass("java.io.File")
 
-        pasta = "/sdcard/Pictures/Spica"
+        pasta = os.path.join(
+            Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES
+            ).getAbsolutePath(),
+            "Spica"
+        )
         os.makedirs(pasta, exist_ok=True)
         caminho_foto = os.path.join(pasta, f"foto_{int(time.time())}.jpg")
 
         intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
 
+        _cb_ref = [callback, caminho_foto]
+
         def on_result(request_code, result_code, data):
             activity_unbind(on_activity_result=on_result)
-            if result_code == -1 and os.path.exists(caminho_foto):
-                Clock.schedule_once(lambda dt: callback(caminho_foto), 0)
+            cb = _cb_ref[0]
+            foto = _cb_ref[1]
+            if result_code == -1:
+                # Procura a foto salva
+                if os.path.exists(foto):
+                    Clock.schedule_once(lambda dt: cb(foto), 0.1)
+                else:
+                    # Tenta pegar da data
+                    try:
+                        thumb = data.getParcelableExtra("data") if data else None
+                        if thumb:
+                            import time
+                            destino = os.path.join(pasta, f"foto_{int(time.time())}_thumb.jpg")
+                            from jnius import autoclass as ac
+                            bmp = ac("android.graphics.Bitmap")
+                            fos = open(destino, "wb")
+                            thumb.compress(bmp.CompressFormat.JPEG, 95, fos)
+                            fos.close()
+                            Clock.schedule_once(lambda dt: cb(destino), 0.1)
+                        else:
+                            Clock.schedule_once(lambda dt: cb(None), 0.1)
+                    except Exception:
+                        Clock.schedule_once(lambda dt: cb(None), 0.1)
             else:
-                Clock.schedule_once(lambda dt: callback(None), 0)
+                Clock.schedule_once(lambda dt: cb(None), 0.1)
 
         activity_bind(on_activity_result=on_result)
         PythonActivity.mActivity.startActivityForResult(intent, 102)
-    except Exception:
+    except Exception as e:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
@@ -112,22 +165,27 @@ def _uri_para_caminho(uri):
         ctx = PythonActivity.mActivity
 
         # Tenta pegar caminho direto
-        cursor = ctx.getContentResolver().query(uri, None, None, None, None)
-        if cursor and cursor.moveToFirst():
-            idx = cursor.getColumnIndex("_data")
-            if idx >= 0:
-                caminho = cursor.getString(idx)
+        try:
+            cursor = ctx.getContentResolver().query(uri, None, None, None, None)
+            if cursor and cursor.moveToFirst():
+                idx = cursor.getColumnIndex("_data")
+                if idx >= 0:
+                    caminho = cursor.getString(idx)
+                    cursor.close()
+                    if caminho and os.path.exists(caminho):
+                        return caminho
+            if cursor:
                 cursor.close()
-                if caminho and os.path.exists(caminho):
-                    return caminho
+        except Exception:
+            pass
 
-        # Copia para arquivo temp
+        # Copia stream para arquivo temp
         pasta = "/sdcard/Pictures/Spica"
         os.makedirs(pasta, exist_ok=True)
         destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
         stream = ctx.getContentResolver().openInputStream(uri)
         with open(destino, "wb") as f:
-            buf = bytearray(4096)
+            buf = bytearray(8192)
             while True:
                 n = stream.read(buf)
                 if n <= 0:
@@ -150,6 +208,8 @@ class ChatScreen(MDScreen):
         self.db_path = _get_db_path()
         self.db_ok = _init_db(self.db_path)
         self._construir_layout()
+        # Pede permissões ao iniciar
+        Clock.schedule_once(lambda dt: _pedir_permissoes(), 1)
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
@@ -180,7 +240,6 @@ class ChatScreen(MDScreen):
         self.scroll.add_widget(self.msgs)
         raiz.add_widget(self.scroll)
 
-        # Barra inferior compacta: 1 botão de anexo + campo + enviar
         entrada = MDBoxLayout(
             size_hint_y=None, height=dp(56),
             padding=[dp(6), dp(4)], spacing=dp(4)
@@ -217,31 +276,26 @@ class ChatScreen(MDScreen):
         Clock.schedule_once(self._boas_vindas, 0.5)
 
     def _abrir_opcoes_imagem(self, *args):
-        """Mostra popup com 2 opções: Câmera ou Galeria/Arquivos."""
         from kivymd.uix.dialog import MDDialog
         from kivymd.uix.button import MDFlatButton
 
-        dialogo = MDDialog(
+        self._dialogo_imagem = MDDialog(
             title="Adicionar imagem",
-            text="Escolha a origem da imagem:",
+            text="Escolha a origem:",
             buttons=[
                 MDFlatButton(
                     text="📷 Câmera",
-                    on_release=lambda x: (dialogo.dismiss(), self._abrir_camera())
+                    on_release=lambda x: (self._dialogo_imagem.dismiss(),
+                                          Clock.schedule_once(lambda dt: _abrir_camera(self._imagem_selecionada), 0.3))
                 ),
                 MDFlatButton(
-                    text="🖼️ Galeria / Arquivos",
-                    on_release=lambda x: (dialogo.dismiss(), self._abrir_galeria())
+                    text="📁 Arquivos",
+                    on_release=lambda x: (self._dialogo_imagem.dismiss(),
+                                          Clock.schedule_once(lambda dt: _abrir_seletor_arquivos(self._imagem_selecionada), 0.3))
                 ),
             ]
         )
-        dialogo.open()
-
-    def _abrir_camera(self):
-        _abrir_camera_android(self._imagem_selecionada)
-
-    def _abrir_galeria(self):
-        _abrir_seletor_android(self._imagem_selecionada)
+        self._dialogo_imagem.open()
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
@@ -254,7 +308,7 @@ class ChatScreen(MDScreen):
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._wind("Ola! Sou a Spica, pronta para ajudar!\nUse o clipe 📎 para anexar imagens.")
+            self._wind("Ola! Sou a Spica, pronta para ajudar!\nUse 📎 para anexar imagens.")
         else:
             self._wind("Ola! Sou a Spica.\n\nVa em Configuracoes e insira sua API key da Groq.")
 
