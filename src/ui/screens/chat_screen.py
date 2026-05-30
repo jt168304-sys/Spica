@@ -1,4 +1,4 @@
-# chat_screen.py — Chat com Spica + câmera + galeria + histórico SQLite
+# chat_screen.py — Chat com Spica
 import os
 import sqlite3
 from datetime import datetime
@@ -45,6 +45,100 @@ def _init_db(db_path):
         return False
 
 
+def _abrir_seletor_android(callback):
+    """Abre o seletor de imagem nativo do Android (qualquer app: Files, Galeria, Zarchiver...)"""
+    try:
+        from jnius import autoclass
+        from android.activity import bind as activity_bind, unbind as activity_unbind
+
+        Intent = autoclass("android.content.Intent")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+
+        intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent.setType("image/*")
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+        def on_result(request_code, result_code, data):
+            activity_unbind(on_activity_result=on_result)
+            if result_code == -1 and data:
+                uri = data.getData()
+                caminho = _uri_para_caminho(uri)
+                Clock.schedule_once(lambda dt: callback(caminho), 0)
+            else:
+                Clock.schedule_once(lambda dt: callback(None), 0)
+
+        activity_bind(on_activity_result=on_result)
+        PythonActivity.mActivity.startActivityForResult(intent, 101)
+    except Exception:
+        Clock.schedule_once(lambda dt: callback(None), 0)
+
+
+def _abrir_camera_android(callback):
+    """Abre a câmera nativa do Android."""
+    try:
+        import time
+        from jnius import autoclass
+        from android.activity import bind as activity_bind, unbind as activity_unbind
+
+        Intent = autoclass("android.content.Intent")
+        MediaStore = autoclass("android.provider.MediaStore")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+
+        pasta = "/sdcard/Pictures/Spica"
+        os.makedirs(pasta, exist_ok=True)
+        caminho_foto = os.path.join(pasta, f"foto_{int(time.time())}.jpg")
+
+        intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+        def on_result(request_code, result_code, data):
+            activity_unbind(on_activity_result=on_result)
+            if result_code == -1 and os.path.exists(caminho_foto):
+                Clock.schedule_once(lambda dt: callback(caminho_foto), 0)
+            else:
+                Clock.schedule_once(lambda dt: callback(None), 0)
+
+        activity_bind(on_activity_result=on_result)
+        PythonActivity.mActivity.startActivityForResult(intent, 102)
+    except Exception:
+        Clock.schedule_once(lambda dt: callback(None), 0)
+
+
+def _uri_para_caminho(uri):
+    """Converte URI Android para caminho de arquivo."""
+    try:
+        import time
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        ctx = PythonActivity.mActivity
+
+        # Tenta pegar caminho direto
+        cursor = ctx.getContentResolver().query(uri, None, None, None, None)
+        if cursor and cursor.moveToFirst():
+            idx = cursor.getColumnIndex("_data")
+            if idx >= 0:
+                caminho = cursor.getString(idx)
+                cursor.close()
+                if caminho and os.path.exists(caminho):
+                    return caminho
+
+        # Copia para arquivo temp
+        pasta = "/sdcard/Pictures/Spica"
+        os.makedirs(pasta, exist_ok=True)
+        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+        stream = ctx.getContentResolver().openInputStream(uri)
+        with open(destino, "wb") as f:
+            buf = bytearray(4096)
+            while True:
+                n = stream.read(buf)
+                if n <= 0:
+                    break
+                f.write(buf[:n])
+        stream.close()
+        return destino if os.path.exists(destino) else None
+    except Exception:
+        return None
+
+
 class ChatScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -86,22 +180,17 @@ class ChatScreen(MDScreen):
         self.scroll.add_widget(self.msgs)
         raiz.add_widget(self.scroll)
 
-        # Barra inferior: câmera | galeria | campo | enviar
+        # Barra inferior compacta: 1 botão de anexo + campo + enviar
         entrada = MDBoxLayout(
-            size_hint_y=None, height=dp(60),
-            padding=[dp(4), dp(4)], spacing=dp(4)
+            size_hint_y=None, height=dp(56),
+            padding=[dp(6), dp(4)], spacing=dp(4)
         )
 
-        # Botão câmera
-        entrada.add_widget(MDIconButton(
-            icon="camera",
-            on_release=self._abrir_camera
-        ))
-
-        # Botão galeria/arquivos
         self.btn_anexo = MDIconButton(
-            icon="image-plus",
-            on_release=self._abrir_picker
+            icon="paperclip",
+            size_hint=(None, None),
+            size=(dp(44), dp(44)),
+            on_release=self._abrir_opcoes_imagem
         )
         entrada.add_widget(self.btn_anexo)
 
@@ -110,24 +199,49 @@ class ChatScreen(MDScreen):
             mode="round",
             multiline=False,
             size_hint_x=1,
+            size_hint_y=None,
+            height=dp(44),
         )
         self.campo.bind(on_text_validate=self._enviar)
         entrada.add_widget(self.campo)
-        entrada.add_widget(MDIconButton(icon="send", on_release=self._enviar))
+
+        entrada.add_widget(MDIconButton(
+            icon="send",
+            size_hint=(None, None),
+            size=(dp(44), dp(44)),
+            on_release=self._enviar
+        ))
         raiz.add_widget(entrada)
 
         self.add_widget(raiz)
         Clock.schedule_once(self._boas_vindas, 0.5)
 
-    def _abrir_camera(self, *args):
-        from src.ui.image_picker import ImagePicker
-        ImagePicker(on_image=self._imagem_selecionada).open()
+    def _abrir_opcoes_imagem(self, *args):
+        """Mostra popup com 2 opções: Câmera ou Galeria/Arquivos."""
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
 
-    def _abrir_picker(self, *args):
-        from src.ui.image_picker import ImagePicker
-        picker = ImagePicker(on_image=self._imagem_selecionada)
-        # Abre direto na galeria
-        picker._abrir_galeria()
+        dialogo = MDDialog(
+            title="Adicionar imagem",
+            text="Escolha a origem da imagem:",
+            buttons=[
+                MDFlatButton(
+                    text="📷 Câmera",
+                    on_release=lambda x: (dialogo.dismiss(), self._abrir_camera())
+                ),
+                MDFlatButton(
+                    text="🖼️ Galeria / Arquivos",
+                    on_release=lambda x: (dialogo.dismiss(), self._abrir_galeria())
+                ),
+            ]
+        )
+        dialogo.open()
+
+    def _abrir_camera(self):
+        _abrir_camera_android(self._imagem_selecionada)
+
+    def _abrir_galeria(self):
+        _abrir_seletor_android(self._imagem_selecionada)
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
@@ -135,12 +249,12 @@ class ChatScreen(MDScreen):
         self.caminho_imagem_selecionada = caminho
         self.btn_anexo.icon = "image-check"
         nome = os.path.basename(caminho)
-        self.campo.hint_text = f"📸 {nome} — digite sua pergunta"
+        self.campo.hint_text = f"📸 {nome}"
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._wind("Ola! Sou a Spica, pronta para ajudar!\nUse 📷 para tirar foto ou 🖼️ para escolher da galeria.")
+            self._wind("Ola! Sou a Spica, pronta para ajudar!\nUse o clipe 📎 para anexar imagens.")
         else:
             self._wind("Ola! Sou a Spica.\n\nVa em Configuracoes e insira sua API key da Groq.")
 
@@ -168,7 +282,7 @@ class ChatScreen(MDScreen):
 
         self.campo.text = ""
         self.caminho_imagem_selecionada = None
-        self.btn_anexo.icon = "image-plus"
+        self.btn_anexo.icon = "paperclip"
         self.campo.hint_text = "Mensagem..."
 
         if imagem:
@@ -261,7 +375,9 @@ class Bolha(MDBoxLayout):
             size_hint=(0.78, None),
             padding=dp(12),
             elevation=2,
-            radius=[dp(16), dp(16), dp(4 if e_usuario else 16), dp(16 if e_usuario else 4)],
+            radius=[dp(16), dp(16),
+                    dp(4 if e_usuario else 16),
+                    dp(16 if e_usuario else 4)],
         )
         label = MDLabel(text=texto, size_hint_y=None, font_style="Body2")
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
