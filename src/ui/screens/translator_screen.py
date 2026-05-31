@@ -1,4 +1,4 @@
-# translator_screen.py — Tradutor com suporte a imagens
+# translator_screen.py — Tradutor com câmera e arquivos
 import os
 from kivy.metrics import dp
 from kivy.clock import Clock
@@ -13,13 +13,6 @@ from kivymd.uix.card import MDCard
 from kivymd.app import MDApp
 
 
-IDIOMAS = [
-    "Inglês", "Espanhol", "Francês", "Alemão", "Italiano",
-    "Japonês", "Coreano", "Chinês", "Russo", "Árabe",
-    "Português de Portugal", "Hindi"
-]
-
-
 class TranslatorScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -28,114 +21,103 @@ class TranslatorScreen(MDScreen):
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
+
         raiz.add_widget(MDTopAppBar(
             title="Tradutor",
             left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("home")]],
+            right_action_items=[["content-copy", lambda x: self._copiar_resultado()]],
         ))
 
-        scroll = ScrollView(always_overscroll=False)
+        scroll = ScrollView(always_overscroll=False, do_scroll_x=False)
         corpo = MDBoxLayout(
             orientation="vertical",
             size_hint_y=None,
             padding=dp(16),
-            spacing=dp(12)
+            spacing=dp(14)
         )
         corpo.bind(minimum_height=corpo.setter("height"))
 
-        # Campo de texto entrada
-        corpo.add_widget(MDLabel(
-            text="Texto ou imagem para traduzir:",
-            font_style="Subtitle2",
-            size_hint_y=None, height=dp(28)
-        ))
-
+        # --- Campo de entrada ---
         self.campo_entrada = MDTextField(
-            hint_text="Digite o texto aqui...",
+            hint_text="Digite o texto para traduzir...",
             mode="rectangle",
             multiline=True,
             size_hint_y=None,
-            height=dp(120),
+            height=dp(130),
         )
         corpo.add_widget(self.campo_entrada)
 
-        # Botões de imagem
-        linha_img = MDBoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
-        linha_img.add_widget(MDRaisedButton(
-            text="📷 Câmera",
-            size_hint_x=1,
-            on_release=self._abrir_camera
-        ))
-        linha_img.add_widget(MDRaisedButton(
-            text="🖼️ Galeria",
-            size_hint_x=1,
-            on_release=self._abrir_galeria
-        ))
-        corpo.add_widget(linha_img)
+        # --- Botão de imagem (único, abre popup) ---
+        self.btn_imagem = MDRaisedButton(
+            text="📎  Adicionar imagem",
+            size_hint_y=None, height=dp(46),
+            on_release=self._abrir_opcoes_imagem
+        )
+        corpo.add_widget(self.btn_imagem)
 
-        # Preview da imagem selecionada
+        # Preview nome da imagem
         self.label_imagem = MDLabel(
             text="",
             font_style="Caption",
             theme_text_color="Secondary",
-            size_hint_y=None, height=dp(24)
+            size_hint_y=None, height=dp(20)
         )
         corpo.add_widget(self.label_imagem)
 
-        # Seleção de idioma
+        # --- Idioma destino ---
         corpo.add_widget(MDLabel(
             text="Traduzir para:",
             font_style="Subtitle2",
-            size_hint_y=None, height=dp(28)
+            size_hint_y=None, height=dp(26)
         ))
 
         self.campo_idioma = MDTextField(
-            hint_text="Ex: inglês, japonês, espanhol...",
+            hint_text="Ex: inglês, japonês...",
             mode="round",
             size_hint_y=None,
-            height=dp(50),
+            height=dp(48),
         )
         self.campo_idioma.text = "Inglês"
         corpo.add_widget(self.campo_idioma)
 
         # Atalhos de idioma
-        grade_idiomas = MDBoxLayout(
+        atalhos = MDBoxLayout(
             orientation="horizontal",
-            size_hint_y=None, height=dp(42),
-            spacing=dp(6)
+            size_hint_y=None, height=dp(40),
+            spacing=dp(4)
         )
         for idioma in ["Inglês", "Espanhol", "Japonês", "Francês"]:
-            grade_idiomas.add_widget(MDFlatButton(
+            atalhos.add_widget(MDFlatButton(
                 text=idioma,
                 size_hint_x=1,
                 on_release=lambda x, i=idioma: setattr(self.campo_idioma, "text", i)
             ))
-        corpo.add_widget(grade_idiomas)
+        corpo.add_widget(atalhos)
 
-        # Botão traduzir
+        # --- Botão traduzir ---
         corpo.add_widget(MDRaisedButton(
             text="Traduzir",
             size_hint_y=None, height=dp(50),
             on_release=self._traduzir
         ))
 
-        # Resultado
+        # --- Card resultado ---
         self.card_resultado = MDCard(
             orientation="vertical",
             size_hint_y=None, height=dp(160),
-            padding=dp(16), radius=[dp(12)], elevation=2
+            padding=dp(14), radius=[dp(12)], elevation=2
         )
-        cabecalho = MDBoxLayout(size_hint_y=None, height=dp(30))
-        cabecalho.add_widget(MDLabel(
-            text="Tradução:", font_style="Subtitle2",
-            size_hint_y=None, height=dp(30)
+        topo_card = MDBoxLayout(size_hint_y=None, height=dp(32))
+        topo_card.add_widget(MDLabel(
+            text="Tradução:",
+            font_style="Subtitle2",
         ))
-        self.btn_copiar = MDIconButton(
+        topo_card.add_widget(MDIconButton(
             icon="content-copy",
             size_hint=(None, None), size=(dp(36), dp(36)),
-            on_release=self._copiar_resultado
-        )
-        cabecalho.add_widget(self.btn_copiar)
-        self.card_resultado.add_widget(cabecalho)
+            on_release=lambda x: self._copiar_resultado()
+        ))
+        self.card_resultado.add_widget(topo_card)
 
         self.label_resultado = MDLabel(
             text="O resultado aparecerá aqui...",
@@ -148,22 +130,48 @@ class TranslatorScreen(MDScreen):
         raiz.add_widget(scroll)
         self.add_widget(raiz)
 
-    def _abrir_camera(self, *args):
-        from src.ui.image_picker import ImagePicker
-        ImagePicker(on_image=self._imagem_selecionada).open()
+    def _abrir_opcoes_imagem(self, *args):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.button import MDFlatButton
 
-    def _abrir_galeria(self, *args):
-        from src.ui.image_picker import ImagePicker
-        p = ImagePicker(on_image=self._imagem_selecionada)
-        p._abrir_galeria()
+        self._dialogo = MDDialog(
+            title="Adicionar imagem",
+            text="Escolha a origem:",
+            buttons=[
+                MDFlatButton(
+                    text="📷  Câmera",
+                    on_release=lambda x: (
+                        self._dialogo.dismiss(),
+                        Clock.schedule_once(lambda dt: self._usar_camera(), 0.3)
+                    )
+                ),
+                MDFlatButton(
+                    text="📁  Arquivos",
+                    on_release=lambda x: (
+                        self._dialogo.dismiss(),
+                        Clock.schedule_once(lambda dt: self._usar_arquivos(), 0.3)
+                    )
+                ),
+            ]
+        )
+        self._dialogo.open()
+
+    def _usar_camera(self):
+        from src.ui.screens.chat_screen import _abrir_camera
+        _abrir_camera(self._imagem_selecionada)
+
+    def _usar_arquivos(self):
+        from src.ui.screens.chat_screen import _abrir_seletor_arquivos
+        _abrir_seletor_arquivos(self._imagem_selecionada)
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
+            self.label_imagem.text = "Nenhuma imagem selecionada."
             return
         self.caminho_imagem = caminho
         nome = os.path.basename(caminho)
-        self.label_imagem.text = f"📸 Imagem: {nome}"
-        self.campo_entrada.hint_text = "Opcional: instrução adicional para a tradução"
+        self.label_imagem.text = f"✅ {nome}"
+        self.btn_imagem.text = "📎  Trocar imagem"
 
     def _traduzir(self, *args):
         texto = self.campo_entrada.text.strip()
@@ -180,16 +188,24 @@ class TranslatorScreen(MDScreen):
 
         if imagem:
             instrucao = texto or ""
-            prompt = f"Leia todo o texto visível nesta imagem e traduza para {idioma}. {instrucao}\nResponda APENAS com a tradução, sem explicações."
-            GroqService.get_instance().perguntar(prompt, self._receber_traducao, caminho_imagem=imagem)
+            prompt = (
+                f"Leia todo o texto visível nesta imagem e traduza para {idioma}."
+                f" {instrucao}\nResponda APENAS com a tradução, sem explicações."
+            )
+            GroqService.get_instance().perguntar(
+                prompt, self._receber_traducao, caminho_imagem=imagem
+            )
         else:
             prompt = f"Traduza para {idioma}. Responda APENAS com a tradução:\n\n{texto}"
             GroqService.get_instance().perguntar(prompt, self._receber_traducao)
 
     def _receber_traducao(self, resultado):
         self.label_resultado.text = resultado
-        self.card_resultado.height = dp(max(160, len(resultado) // 2 + 80))
+        # Ajusta altura do card conforme tamanho do texto
+        linhas = max(3, resultado.count('\n') + len(resultado) // 40)
+        self.card_resultado.height = dp(60 + linhas * 22)
 
-    def _copiar_resultado(self, *args):
+    def _copiar_resultado(self):
         from kivy.core.clipboard import Clipboard
-        Clipboard.copy(self.label_resultado.text)
+        if self.label_resultado.text and "aparecerá" not in self.label_resultado.text:
+            Clipboard.copy(self.label_resultado.text)
