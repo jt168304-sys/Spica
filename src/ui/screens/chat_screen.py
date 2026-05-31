@@ -1,4 +1,4 @@
-# chat_screen.py — Chat com Spica + plyer para camera/arquivos
+# chat_screen.py
 import os
 import sqlite3
 from datetime import datetime
@@ -45,31 +45,34 @@ def _init_db(db_path):
         return False
 
 
+def _pedir_permissoes_camera():
+    try:
+        from android.permissions import request_permissions, Permission
+        request_permissions([
+            Permission.CAMERA,
+            Permission.READ_EXTERNAL_STORAGE,
+            Permission.WRITE_EXTERNAL_STORAGE,
+        ])
+    except Exception:
+        pass
+
+
 def _abrir_camera(callback):
-    """Abre camera usando plyer."""
     import time
     try:
-        from plyer import camera
-        pasta = "/sdcard/Pictures/Spica"
-        os.makedirs(pasta, exist_ok=True)
-        caminho = os.path.join(pasta, f"foto_{int(time.time())}.jpg")
-        camera.take_picture(
-            filename=caminho,
-            on_complete=lambda p: Clock.schedule_once(
-                lambda dt: callback(p if p and os.path.exists(p) else None), 0.1
-            )
-        )
-    except Exception as e:
-        # Fallback: Intent direto
-        _abrir_camera_intent(callback)
-
-
-def _abrir_camera_intent(callback):
-    """Intent direto para camera."""
-    import time
-    try:
+        from android.permissions import request_permissions, check_permission, Permission
         from jnius import autoclass
         from android.activity import bind as ab, unbind as aub
+
+        # Pede permissão primeiro
+        if not check_permission(Permission.CAMERA):
+            def _apos_permissao(permissoes, resultados):
+                if resultados and resultados[0]:
+                    Clock.schedule_once(lambda dt: _abrir_camera(callback), 0.5)
+                else:
+                    Clock.schedule_once(lambda dt: callback(None), 0)
+            request_permissions([Permission.CAMERA, Permission.WRITE_EXTERNAL_STORAGE], _apos_permissao)
+            return
 
         Intent = autoclass("android.content.Intent")
         MediaStore = autoclass("android.provider.MediaStore")
@@ -81,35 +84,40 @@ def _abrir_camera_intent(callback):
 
         intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
 
+        _ref = [foto]
+
         def on_result(req, res, data):
             aub(on_activity_result=on_result)
-            Clock.schedule_once(
-                lambda dt: callback(foto if res == -1 and os.path.exists(foto) else None), 0.1
-            )
+            f = _ref[0]
+            if res == -1:
+                # Tenta achar o arquivo
+                if os.path.exists(f):
+                    Clock.schedule_once(lambda dt: callback(f), 0.2)
+                else:
+                    # Busca o arquivo mais recente na pasta
+                    try:
+                        arquivos = [
+                            os.path.join(pasta, x) for x in os.listdir(pasta)
+                            if x.endswith(('.jpg', '.jpeg', '.png'))
+                        ]
+                        if arquivos:
+                            mais_recente = max(arquivos, key=os.path.getmtime)
+                            Clock.schedule_once(lambda dt: callback(mais_recente), 0.2)
+                        else:
+                            Clock.schedule_once(lambda dt: callback(None), 0)
+                    except Exception:
+                        Clock.schedule_once(lambda dt: callback(None), 0)
+            else:
+                Clock.schedule_once(lambda dt: callback(None), 0)
 
         ab(on_activity_result=on_result)
         PythonActivity.mActivity.startActivityForResult(intent, 102)
-    except Exception:
+
+    except Exception as e:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
 def _abrir_seletor_arquivos(callback):
-    """Abre seletor de arquivos usando plyer ou Intent."""
-    try:
-        from plyer import filechooser
-        filechooser.open_file(
-            title="Selecionar imagem",
-            filters=[["Imagens", "*.jpg", "*.jpeg", "*.png"]],
-            on_selection=lambda sel: Clock.schedule_once(
-                lambda dt: callback(sel[0] if sel else None), 0.1
-            )
-        )
-    except Exception:
-        _abrir_seletor_intent(callback)
-
-
-def _abrir_seletor_intent(callback):
-    """Intent direto para seletor de arquivos."""
     try:
         from jnius import autoclass
         from android.activity import bind as ab, unbind as aub
@@ -127,13 +135,14 @@ def _abrir_seletor_intent(callback):
             if res == -1 and data:
                 uri = data.getData()
                 caminho = _uri_para_caminho(uri)
-                Clock.schedule_once(lambda dt: callback(caminho), 0.1)
+                Clock.schedule_once(lambda dt: callback(caminho), 0.2)
             else:
-                Clock.schedule_once(lambda dt: callback(None), 0.1)
+                Clock.schedule_once(lambda dt: callback(None), 0.2)
 
         ab(on_activity_result=on_result)
         PythonActivity.mActivity.startActivityForResult(chooser, 101)
-    except Exception:
+
+    except Exception as e:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
@@ -158,6 +167,7 @@ def _uri_para_caminho(uri):
         except Exception:
             pass
 
+        # Copia para arquivo temp
         pasta = "/sdcard/Pictures/Spica"
         os.makedirs(pasta, exist_ok=True)
         destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
@@ -186,6 +196,8 @@ class ChatScreen(MDScreen):
         self.db_path = _get_db_path()
         self.db_ok = _init_db(self.db_path)
         self._construir_layout()
+        # Pede permissões ao iniciar o chat
+        Clock.schedule_once(lambda dt: _pedir_permissoes_camera(), 1)
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
@@ -279,6 +291,7 @@ class ChatScreen(MDScreen):
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
+            self._wind("Nao foi possivel selecionar a imagem. Tente novamente.")
             return
         self.caminho_imagem_selecionada = caminho
         self.btn_anexo.icon = "image-check"
