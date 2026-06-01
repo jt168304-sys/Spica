@@ -7,14 +7,14 @@ source.dir = .
 source.include_exts = py,png,jpg,json
 source.main = main.py
 
-requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3,plyer
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.0,kivymd==1.2.0,requests,certifi,urllib3,plyer,android
 
 orientation = portrait
 fullscreen = 0
 
 icon.filename = %(source.dir)s/Spica.png
 
-android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE,CAMERA,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
+android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE,CAMERA,READ_MEDIA_IMAGES
 
 android.sdk_path = /usr/local/lib/android/sdk
 android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653
