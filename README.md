@@ -1,13 +1,13 @@
-# 🌬️ WindIA — Assistente Virtual Android
+Spica — Assistente Virtual Android
 
 > **Assistente virtual inteligente com bolha flutuante, desenvolvido em Python + KivyMD**
 
 ---
 
-## ✨ O que é o WindIA?
+## O que é a Spica?
 
-O **WindIA** é um assistente virtual para Android feito 100% em Python.
-Funciona como o assistente do Facebook Messenger — com uma **bolha flutuante** que
+A **Spica** é uma assistente virtual para Android feito 100% em Python.
+Funciona com uma bolha flutuante que
 fica sempre visível na tela e pode ser tocada para abrir o painel principal.
 
 ### Funcionalidades
@@ -21,9 +21,9 @@ fica sempre visível na tela e pode ser tocada para abrir o painel principal.
 | 🌙 Modo escuro/claro | ✅ Pronto |
 | 🎙️ Reconhecimento de voz | ✅ Pronto |
 | ⚙️ Configurações salvas | ✅ Pronto |
-| 🤖 Chat com IA (Groq/Gemini) | 🔧 Em breve |
-| ⏰ Alarmes e lembretes | 🔧 Em breve |
-| 🌐 Tradução de texto | 🔧 Em breve |
+| 🤖 Chat com IA (Groq/Gemini) | Em breve |
+| ⏰ Alarmes e lembretes | Em breve |
+| 🌐 Tradução de texto | Em breve |
 
 ---
 
@@ -82,7 +82,7 @@ WindIA/
 
 ---
 
-## 🚀 Como Executar
+##  Como Executar
 
 ### No PC (Windows / Linux / Mac)
 
@@ -100,7 +100,7 @@ python main.py
 
 1. Instale o **Pydroid 3** na Play Store
 2. Abra o Pydroid 3 → vá em **Pip** → instale: `kivy`, `kivymd`
-3. Abra o arquivo `main.py` e execute ▶️
+3. Abra o arquivo `main.py` e execute
 
 ### No Celular com Termux
 
@@ -112,7 +112,7 @@ python main.py
 
 ---
 
-## 📱 Gerar APK com Buildozer
+##  Gerar APK com Buildozer
 
 > Requer Linux ou WSL no Windows
 
@@ -129,7 +129,7 @@ buildozer android debug
 
 ---
 
-## 💬 Comandos Disponíveis
+## Comandos Disponíveis
 
 | Exemplo | O que faz |
 |---|---|
@@ -142,7 +142,7 @@ buildozer android debug
 
 ---
 
-## 🔑 Configurar API de IA (Opcional)
+##  Configurar API de IA (Opcional)
 
 Para habilitar respostas mais inteligentes:
 
@@ -152,10 +152,10 @@ Para habilitar respostas mais inteligentes:
 
 ---
 
-## 📄 Licença
+##  Licença
 
-MIT — Livre para usar, modificar e distribuir.
+Incondicionalmente privada.
 
 ---
 
-*WindIA — Feito com 💙 Python + KivyMD*
+*Spica — Feita com Python e KivyMD*
