@@ -45,6 +45,63 @@ def _init_db(db_path):
         return False
 
 
+def _uri_para_arquivo(uri_str):
+    """Converte URI content:// para arquivo físico copiando o stream."""
+    import time
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Uri = autoclass("android.net.Uri")
+        ctx = PythonActivity.mActivity
+        uri = Uri.parse(str(uri_str))
+
+        # Tenta pegar caminho direto via _data
+        try:
+            cursor = ctx.getContentResolver().query(uri, None, None, None, None)
+            if cursor and cursor.moveToFirst():
+                idx = cursor.getColumnIndex("_data")
+                if idx >= 0:
+                    p = cursor.getString(idx)
+                    cursor.close()
+                    if p and os.path.exists(p):
+                        return p
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+
+        # Copia stream para arquivo temp
+        pasta = "/sdcard/Pictures/Spica"
+        os.makedirs(pasta, exist_ok=True)
+        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+        stream = ctx.getContentResolver().openInputStream(uri)
+        with open(destino, "wb") as f:
+            buf = bytearray(8192)
+            while True:
+                n = stream.read(buf)
+                if n <= 0:
+                    break
+                f.write(buf[:n])
+        stream.close()
+        return destino if os.path.exists(destino) else None
+    except Exception:
+        return None
+
+
+def _resolver_caminho(caminho):
+    """Resolve caminho ou URI para arquivo físico acessível."""
+    if not caminho:
+        return None
+    s = str(caminho)
+    # Já é arquivo físico
+    if os.path.exists(s):
+        return s
+    # É URI do Android
+    if s.startswith("content://") or s.startswith("file://"):
+        return _uri_para_arquivo(s)
+    return None
+
+
 def _abrir_camera(callback):
     import time
     try:
@@ -55,7 +112,9 @@ def _abrir_camera(callback):
         camera.take_picture(
             filename=foto,
             on_complete=lambda p: Clock.schedule_once(
-                lambda dt: callback(p if p and os.path.exists(str(p)) else None), 0.2
+                lambda dt: callback(
+                    foto if os.path.exists(foto) else (_resolver_caminho(p) if p else None)
+                ), 0.3
             )
         )
     except Exception:
@@ -65,12 +124,17 @@ def _abrir_camera(callback):
 def _abrir_seletor(callback):
     try:
         from plyer import filechooser
+        def _on_sel(sel):
+            if not sel:
+                Clock.schedule_once(lambda dt: callback(None), 0.2)
+                return
+            caminho = _resolver_caminho(sel[0])
+            Clock.schedule_once(lambda dt: callback(caminho), 0.2)
+
         filechooser.open_file(
             title="Selecionar imagem",
             filters=[["Imagens", "*.jpg", "*.jpeg", "*.png"]],
-            on_selection=lambda sel: Clock.schedule_once(
-                lambda dt: callback(sel[0] if sel else None), 0.2
-            )
+            on_selection=_on_sel
         )
     except Exception:
         Clock.schedule_once(lambda dt: callback(None), 0)
@@ -121,34 +185,25 @@ class ChatScreen(MDScreen):
             size_hint_y=None, height=dp(56),
             padding=[dp(6), dp(4)], spacing=dp(4)
         )
-
         self.btn_anexo = MDIconButton(
             icon="paperclip",
-            size_hint=(None, None),
-            size=(dp(44), dp(44)),
+            size_hint=(None, None), size=(dp(44), dp(44)),
             on_release=self._abrir_opcoes_imagem
         )
         entrada.add_widget(self.btn_anexo)
 
         self.campo = MDTextField(
-            hint_text="Mensagem...",
-            mode="round",
-            multiline=False,
-            size_hint_x=1,
-            size_hint_y=None,
-            height=dp(44),
+            hint_text="Mensagem...", mode="round",
+            multiline=False, size_hint_x=1,
+            size_hint_y=None, height=dp(44),
         )
         self.campo.bind(on_text_validate=self._enviar)
         entrada.add_widget(self.campo)
-
         entrada.add_widget(MDIconButton(
-            icon="send",
-            size_hint=(None, None),
-            size=(dp(44), dp(44)),
+            icon="send", size_hint=(None, None), size=(dp(44), dp(44)),
             on_release=self._enviar
         ))
         raiz.add_widget(entrada)
-
         self.add_widget(raiz)
         Clock.schedule_once(self._boas_vindas, 0.5)
 
@@ -182,9 +237,9 @@ class ChatScreen(MDScreen):
         if not caminho:
             self._wind("Nenhuma imagem selecionada.")
             return
-        self.caminho_imagem_selecionada = str(caminho)
+        self.caminho_imagem_selecionada = caminho
         self.btn_anexo.icon = "image-check"
-        self.campo.hint_text = f"📸 {os.path.basename(str(caminho))}"
+        self.campo.hint_text = f"📸 {os.path.basename(caminho)}"
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
@@ -230,7 +285,7 @@ class ChatScreen(MDScreen):
             GroqService.get_instance().perguntar(
                 texto or "Analise e descreva esta imagem.",
                 self._receber_resposta,
-                caminho_imagem=str(imagem)
+                caminho_imagem=imagem
             )
         else:
             self._usuario(texto)
@@ -307,9 +362,7 @@ class Bolha(MDBoxLayout):
 
         e_usuario = (autor == "usuario")
         card = MDCard(
-            size_hint=(0.78, None),
-            padding=dp(12),
-            elevation=2,
+            size_hint=(0.78, None), padding=dp(12), elevation=2,
             radius=[dp(16), dp(16),
                     dp(4 if e_usuario else 16),
                     dp(16 if e_usuario else 4)],
