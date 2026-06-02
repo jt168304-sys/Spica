@@ -118,7 +118,7 @@ def _abrir_camera(callback):
             )
         )
     except Exception:
-        Clock.schedule_once(lambda dt: callback(None), 0)
+        from kivy.clock import Clock as C; C.schedule_once(lambda dt: callback(f"ERRO:{type(e).__name__}:{e}"), 0)
 
 
 def _abrir_seletor(callback):
@@ -137,7 +137,7 @@ def _abrir_seletor(callback):
             on_selection=_on_sel
         )
     except Exception:
-        Clock.schedule_once(lambda dt: callback(None), 0)
+        from kivy.clock import Clock as C; C.schedule_once(lambda dt: callback(f"ERRO:{type(e).__name__}:{e}"), 0)
 
 
 class ChatScreen(MDScreen):
