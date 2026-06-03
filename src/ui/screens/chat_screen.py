@@ -45,35 +45,34 @@ def _init_db(db_path):
         return False
 
 
-def _uri_para_arquivo(uri_str):
-    """Converte URI content:// para arquivo físico copiando o stream."""
+def _copiar_para_temp(caminho_ou_uri):
+    """Copia arquivo para pasta temp garantindo acesso de leitura."""
     import time
+    import shutil
+    pasta = "/sdcard/Pictures/Spica"
+    os.makedirs(pasta, exist_ok=True)
+    destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+
+    s = str(caminho_ou_uri)
+
+    # Tenta leitura direta primeiro
+    try:
+        with open(s, "rb") as f:
+            data = f.read()
+        if data:
+            with open(destino, "wb") as f:
+                f.write(data)
+            return destino
+    except Exception:
+        pass
+
+    # Tenta via jnius (content URI)
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         Uri = autoclass("android.net.Uri")
         ctx = PythonActivity.mActivity
-        uri = Uri.parse(str(uri_str))
-
-        # Tenta pegar caminho direto via _data
-        try:
-            cursor = ctx.getContentResolver().query(uri, None, None, None, None)
-            if cursor and cursor.moveToFirst():
-                idx = cursor.getColumnIndex("_data")
-                if idx >= 0:
-                    p = cursor.getString(idx)
-                    cursor.close()
-                    if p and os.path.exists(p):
-                        return p
-            if cursor:
-                cursor.close()
-        except Exception:
-            pass
-
-        # Copia stream para arquivo temp
-        pasta = "/sdcard/Pictures/Spica"
-        os.makedirs(pasta, exist_ok=True)
-        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+        uri = Uri.parse(s)
         stream = ctx.getContentResolver().openInputStream(uri)
         with open(destino, "wb") as f:
             buf = bytearray(8192)
@@ -83,52 +82,76 @@ def _uri_para_arquivo(uri_str):
                     break
                 f.write(buf[:n])
         stream.close()
-        return destino if os.path.exists(destino) else None
+        if os.path.exists(destino) and os.path.getsize(destino) > 0:
+            return destino
     except Exception:
-        return None
+        pass
 
-
-def _resolver_caminho(caminho):
-    """Resolve caminho ou URI para arquivo físico acessível."""
-    if not caminho:
-        return None
-    s = str(caminho)
-    # Já é arquivo físico
-    if os.path.exists(s):
-        return s
-    # É URI do Android
-    if s.startswith("content://") or s.startswith("file://"):
-        return _uri_para_arquivo(s)
     return None
 
 
 def _abrir_camera(callback):
+    """Abre câmera nativa via Intent."""
     import time
     try:
-        from plyer import camera
+        from android.permissions import request_permissions, check_permission, Permission
+        from jnius import autoclass
+        from android.activity import bind as ab, unbind as aub
+
+        if not check_permission(Permission.CAMERA):
+            def _apos(perms, results):
+                if results and results[0]:
+                    Clock.schedule_once(lambda dt: _abrir_camera(callback), 0.5)
+                else:
+                    Clock.schedule_once(lambda dt: callback(None), 0)
+            request_permissions([Permission.CAMERA, Permission.WRITE_EXTERNAL_STORAGE], _apos)
+            return
+
+        Intent = autoclass("android.content.Intent")
+        MediaStore = autoclass("android.provider.MediaStore")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+
         pasta = "/sdcard/Pictures/Spica"
         os.makedirs(pasta, exist_ok=True)
         foto = os.path.join(pasta, f"foto_{int(time.time())}.jpg")
-        camera.take_picture(
-            filename=foto,
-            on_complete=lambda p: Clock.schedule_once(
-                lambda dt: callback(
-                    foto if os.path.exists(foto) else (_resolver_caminho(p) if p else None)
-                ), 0.3
-            )
-        )
-    except Exception:
-        from kivy.clock import Clock as C; C.schedule_once(lambda dt: callback(f"ERRO:{type(e).__name__}:{e}"), 0)
+
+        intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+        def on_result(req, res, data):
+            aub(on_activity_result=on_result)
+            if res == -1:
+                # Busca foto mais recente na pasta
+                try:
+                    if os.path.exists(foto):
+                        Clock.schedule_once(lambda dt: callback(foto), 0.3)
+                        return
+                    arquivos = sorted(
+                        [os.path.join(pasta, f) for f in os.listdir(pasta)
+                         if f.endswith(('.jpg', '.jpeg', '.png'))],
+                        key=os.path.getmtime, reverse=True
+                    )
+                    Clock.schedule_once(lambda dt: callback(arquivos[0] if arquivos else None), 0.3)
+                except Exception:
+                    Clock.schedule_once(lambda dt: callback(None), 0)
+            else:
+                Clock.schedule_once(lambda dt: callback(None), 0)
+
+        ab(on_activity_result=on_result)
+        PythonActivity.mActivity.startActivityForResult(intent, 102)
+    except Exception as e:
+        Clock.schedule_once(lambda dt: callback(None), 0)
 
 
 def _abrir_seletor(callback):
+    """Abre seletor de arquivos."""
     try:
         from plyer import filechooser
+
         def _on_sel(sel):
             if not sel:
                 Clock.schedule_once(lambda dt: callback(None), 0.2)
                 return
-            caminho = _resolver_caminho(sel[0])
+            caminho = _copiar_para_temp(sel[0])
             Clock.schedule_once(lambda dt: callback(caminho), 0.2)
 
         filechooser.open_file(
@@ -136,8 +159,8 @@ def _abrir_seletor(callback):
             filters=[["Imagens", "*.jpg", "*.jpeg", "*.png"]],
             on_selection=_on_sel
         )
-    except Exception:
-        from kivy.clock import Clock as C; C.schedule_once(lambda dt: callback(f"ERRO:{type(e).__name__}:{e}"), 0)
+    except Exception as e:
+        Clock.schedule_once(lambda dt: callback(None), 0)
 
 
 class ChatScreen(MDScreen):
@@ -235,7 +258,7 @@ class ChatScreen(MDScreen):
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
-            self._wind("Nenhuma imagem selecionada.")
+            self._wind("Nao foi possivel acessar a imagem.\nVerifique as permissoes do app em Configuracoes > Apps > Spica.")
             return
         self.caminho_imagem_selecionada = caminho
         self.btn_anexo.icon = "image-check"
