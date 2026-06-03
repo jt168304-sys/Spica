@@ -21,9 +21,9 @@ fica sempre visível na tela e pode ser tocada para abrir o painel principal.
 | 🌙 Modo escuro/claro | ✅ Pronto |
 | 🎙️ Reconhecimento de voz | ✅ Pronto |
 | ⚙️ Configurações salvas | ✅ Pronto |
-| 🤖 Chat com IA (Groq/Gemini) | Em breve |
-| ⏰ Alarmes e lembretes | Em breve |
-| 🌐 Tradução de texto | Em breve |
+| 🤖 Chat com IA (Groq/Gemini) |  Em breve |
+| ⏰ Alarmes e lembretes |  Em breve |
+| 🌐 Tradução de texto |  Em breve |
 
 ---
 
