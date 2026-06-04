@@ -45,17 +45,25 @@ def _init_db(db_path):
         return False
 
 
-def _copiar_para_temp(caminho_ou_uri):
-    """Copia arquivo para pasta temp garantindo acesso de leitura."""
-    import time
-    import shutil
-    pasta = "/sdcard/Pictures/Spica"
+def _get_temp_dir():
+    """Retorna diretório gravável pelo app."""
+    try:
+        from android.storage import app_storage_path
+        pasta = os.path.join(app_storage_path(), "imagens")
+    except Exception:
+        pasta = os.path.join(os.path.expanduser("~"), "imagens")
     os.makedirs(pasta, exist_ok=True)
+    return pasta
+
+
+def _copiar_para_temp(caminho_ou_uri):
+    """Copia arquivo para diretório privado do app."""
+    import time
+    s = str(caminho_ou_uri)
+    pasta = _get_temp_dir()
     destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
 
-    s = str(caminho_ou_uri)
-
-    # Tenta leitura direta primeiro
+    # 1. Tenta leitura direta
     try:
         with open(s, "rb") as f:
             data = f.read()
@@ -66,7 +74,7 @@ def _copiar_para_temp(caminho_ou_uri):
     except Exception:
         pass
 
-    # Tenta via jnius (content URI)
+    # 2. Tenta via ContentResolver (content:// URI)
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
@@ -91,7 +99,6 @@ def _copiar_para_temp(caminho_ou_uri):
 
 
 def _abrir_camera(callback):
-    """Abre câmera nativa via Intent."""
     import time
     try:
         from android.permissions import request_permissions, check_permission, Permission
@@ -104,15 +111,14 @@ def _abrir_camera(callback):
                     Clock.schedule_once(lambda dt: _abrir_camera(callback), 0.5)
                 else:
                     Clock.schedule_once(lambda dt: callback(None), 0)
-            request_permissions([Permission.CAMERA, Permission.WRITE_EXTERNAL_STORAGE], _apos)
+            request_permissions([Permission.CAMERA], _apos)
             return
 
         Intent = autoclass("android.content.Intent")
         MediaStore = autoclass("android.provider.MediaStore")
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
 
-        pasta = "/sdcard/Pictures/Spica"
-        os.makedirs(pasta, exist_ok=True)
+        pasta = _get_temp_dir()
         foto = os.path.join(pasta, f"foto_{int(time.time())}.jpg")
 
         intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
@@ -120,17 +126,15 @@ def _abrir_camera(callback):
         def on_result(req, res, data):
             aub(on_activity_result=on_result)
             if res == -1:
-                # Busca foto mais recente na pasta
                 try:
-                    if os.path.exists(foto):
-                        Clock.schedule_once(lambda dt: callback(foto), 0.3)
-                        return
                     arquivos = sorted(
                         [os.path.join(pasta, f) for f in os.listdir(pasta)
                          if f.endswith(('.jpg', '.jpeg', '.png'))],
                         key=os.path.getmtime, reverse=True
                     )
-                    Clock.schedule_once(lambda dt: callback(arquivos[0] if arquivos else None), 0.3)
+                    Clock.schedule_once(
+                        lambda dt: callback(arquivos[0] if arquivos else None), 0.3
+                    )
                 except Exception:
                     Clock.schedule_once(lambda dt: callback(None), 0)
             else:
@@ -138,12 +142,11 @@ def _abrir_camera(callback):
 
         ab(on_activity_result=on_result)
         PythonActivity.mActivity.startActivityForResult(intent, 102)
-    except Exception as e:
+    except Exception:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
 def _abrir_seletor(callback):
-    """Abre seletor de arquivos."""
     try:
         from plyer import filechooser
 
@@ -159,7 +162,7 @@ def _abrir_seletor(callback):
             filters=[["Imagens", "*.jpg", "*.jpeg", "*.png"]],
             on_selection=_on_sel
         )
-    except Exception as e:
+    except Exception:
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
@@ -258,7 +261,7 @@ class ChatScreen(MDScreen):
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
-            self._wind("Nao foi possivel acessar a imagem.\nVerifique as permissoes do app em Configuracoes > Apps > Spica.")
+            self._wind("Nao foi possivel acessar a imagem.\nVerifique as permissoes em Config > Apps > Spica > Permissoes.")
             return
         self.caminho_imagem_selecionada = caminho
         self.btn_anexo.icon = "image-check"
