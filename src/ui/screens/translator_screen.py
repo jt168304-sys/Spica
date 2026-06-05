@@ -161,8 +161,8 @@ class TranslatorScreen(MDScreen):
         _abrir_camera(self._imagem_selecionada)
 
     def _usar_arquivos(self):
-        from src.ui.screens.chat_screen import _abrir_seletor_arquivos
-        _abrir_seletor_arquivos(self._imagem_selecionada)
+        from src.ui.screens.chat_screen import _abrir_seletor
+        _abrir_seletor(self._imagem_selecionada)
 
     def _imagem_selecionada(self, caminho):
         if not caminho:
