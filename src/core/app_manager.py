@@ -1,3 +1,4 @@
+# app_manager.py — Gerenciador principal do Spica (simplificado)
 from kivymd.app import MDApp
 from kivy.uix.screenmanager import ScreenManager
 from kivy.core.window import Window
@@ -30,28 +31,16 @@ class WindApp(MDApp):
         self.theme_cls.theme_style = self.settings.get("theme_mode", "Dark")
 
     def _register_screens(self):
-        from src.ui.screens.home_screen import HomeScreen
-        from src.ui.screens.notes_screen import NotesScreen
         from src.ui.screens.chat_screen import ChatScreen
         from src.ui.screens.settings_screen import SettingsScreen
-        from src.ui.screens.history_screen import HistoryScreen
-        from src.ui.screens.voice_screen import VoiceScreen
-        from src.ui.screens.translator_screen import TranslatorScreen
-        from src.ui.screens.calculator_screen import CalculatorScreen
 
-        telas = [
-            HomeScreen(name="home"),
-            NotesScreen(name="notas"),
+        for tela in [
             ChatScreen(name="chat"),
             SettingsScreen(name="configuracoes"),
-            HistoryScreen(name="historico"),
-            VoiceScreen(name="voz"),
-            TranslatorScreen(name="tradutor"),
-            CalculatorScreen(name="calculadora"),
-        ]
-        for tela in telas:
+        ]:
             self.screen_manager.add_widget(tela)
-        self.screen_manager.current = "home"
+
+        self.screen_manager.current = "chat"
 
     def _create_bubble(self, dt):
         try:
@@ -61,7 +50,8 @@ class WindApp(MDApp):
             self.logger.error(f"Erro na bolha: {e}")
 
     def navigate_to(self, screen_name):
-        if screen_name in [s.name for s in self.screen_manager.screens]:
+        telas = [s.name for s in self.screen_manager.screens]
+        if screen_name in telas:
             self.screen_manager.current = screen_name
 
     def toggle_theme(self):
