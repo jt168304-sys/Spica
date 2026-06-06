@@ -1,45 +1,13 @@
-# bubble.py — Bolha flutuante Spica (simplificada: apenas chat + configuracoes)
+# bubble.py — Bolha flutuante Spica
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivymd.uix.card import MDCard
+from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDIconButton
+from kivymd.uix.button import MDIconButton, MDRaisedButton, MDFlatButton
 from kivymd.app import MDApp
-
-
-def _solicitar_permissao_overlay():
-    """Abre as configuracoes do Android para permitir sobreposicao de apps."""
-    try:
-        from jnius import autoclass
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Settings = autoclass("android.provider.Settings")
-        Intent = autoclass("android.content.Intent")
-        Uri = autoclass("android.net.Uri")
-
-        ctx = PythonActivity.mActivity
-        if not Settings.canDrawOverlays(ctx):
-            intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse(f"package:{ctx.getPackageName()}")
-            )
-            ctx.startActivity(intent)
-            return False
-        return True
-    except Exception:
-        return True  # Desktop: sem restricao
-
-
-def _tem_permissao_overlay():
-    try:
-        from jnius import autoclass
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Settings = autoclass("android.provider.Settings")
-        ctx = PythonActivity.mActivity
-        return Settings.canDrawOverlays(ctx)
-    except Exception:
-        return True
 
 
 class FloatingBubble(MDCard):
@@ -62,7 +30,7 @@ class FloatingBubble(MDCard):
         self.panel_aberto = False
 
         self._icon = MDIconButton(
-            icon="shimmer",
+            icon="auto-fix",
             icon_size=dp(28),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
             theme_icon_color="Custom",
@@ -77,17 +45,28 @@ class FloatingBubble(MDCard):
         self.opacity = 0
         Clock.schedule_once(lambda dt: Animation(opacity=1, duration=0.4).start(self), 0.2)
 
-        # Verifica permissao de overlay logo no inicio
-        Clock.schedule_once(lambda dt: self._checar_overlay(), 2.0)
+        # Pede permissao de sobreposicao logo no inicio
+        Clock.schedule_once(self._pedir_overlay_se_necessario, 3.0)
 
-    def _checar_overlay(self):
+    def _pedir_overlay_se_necessario(self, dt):
         try:
             from kivy.utils import platform
-            if platform == "android" and not _tem_permissao_overlay():
-                # Notifica via painel ao abrir
-                self._painel._precisa_overlay = True
-        except Exception:
-            pass
+            if platform != "android":
+                return
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Settings = autoclass("android.provider.Settings")
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            ctx = PythonActivity.mActivity
+            if not Settings.canDrawOverlays(ctx):
+                intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse(f"package:{ctx.getPackageName()}")
+                )
+                ctx.startActivity(intent)
+        except Exception as e:
+            print(f"[Spica] overlay check: {e}")
 
     # ── Touch ─────────────────────────────────────────────────────────────────
 
@@ -110,10 +89,14 @@ class FloatingBubble(MDCard):
             if abs(dx) > self.DRAG_THRESHOLD or abs(dy) > self.DRAG_THRESHOLD:
                 self._dragging = True
             if self._dragging:
-                nx = max(self.MARGEM, min(self.x + (touch.x - self._last_pos[0]),
-                                          Window.width - self.BUBBLE_SIZE - self.MARGEM))
-                ny = max(self.MARGEM, min(self.y + (touch.y - self._last_pos[1]),
-                                          Window.height - self.BUBBLE_SIZE - self.MARGEM))
+                nx = max(self.MARGEM, min(
+                    self.x + (touch.x - self._last_pos[0]),
+                    Window.width - self.BUBBLE_SIZE - self.MARGEM
+                ))
+                ny = max(self.MARGEM, min(
+                    self.y + (touch.y - self._last_pos[1]),
+                    Window.height - self.BUBBLE_SIZE - self.MARGEM
+                ))
                 self.pos = (nx, ny)
             self._last_pos = (touch.x, touch.y)
             return True
@@ -144,16 +127,22 @@ class FloatingBubble(MDCard):
             self._abrir_painel()
 
     def _abrir_painel(self):
-        self._painel.abrir(self.pos)
-        self.panel_aberto = True
-        self._icon.icon = "close"
+        try:
+            self._painel.abrir(self.pos)
+            self.panel_aberto = True
+            self._icon.icon = "close"
+        except Exception as e:
+            print(f"[Spica] _abrir_painel erro: {e}")
 
     def _fechar_painel(self):
-        self._painel.fechar()
-        self.panel_aberto = False
-        self._icon.icon = "shimmer"
+        try:
+            self._painel.fechar()
+            self.panel_aberto = False
+            self._icon.icon = "auto-fix"
+        except Exception as e:
+            print(f"[Spica] _fechar_painel erro: {e}")
 
-    # ── Animacoes ─────────────────────────────────────────────────────────────
+    # ── Animacoes extras ──────────────────────────────────────────────────────
 
     def pulsar(self):
         anim = (
@@ -168,16 +157,15 @@ class FloatingBubble(MDCard):
         self.size = (self.BUBBLE_SIZE, self.BUBBLE_SIZE)
 
 
-# ── Painel da bolha ───────────────────────────────────────────────────────────
+# ── Painel de opcoes ──────────────────────────────────────────────────────────
 
 class PainelSpica(MDCard):
-    LARGURA = dp(220)
-    ALTURA  = dp(200)
+    """Painel simples: Chat | Configuracoes | Sobreposicao."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
-        self.size = (self.LARGURA, self.ALTURA)
+        self.size = (dp(220), dp(230))
         self.radius = [dp(16)]
         self.elevation = 12
         self.opacity = 0
@@ -185,75 +173,75 @@ class PainelSpica(MDCard):
         self.spacing = dp(10)
         self.orientation = "vertical"
         self._na_window = False
-        self._precisa_overlay = False
         self._construir_ui()
 
     def _construir_ui(self):
-        from kivymd.uix.boxlayout import MDBoxLayout
-        from kivymd.uix.button import MDRaisedButton
-
         self.add_widget(MDLabel(
-            text="Spica ✦",
+            text="Spica \u2736",
             font_style="H6",
             halign="center",
             size_hint_y=None,
             height=dp(36),
         ))
 
-        # Botao Chat
+        # ── Botoes sem icon= para maxima compatibilidade com KivyMD ──
         self.add_widget(MDRaisedButton(
-            text="  Chat",
-            icon="chat-outline",
-            size_hint_y=None,
+            text="Chat",
+            size_hint=(1, None),
             height=dp(42),
             on_release=lambda x: self._ir("chat"),
         ))
 
-        # Botao Configuracoes
         self.add_widget(MDRaisedButton(
-            text="  Configuracoes",
-            icon="cog-outline",
-            size_hint_y=None,
+            text="Configuracoes",
+            size_hint=(1, None),
             height=dp(42),
             on_release=lambda x: self._ir("configuracoes"),
         ))
 
-        # Botao de overlay (aparece se nao tiver permissao)
-        self._btn_overlay = MDRaisedButton(
-            text="  Ativar Sobreposicao",
-            icon="layers-outline",
-            size_hint_y=None,
-            height=dp(38),
-            opacity=0,
-            disabled=True,
+        self.add_widget(MDFlatButton(
+            text="Ativar Sobreposicao",
+            size_hint=(1, None),
+            height=dp(36),
             on_release=lambda x: self._pedir_overlay(),
-        )
-        self.add_widget(self._btn_overlay)
+        ))
 
     def _ir(self, tela):
-        MDApp.get_running_app().navigate_to(tela)
-        MDApp.get_running_app().bubble._fechar_painel()
+        try:
+            MDApp.get_running_app().navigate_to(tela)
+            MDApp.get_running_app().bubble._fechar_painel()
+        except Exception as e:
+            print(f"[Spica] _ir erro: {e}")
 
     def _pedir_overlay(self):
-        _solicitar_permissao_overlay()
+        try:
+            from kivy.utils import platform
+            if platform != "android":
+                return
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Settings = autoclass("android.provider.Settings")
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            ctx = PythonActivity.mActivity
+            if not Settings.canDrawOverlays(ctx):
+                intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse(f"package:{ctx.getPackageName()}")
+                )
+                ctx.startActivity(intent)
+        except Exception as e:
+            print(f"[Spica] _pedir_overlay: {e}")
         MDApp.get_running_app().bubble._fechar_painel()
 
     def abrir(self, pos_bolha):
         if not self._na_window:
             Window.add_widget(self)
             self._na_window = True
-
-        # Mostra botao de overlay se necessario
-        if self._precisa_overlay:
-            self.ALTURA = dp(250)
-            self.height = self.ALTURA
-            self._btn_overlay.opacity = 1
-            self._btn_overlay.disabled = False
-
         px, py = pos_bolha
         self.pos = (
-            max(dp(8), min(px - self.LARGURA / 2, Window.width - self.LARGURA - dp(8))),
-            min(py + dp(66), Window.height - self.ALTURA - dp(8)),
+            max(dp(8), min(px - self.width / 2, Window.width - self.width - dp(8))),
+            min(py + dp(66), Window.height - self.height - dp(8)),
         )
         Animation(opacity=1, duration=0.2).start(self)
 

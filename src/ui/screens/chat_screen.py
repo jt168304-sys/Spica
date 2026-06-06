@@ -1,6 +1,7 @@
-# chat_screen.py — Chat principal do Spica (reconstruido)
+# chat_screen.py — Chat principal do Spica
 import os
 import time
+import shutil
 import sqlite3
 from datetime import datetime
 from kivy.clock import Clock
@@ -33,15 +34,13 @@ def _init_db(db_path):
         con.execute("""
             CREATE TABLE IF NOT EXISTS chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                sessao TEXT NOT NULL, autor TEXT NOT NULL,
-                mensagem TEXT NOT NULL, ts TEXT NOT NULL
+                sessao TEXT, autor TEXT, mensagem TEXT, ts TEXT
             )
         """)
         con.commit()
         con.close()
-        return True
     except Exception:
-        return False
+        pass
 
 
 # ── Utilitarios de imagem ─────────────────────────────────────────────────────
@@ -57,29 +56,63 @@ def _get_temp_dir():
 
 
 def _copiar_da_uri(uri_java):
+    """
+    Copia conteudo de uma URI Android para arquivo local.
+    Usa duas estrategias para maxima compatibilidade.
+    """
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         ctx = PythonActivity.mActivity
+        resolver = ctx.getContentResolver()
         pasta = _get_temp_dir()
         destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
-        stream = ctx.getContentResolver().openInputStream(uri_java)
-        with open(destino, "wb") as f:
-            buf = bytearray(8192)
+
+        # ── Estrategia 1: ParcelFileDescriptor → shutil (mais confiavel) ──
+        # Evita completamente o problema de bytearray pyjnius
+        try:
+            pfd = resolver.openFileDescriptor(uri_java, "r")
+            raw_fd = pfd.getFd()
+            py_fd = os.dup(raw_fd)   # duplica o FD antes de fechar o PFD
+            pfd.close()
+            with open(py_fd, "rb") as src:
+                with open(destino, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                print(f"[Spica] Imagem copiada via PFD: {destino}")
+                return destino
+        except Exception as e1:
+            print(f"[Spica] PFD falhou ({e1}), tentando Java IO...")
+
+        # ── Estrategia 2: Java FileOutputStream + buffer Java nativo ──
+        # Usa Array.newInstance para criar byte[] Java real (sem conversao Python)
+        try:
+            FileOutputStream = autoclass("java.io.FileOutputStream")
+            Array = autoclass("java.lang.reflect.Array")
+            ByteType = autoclass("java.lang.Byte").TYPE
+            stream_in = resolver.openInputStream(uri_java)
+            stream_out = FileOutputStream(destino)
+            buf = Array.newInstance(ByteType, 8192)
             while True:
-                n = stream.read(buf)
-                if n <= 0:
+                n = stream_in.read(buf, 0, 8192)
+                if n < 0:
                     break
-                f.write(buf[:n])
-        stream.close()
-        if os.path.exists(destino) and os.path.getsize(destino) > 0:
-            return destino
+                stream_out.write(buf, 0, n)
+            stream_out.flush()
+            stream_in.close()
+            stream_out.close()
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                print(f"[Spica] Imagem copiada via Java IO: {destino}")
+                return destino
+        except Exception as e2:
+            print(f"[Spica] Java IO falhou: {e2}")
+
     except Exception as e:
-        print(f"[Spica] Erro ao copiar URI: {e}")
+        print(f"[Spica] _copiar_da_uri erro geral: {e}")
     return None
 
 
-# URI da foto fica guardada fora do closure para sobreviver ao retorno da Activity
+# URI da foto fica fora do closure para sobreviver ao retorno da Activity
 _uri_foto_camera = [None]
 
 
@@ -117,21 +150,26 @@ def _abrir_camera(callback):
         def on_result(req, res, data):
             aub(on_activity_result=on_result)
             uri_salva = _uri_foto_camera[0]
-            if res == -1 and uri_salva is not None:   # RESULT_OK
-                caminho_local = _copiar_da_uri(uri_salva)
-                Clock.schedule_once(lambda dt: callback(caminho_local), 0.3)
-            else:
-                try:
-                    if uri_salva:
-                        resolver.delete(uri_salva, None, None)
-                except Exception:
-                    pass
-                Clock.schedule_once(lambda dt: callback(None), 0)
+            try:
+                if res == -1 and uri_salva is not None:   # RESULT_OK
+                    caminho = _copiar_da_uri(uri_salva)
+                    Clock.schedule_once(lambda dt: callback(caminho), 0.3)
+                    return
+            except Exception as e:
+                print(f"[Spica] camera on_result: {e}")
+            # Cancela ou erro: remove o registro vazio
+            try:
+                if uri_salva:
+                    resolver.delete(uri_salva, None, None)
+            except Exception:
+                pass
+            Clock.schedule_once(lambda dt: callback(None), 0)
 
         ab(on_activity_result=on_result)
         ctx.startActivityForResult(intent, 102)
+
     except Exception as e:
-        print(f"[Spica] Erro camera: {e}")
+        print(f"[Spica] _abrir_camera erro: {e}")
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
@@ -148,22 +186,26 @@ def _abrir_seletor(callback):
 
         def on_result(req, res, data):
             aub(on_activity_result=on_result)
-            if res == -1 and data is not None:
-                uri = data.getData()
-                if uri:
-                    caminho = _copiar_da_uri(uri)
-                    Clock.schedule_once(lambda dt: callback(caminho), 0.2)
-                    return
+            try:
+                if res == -1 and data is not None:
+                    uri = data.getData()
+                    if uri:
+                        caminho = _copiar_da_uri(uri)
+                        Clock.schedule_once(lambda dt: callback(caminho), 0.2)
+                        return
+            except Exception as e:
+                print(f"[Spica] seletor on_result: {e}")
             Clock.schedule_once(lambda dt: callback(None), 0.2)
 
         ab(on_activity_result=on_result)
         ctx.startActivityForResult(intent, 103)
+
     except Exception as e:
-        print(f"[Spica] Erro seletor: {e}")
+        print(f"[Spica] _abrir_seletor erro: {e}")
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
-# ── Widget de bolha ───────────────────────────────────────────────────────────
+# ── Widget de bolha de mensagem ───────────────────────────────────────────────
 
 class Bolha(MDBoxLayout):
     def __init__(self, texto, autor, **kwargs):
@@ -182,10 +224,7 @@ class Bolha(MDBoxLayout):
                 dp(4 if e_usuario else 16),
                 dp(16 if e_usuario else 4),
             ],
-            md_bg_color=(
-                [0.15, 0.38, 0.72, 1] if e_usuario
-                else [0.18, 0.18, 0.24, 1]
-            ),
+            md_bg_color=[0.15, 0.38, 0.72, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
         )
         label = MDLabel(
             text=texto,
@@ -211,8 +250,7 @@ class ChatScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._sessao = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._db_path = _get_db_path()
-        _init_db(self._db_path)
+        _init_db(_get_db_path())
         self._imagem_pendente = None
         self._aguardando = False
         self._bolha_digitando = None
@@ -225,14 +263,13 @@ class ChatScreen(MDScreen):
         raiz = MDBoxLayout(orientation="vertical")
 
         raiz.add_widget(MDTopAppBar(
-            title="Spica ✦",
+            title="Spica \u2736",
             right_action_items=[
-                ["cog-outline",       lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
+                ["cog-outline",          lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
                 ["delete-sweep-outline", lambda x: self._limpar_chat()],
             ],
         ))
 
-        # Mensagens
         self._scroll = ScrollView(do_scroll_x=False)
         self._msgs = MDBoxLayout(
             orientation="vertical",
@@ -279,14 +316,13 @@ class ChatScreen(MDScreen):
         )
         self._campo.bind(on_text_validate=lambda x: self._enviar())
         entrada.add_widget(self._campo)
-        self._btn_enviar = MDIconButton(
+        entrada.add_widget(MDIconButton(
             icon="send",
             icon_size=dp(24),
             theme_icon_color="Custom",
             icon_color=[0.25, 0.55, 1.0, 1],
             on_release=lambda x: self._enviar(),
-        )
-        entrada.add_widget(self._btn_enviar)
+        ))
         raiz.add_widget(entrada)
         self.add_widget(raiz)
 
@@ -295,12 +331,12 @@ class ChatScreen(MDScreen):
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._spica("Olá! Sou a Spica ✦  —  pode me enviar mensagens de texto ou imagens. Como posso ajudar?")
+            self._spica("Ola! Sou a Spica \u2736 \u2014 pode me enviar mensagens de texto ou imagens. Como posso ajudar?")
         else:
             self._spica(
-                "Olá! Sou a Spica ✦\n\n"
-                "Para ativar a IA, vá em ⚙ Configurações e insira sua chave da Groq "
-                "(console.groq.com — gratuito)."
+                "Ola! Sou a Spica \u2736\n\n"
+                "Para ativar a IA, va em \u2699 Configuracoes e insira sua chave da Groq "
+                "(console.groq.com \u2014 e gratuito)."
             )
 
     # ── Envio ─────────────────────────────────────────────────────────────────
@@ -314,20 +350,18 @@ class ChatScreen(MDScreen):
 
         from src.services.groq_service import GroqService
         if not GroqService.get_instance().disponivel:
-            self._spica("⚙ Sem API Key — abra as Configurações e insira sua chave Groq.")
+            self._spica("\u2699 Sem API Key \u2014 abra as Configuracoes e insira sua chave Groq.")
             return
 
-        # Exibição
-        exibir = texto or "📷 Imagem"
+        exibir = texto or "\U0001F4F7 Imagem"
         if self._imagem_pendente and texto:
-            exibir = f"📷  {texto}"
+            exibir = f"\U0001F4F7  {texto}"
         self._usuario(exibir)
 
         img = self._imagem_pendente
         self._imagem_pendente = None
         self._limpar_preview()
         self._campo.text = ""
-
         self._aguardando = True
         self._mostrar_digitando()
 
@@ -342,7 +376,7 @@ class ChatScreen(MDScreen):
         self._aguardando = False
         self._spica(resposta)
 
-    # ── Câmera / Galeria ──────────────────────────────────────────────────────
+    # ── Camera / Galeria ──────────────────────────────────────────────────────
 
     def _acao_camera(self):
         if self._aguardando:
@@ -356,7 +390,7 @@ class ChatScreen(MDScreen):
 
     def _ao_receber_imagem(self, caminho):
         if not caminho or not os.path.exists(caminho):
-            self._spica("Não consegui carregar a imagem. Tente novamente.")
+            self._spica("Nao consegui carregar a imagem. Tente novamente.")
             return
         self._imagem_pendente = caminho
         self._mostrar_preview(caminho)
@@ -365,7 +399,6 @@ class ChatScreen(MDScreen):
         from kivy.uix.image import AsyncImage
         self._limpar_preview()
         self._preview_box.height = dp(84)
-
         img = AsyncImage(
             source=caminho,
             size_hint=(None, None),
@@ -378,11 +411,10 @@ class ChatScreen(MDScreen):
             icon_size=dp(20),
             size_hint=(None, None),
             size=(dp(36), dp(36)),
-            pos_hint={"top": 1},
             on_release=lambda x: self._remover_imagem(),
         )
         lbl = MDLabel(
-            text="Imagem pronta — adicione texto ou toque em enviar",
+            text="Imagem pronta \u2014 adicione texto ou toque em enviar",
             font_style="Caption",
             theme_text_color="Secondary",
         )
@@ -409,7 +441,7 @@ class ChatScreen(MDScreen):
         self._rolar_baixo()
 
     def _mostrar_digitando(self):
-        self._bolha_digitando = Bolha(texto="•  •  •", autor="spica")
+        self._bolha_digitando = Bolha(texto="\u2022  \u2022  \u2022", autor="spica")
         self._msgs.add_widget(self._bolha_digitando)
         self._rolar_baixo()
 

@@ -1,4 +1,4 @@
-# permissions.py — Gerenciador de permissoes Android
+# permissions.py
 from kivy.utils import platform
 from src.utils.logger import WindLogger
 
@@ -12,20 +12,24 @@ class PermissionManager:
             return
         try:
             from android.permissions import request_permissions, Permission
-            request_permissions([
-                Permission.INTERNET,
-                Permission.CAMERA,
-                Permission.RECORD_AUDIO,
-                Permission.READ_MEDIA_IMAGES,
-                Permission.READ_EXTERNAL_STORAGE,
-                Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.VIBRATE,
-            ])
+            # Tenta cada permissao individualmente para nao deixar uma falha cancelar as outras
+            perms = []
+            for nome in [
+                "INTERNET", "CAMERA", "RECORD_AUDIO", "VIBRATE",
+                "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE",
+                "READ_MEDIA_IMAGES",   # Android 13+
+            ]:
+                try:
+                    perms.append(getattr(Permission, nome))
+                except AttributeError:
+                    pass   # Constante nao existe nessa versao do p4a — ok
+            if perms:
+                request_permissions(perms)
         except Exception as e:
             self.logger.warning(f"Erro permissoes: {e}")
 
     def pedir_overlay(self):
-        """Solicita permissao de sobreposicao de apps (SYSTEM_ALERT_WINDOW)."""
+        """Abre configuracoes do Android para SYSTEM_ALERT_WINDOW."""
         if platform != "android":
             return True
         try:
@@ -54,13 +58,9 @@ class PermissionManager:
             from jnius import autoclass
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             Settings = autoclass("android.provider.Settings")
-            ctx = PythonActivity.mActivity
-            return Settings.canDrawOverlays(ctx)
+            return Settings.canDrawOverlays(PythonActivity.mActivity)
         except Exception:
             return False
 
     def verificar(self, permissao: str) -> bool:
-        return True
-
-    def tem_microfone(self) -> bool:
         return True
