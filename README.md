@@ -154,7 +154,7 @@ Para habilitar respostas mais inteligentes:
 
 ##  Licença
 
-Incondicionalmente privada.
+Incondicionalmente privada kashira.
 
 ---
 
