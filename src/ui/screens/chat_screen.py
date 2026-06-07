@@ -1,6 +1,7 @@
 # chat_screen.py — Chat principal do Spica
 import os
 import time
+import shutil
 import sqlite3
 from datetime import datetime
 from kivy.clock import Clock
@@ -42,36 +43,94 @@ def _init_db(db_path):
         pass
 
 
-# ── Seletor de imagem via plyer ───────────────────────────────────────────────
+# ── Diretorio interno para imagens ────────────────────────────────────────────
+
+def _get_pasta_imagens():
+    try:
+        from android.storage import app_storage_path
+        pasta = os.path.join(app_storage_path(), "imagens")
+    except Exception:
+        pasta = os.path.join(os.path.expanduser("~"), "imagens")
+    os.makedirs(pasta, exist_ok=True)
+    return pasta
+
+
+# ── Seletor de galeria ────────────────────────────────────────────────────────
 
 def _abrir_seletor(callback):
     """
-    Usa plyer.filechooser — ja resolve content:// URIs internamente no Android,
-    retorna o caminho real do arquivo sem precisar de copia manual.
+    Abre seletor de imagens.  on_result apenas guarda a URI como string
+    (trabalho minimo na callback) e delega a copia para a thread Kivy.
     """
     try:
-        from plyer import filechooser
+        from jnius import autoclass
+        from android.activity import bind as ab, unbind as aub
+        Intent = autoclass("android.content.Intent")
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        ctx = PythonActivity.mActivity
 
-        def on_selection(selecao):
+        intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent.setType("image/*")
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
+
+        def on_result(req, res, data):
+            uri_str = None
             try:
-                if selecao and len(selecao) > 0:
-                    caminho = selecao[0]
-                    if caminho and os.path.exists(caminho):
-                        Clock.schedule_once(lambda dt: callback(caminho), 0.1)
-                        return
+                aub(on_activity_result=on_result)
+            except Exception:
+                pass
+            try:
+                if res == -1 and data is not None:
+                    uri = data.getData()
+                    if uri is not None:
+                        uri_str = uri.toString()
             except Exception as e:
-                print(f"[Spica] plyer selecao: {e}")
-            Clock.schedule_once(lambda dt: callback(None), 0.1)
+                print(f"[Spica] on_result: {e}")
 
-        filechooser.open_file(
-            on_selection=on_selection,
-            filters=["*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.webp"],
-            multiple=False,
-            title="Escolher imagem",
-        )
+            if uri_str:
+                Clock.schedule_once(
+                    lambda dt: _copiar_uri_e_retornar(uri_str, callback), 0.3
+                )
+            else:
+                Clock.schedule_once(lambda dt: callback(None), 0.3)
+
+        ab(on_activity_result=on_result)
+        ctx.startActivityForResult(intent, 103)
+
     except Exception as e:
         print(f"[Spica] _abrir_seletor: {e}")
         Clock.schedule_once(lambda dt: callback(None), 0)
+
+
+def _copiar_uri_e_retornar(uri_str, callback):
+    """Copia a imagem para storage interna e chama callback com o caminho real."""
+    caminho = None
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Uri = autoclass("android.net.Uri")
+        ctx = PythonActivity.mActivity
+        resolver = ctx.getContentResolver()
+        uri_java = Uri.parse(uri_str)
+
+        pasta = _get_pasta_imagens()
+        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+
+        # Estrategia: ParcelFileDescriptor → shutil (Python puro, sem bugs de bytearray)
+        pfd = resolver.openFileDescriptor(uri_java, "r")
+        if pfd is not None:
+            py_fd = os.dup(pfd.getFd())
+            pfd.close()
+            with open(py_fd, "rb") as src, open(destino, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                caminho = destino
+                print(f"[Spica] Imagem copiada: {destino}")
+
+    except Exception as e:
+        print(f"[Spica] _copiar_uri_e_retornar: {e}")
+
+    callback(caminho)
 
 
 # ── Widget bolha de mensagem ──────────────────────────────────────────────────
@@ -128,7 +187,6 @@ class ChatScreen(MDScreen):
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
-
         raiz.add_widget(MDTopAppBar(
             title="Spica \u2736",
             right_action_items=[
@@ -245,10 +303,10 @@ class ChatScreen(MDScreen):
         self._mostrar_preview(caminho)
 
     def _mostrar_preview(self, caminho):
-        from kivy.uix.image import AsyncImage
+        from kivy.uix.image import Image as KivyImage
         self._limpar_preview()
         self._preview_box.height = dp(84)
-        img = AsyncImage(
+        img = KivyImage(
             source=caminho,
             size_hint=(None, None),
             size=(dp(72), dp(72)),

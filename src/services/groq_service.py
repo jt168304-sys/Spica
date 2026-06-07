@@ -27,50 +27,37 @@ def _resolver_caminho_imagem(caminho: str) -> str:
 
 
 def _uri_para_arquivo(uri: str) -> str:
-    """Copia conteúdo de uma URI Android para um arquivo temporário."""
-    import time
+    """Copia conteudo de uma URI Android para arquivo interno (usa PFD)."""
+    import time, shutil
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Uri = autoclass("android.net.Uri")
         ctx = PythonActivity.mActivity
-
-        # Tenta pegar caminho direto via cursor
-        try:
-            from jnius import autoclass as ac
-            Uri = ac("android.net.Uri")
-            uri_obj = Uri.parse(uri)
-            cursor = ctx.getContentResolver().query(uri_obj, None, None, None, None)
-            if cursor and cursor.moveToFirst():
-                idx = cursor.getColumnIndex("_data")
-                if idx >= 0:
-                    p = cursor.getString(idx)
-                    cursor.close()
-                    if p and os.path.exists(p):
-                        return p
-            if cursor:
-                cursor.close()
-        except Exception:
-            pass
-
-        # Copia o stream para arquivo temp
-        from jnius import autoclass as ac
-        Uri = ac("android.net.Uri")
+        resolver = ctx.getContentResolver()
         uri_obj = Uri.parse(uri)
-        pasta = "/sdcard/Pictures/Spica"
+
+        # Diretorio interno do app (sempre acessivel por qualquer thread)
+        try:
+            from android.storage import app_storage_path
+            pasta = os.path.join(app_storage_path(), "imagens")
+        except Exception:
+            pasta = os.path.join(os.path.expanduser("~"), "imagens")
         os.makedirs(pasta, exist_ok=True)
         destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
-        stream = ctx.getContentResolver().openInputStream(uri_obj)
-        with open(destino, "wb") as f:
-            buf = bytearray(8192)
-            while True:
-                n = stream.read(buf)
-                if n <= 0:
-                    break
-                f.write(buf[:n])
-        stream.close()
-        return destino if os.path.exists(destino) else ""
+
+        # PFD + shutil: evita bugs de bytearray do pyjnius
+        pfd = resolver.openFileDescriptor(uri_obj, "r")
+        if pfd is not None:
+            py_fd = os.dup(pfd.getFd())
+            pfd.close()
+            with open(py_fd, "rb") as src, open(destino, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                return destino
     except Exception as e:
-        return ""
+        pass
+    return ""
 
 
 class GroqService:
