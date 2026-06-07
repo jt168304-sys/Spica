@@ -14,7 +14,7 @@ fullscreen = 0
 
 icon.filename = %(source.dir)s/Spica.png
 
-android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE,CAMERA,READ_MEDIA_IMAGES
+android.permissions = INTERNET,RECORD_AUDIO,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,FOREGROUND_SERVICE,CAMERA,READ_MEDIA_IMAGES,SYSTEM_ALERT_WINDOW
 
 android.sdk_path = /usr/local/lib/android/sdk
 android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653

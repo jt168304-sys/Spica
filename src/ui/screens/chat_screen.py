@@ -1,7 +1,6 @@
-# chat_screen.py — Chat principal do Spica
+# chat_screen.py — Chat principal do Spica (sem camera, galeria corrigida)
 import os
 import time
-import shutil
 import sqlite3
 from datetime import datetime
 from kivy.clock import Clock
@@ -17,7 +16,7 @@ from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.app import MDApp
 
 
-# ── Utilitarios de banco ──────────────────────────────────────────────────────
+# ── Banco ─────────────────────────────────────────────────────────────────────
 
 def _get_db_path():
     try:
@@ -43,7 +42,7 @@ def _init_db(db_path):
         pass
 
 
-# ── Utilitarios de imagem ─────────────────────────────────────────────────────
+# ── Imagem ────────────────────────────────────────────────────────────────────
 
 def _get_temp_dir():
     try:
@@ -57,8 +56,7 @@ def _get_temp_dir():
 
 def _copiar_da_uri(uri_java):
     """
-    Copia conteudo de uma URI Android para arquivo local.
-    Usa duas estrategias para maxima compatibilidade.
+    Tres estrategias em cascata para maxima compatibilidade.
     """
     try:
         from jnius import autoclass
@@ -68,30 +66,50 @@ def _copiar_da_uri(uri_java):
         pasta = _get_temp_dir()
         destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
 
-        # ── Estrategia 1: ParcelFileDescriptor → shutil (mais confiavel) ──
-        # Evita completamente o problema de bytearray pyjnius
+        # ── Estrategia 1: Bitmap decode/compress ─────────────────────────────
+        # Funciona com qualquer content:// URI (galeria, Drive, etc.)
         try:
-            pfd = resolver.openFileDescriptor(uri_java, "r")
-            raw_fd = pfd.getFd()
-            py_fd = os.dup(raw_fd)   # duplica o FD antes de fechar o PFD
-            pfd.close()
-            with open(py_fd, "rb") as src:
-                with open(destino, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            if os.path.exists(destino) and os.path.getsize(destino) > 0:
-                print(f"[Spica] Imagem copiada via PFD: {destino}")
-                return destino
-        except Exception as e1:
-            print(f"[Spica] PFD falhou ({e1}), tentando Java IO...")
-
-        # ── Estrategia 2: Java FileOutputStream + buffer Java nativo ──
-        # Usa Array.newInstance para criar byte[] Java real (sem conversao Python)
-        try:
+            BitmapFactory = autoclass("android.graphics.BitmapFactory")
+            CompressFormat = autoclass("android.graphics.Bitmap$CompressFormat")
             FileOutputStream = autoclass("java.io.FileOutputStream")
+
+            stream = resolver.openInputStream(uri_java)
+            bm = BitmapFactory.decodeStream(stream)
+            stream.close()
+
+            if bm is not None:
+                fos = FileOutputStream(destino)
+                bm.compress(CompressFormat.JPEG, 90, fos)
+                fos.flush()
+                fos.close()
+                bm.recycle()
+                if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                    print("[Spica] Imagem via Bitmap OK")
+                    return destino
+        except Exception as e1:
+            print(f"[Spica] Bitmap falhou: {e1}")
+
+        # ── Estrategia 2: ParcelFileDescriptor → shutil (Python puro) ────────
+        try:
+            import shutil
+            pfd = resolver.openFileDescriptor(uri_java, "r")
+            py_fd = os.dup(pfd.getFd())
+            pfd.close()
+            with open(py_fd, "rb") as src, open(destino, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                print("[Spica] Imagem via PFD OK")
+                return destino
+        except Exception as e2:
+            print(f"[Spica] PFD falhou: {e2}")
+
+        # ── Estrategia 3: Java IO com buffer Java nativo ──────────────────────
+        try:
+            FileOutputStream2 = autoclass("java.io.FileOutputStream")
             Array = autoclass("java.lang.reflect.Array")
             ByteType = autoclass("java.lang.Byte").TYPE
             stream_in = resolver.openInputStream(uri_java)
-            stream_out = FileOutputStream(destino)
+            stream_out = FileOutputStream2(destino)
             buf = Array.newInstance(ByteType, 8192)
             while True:
                 n = stream_in.read(buf, 0, 8192)
@@ -102,78 +120,21 @@ def _copiar_da_uri(uri_java):
             stream_in.close()
             stream_out.close()
             if os.path.exists(destino) and os.path.getsize(destino) > 0:
-                print(f"[Spica] Imagem copiada via Java IO: {destino}")
+                print("[Spica] Imagem via Java IO OK")
                 return destino
-        except Exception as e2:
-            print(f"[Spica] Java IO falhou: {e2}")
+        except Exception as e3:
+            print(f"[Spica] Java IO falhou: {e3}")
 
     except Exception as e:
         print(f"[Spica] _copiar_da_uri erro geral: {e}")
     return None
 
 
-# URI da foto fica fora do closure para sobreviver ao retorno da Activity
-_uri_foto_camera = [None]
-
-
-def _abrir_camera(callback):
-    try:
-        from android.permissions import request_permissions, check_permission, Permission
-        from jnius import autoclass
-        from android.activity import bind as ab, unbind as aub
-
-        if not check_permission(Permission.CAMERA):
-            def _apos(perms, results):
-                if results and results[0]:
-                    Clock.schedule_once(lambda dt: _abrir_camera(callback), 0.5)
-                else:
-                    Clock.schedule_once(lambda dt: callback(None), 0)
-            request_permissions([Permission.CAMERA], _apos)
-            return
-
-        Intent = autoclass("android.content.Intent")
-        MediaStore = autoclass("android.provider.MediaStore")
-        ContentValues = autoclass("android.content.ContentValues")
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-
-        ctx = PythonActivity.mActivity
-        resolver = ctx.getContentResolver()
-
-        values = ContentValues()
-        values.put(MediaStore.Images.Media.DISPLAY_NAME, f"spica_{int(time.time())}.jpg")
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-        _uri_foto_camera[0] = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-
-        intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        intent.putExtra(MediaStore.EXTRA_OUTPUT, _uri_foto_camera[0])
-
-        def on_result(req, res, data):
-            aub(on_activity_result=on_result)
-            uri_salva = _uri_foto_camera[0]
-            try:
-                if res == -1 and uri_salva is not None:   # RESULT_OK
-                    caminho = _copiar_da_uri(uri_salva)
-                    Clock.schedule_once(lambda dt: callback(caminho), 0.3)
-                    return
-            except Exception as e:
-                print(f"[Spica] camera on_result: {e}")
-            # Cancela ou erro: remove o registro vazio
-            try:
-                if uri_salva:
-                    resolver.delete(uri_salva, None, None)
-            except Exception:
-                pass
-            Clock.schedule_once(lambda dt: callback(None), 0)
-
-        ab(on_activity_result=on_result)
-        ctx.startActivityForResult(intent, 102)
-
-    except Exception as e:
-        print(f"[Spica] _abrir_camera erro: {e}")
-        Clock.schedule_once(lambda dt: callback(None), 0)
-
-
 def _abrir_seletor(callback):
+    """
+    Abre o seletor de imagens usando ACTION_OPEN_DOCUMENT
+    (concede permissao persistente automaticamente — mais seguro que GET_CONTENT).
+    """
     try:
         from jnius import autoclass
         from android.activity import bind as ab, unbind as aub
@@ -181,15 +142,24 @@ def _abrir_seletor(callback):
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         ctx = PythonActivity.mActivity
 
-        intent = Intent(Intent.ACTION_GET_CONTENT)
+        intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        intent.addCategory(Intent.CATEGORY_OPENABLE)
         intent.setType("image/*")
 
         def on_result(req, res, data):
-            aub(on_activity_result=on_result)
+            try:
+                aub(on_activity_result=on_result)
+            except Exception:
+                pass
             try:
                 if res == -1 and data is not None:
                     uri = data.getData()
-                    if uri:
+                    if uri is not None:
+                        # Permissao persistente para ACTION_OPEN_DOCUMENT
+                        try:
+                            ctx.getContentResolver().takePersistableUriPermission(uri, 1)
+                        except Exception:
+                            pass
                         caminho = _copiar_da_uri(uri)
                         Clock.schedule_once(lambda dt: callback(caminho), 0.2)
                         return
@@ -201,11 +171,11 @@ def _abrir_seletor(callback):
         ctx.startActivityForResult(intent, 103)
 
     except Exception as e:
-        print(f"[Spica] _abrir_seletor erro: {e}")
+        print(f"[Spica] _abrir_seletor: {e}")
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
-# ── Widget de bolha de mensagem ───────────────────────────────────────────────
+# ── Widget bolha ──────────────────────────────────────────────────────────────
 
 class Bolha(MDBoxLayout):
     def __init__(self, texto, autor, **kwargs):
@@ -257,8 +227,6 @@ class ChatScreen(MDScreen):
         self._construir_layout()
         Clock.schedule_once(self._boas_vindas, 0.4)
 
-    # ── Layout ────────────────────────────────────────────────────────────────
-
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
 
@@ -291,18 +259,13 @@ class ChatScreen(MDScreen):
         )
         raiz.add_widget(self._preview_box)
 
-        # Barra de entrada
+        # Barra de entrada — sem botao de camera
         entrada = MDBoxLayout(
             size_hint_y=None,
             height=dp(60),
             padding=[dp(6), dp(6)],
             spacing=dp(2),
         )
-        entrada.add_widget(MDIconButton(
-            icon="camera-outline",
-            icon_size=dp(24),
-            on_release=lambda x: self._acao_camera(),
-        ))
         entrada.add_widget(MDIconButton(
             icon="image-outline",
             icon_size=dp(24),
@@ -326,20 +289,16 @@ class ChatScreen(MDScreen):
         raiz.add_widget(entrada)
         self.add_widget(raiz)
 
-    # ── Boas-vindas ───────────────────────────────────────────────────────────
-
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._spica("Ola! Sou a Spica \u2736 \u2014 pode me enviar mensagens de texto ou imagens. Como posso ajudar?")
+            self._spica("Ola! Sou a Spica \u2736 \u2014 me mande texto ou imagens da galeria. Como posso ajudar?")
         else:
             self._spica(
                 "Ola! Sou a Spica \u2736\n\n"
-                "Para ativar a IA, va em \u2699 Configuracoes e insira sua chave da Groq "
-                "(console.groq.com \u2014 e gratuito)."
+                "Para ativar a IA, va em \u2699 Configuracoes e insira sua chave Groq "
+                "(console.groq.com \u2014 gratuito)."
             )
-
-    # ── Envio ─────────────────────────────────────────────────────────────────
 
     def _enviar(self):
         if self._aguardando:
@@ -350,12 +309,12 @@ class ChatScreen(MDScreen):
 
         from src.services.groq_service import GroqService
         if not GroqService.get_instance().disponivel:
-            self._spica("\u2699 Sem API Key \u2014 abra as Configuracoes e insira sua chave Groq.")
+            self._spica("\u2699 Sem API Key \u2014 abra Configuracoes e insira sua chave Groq.")
             return
 
-        exibir = texto or "\U0001F4F7 Imagem"
+        exibir = texto or "\U0001F5BC Imagem"
         if self._imagem_pendente and texto:
-            exibir = f"\U0001F4F7  {texto}"
+            exibir = f"\U0001F5BC {texto}"
         self._usuario(exibir)
 
         img = self._imagem_pendente
@@ -375,13 +334,6 @@ class ChatScreen(MDScreen):
         self._remover_digitando()
         self._aguardando = False
         self._spica(resposta)
-
-    # ── Camera / Galeria ──────────────────────────────────────────────────────
-
-    def _acao_camera(self):
-        if self._aguardando:
-            return
-        _abrir_camera(self._ao_receber_imagem)
 
     def _acao_galeria(self):
         if self._aguardando:
@@ -414,7 +366,7 @@ class ChatScreen(MDScreen):
             on_release=lambda x: self._remover_imagem(),
         )
         lbl = MDLabel(
-            text="Imagem pronta \u2014 adicione texto ou toque em enviar",
+            text="Imagem pronta \u2014 escreva algo ou envie direto",
             font_style="Caption",
             theme_text_color="Secondary",
         )
@@ -429,8 +381,6 @@ class ChatScreen(MDScreen):
     def _remover_imagem(self):
         self._imagem_pendente = None
         self._limpar_preview()
-
-    # ── Mensagens ─────────────────────────────────────────────────────────────
 
     def _usuario(self, texto):
         self._msgs.add_widget(Bolha(texto=texto, autor="usuario"))
