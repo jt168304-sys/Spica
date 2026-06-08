@@ -1,7 +1,6 @@
 # chat_screen.py — Chat principal do Spica
 import os
 import time
-import shutil
 import sqlite3
 from datetime import datetime
 from kivy.clock import Clock
@@ -43,31 +42,31 @@ def _init_db(db_path):
         pass
 
 
-# ── Diretorio interno para imagens ────────────────────────────────────────────
+# ── Storage interno ───────────────────────────────────────────────────────────
 
-def _get_pasta_imagens():
+def _pasta_imagens():
     try:
         from android.storage import app_storage_path
-        pasta = os.path.join(app_storage_path(), "imagens")
+        p = os.path.join(app_storage_path(), "imgs")
     except Exception:
-        pasta = os.path.join(os.path.expanduser("~"), "imagens")
-    os.makedirs(pasta, exist_ok=True)
-    return pasta
+        p = os.path.join(os.path.expanduser("~"), "imgs")
+    os.makedirs(p, exist_ok=True)
+    return p
 
 
-# ── Seletor de galeria ────────────────────────────────────────────────────────
+# ── Seletor de imagem ─────────────────────────────────────────────────────────
 
 def _abrir_seletor(callback):
     """
-    Abre seletor de imagens.  on_result apenas guarda a URI como string
-    (trabalho minimo na callback) e delega a copia para a thread Kivy.
+    Seleciona imagem via ACTION_GET_CONTENT.
+    on_result guarda so a URI (string) e delega tudo para a thread Kivy.
     """
     try:
         from jnius import autoclass
         from android.activity import bind as ab, unbind as aub
-        Intent = autoclass("android.content.Intent")
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        ctx = PythonActivity.mActivity
+        Intent      = autoclass("android.content.Intent")
+        PythonAct   = autoclass("org.kivy.android.PythonActivity")
+        ctx         = PythonAct.mActivity
 
         intent = Intent(Intent.ACTION_GET_CONTENT)
         intent.setType("image/*")
@@ -77,19 +76,19 @@ def _abrir_seletor(callback):
             uri_str = None
             try:
                 aub(on_activity_result=on_result)
-            except Exception:
+            except BaseException:
                 pass
             try:
                 if res == -1 and data is not None:
                     uri = data.getData()
                     if uri is not None:
                         uri_str = uri.toString()
-            except Exception as e:
-                print(f"[Spica] on_result: {e}")
+            except BaseException as e:
+                print(f"[Spica] on_result uri: {e}")
 
             if uri_str:
                 Clock.schedule_once(
-                    lambda dt: _copiar_uri_e_retornar(uri_str, callback), 0.3
+                    lambda dt, u=uri_str: _copiar_imagem(u, callback), 0.4
                 )
             else:
                 Clock.schedule_once(lambda dt: callback(None), 0.3)
@@ -102,38 +101,76 @@ def _abrir_seletor(callback):
         Clock.schedule_once(lambda dt: callback(None), 0)
 
 
-def _copiar_uri_e_retornar(uri_str, callback):
-    """Copia a imagem para storage interna e chama callback com o caminho real."""
+def _copiar_imagem(uri_str, callback):
+    """Copia via Java NIO Files.copy — sem bytearray, sem PFD mode issues."""
     caminho = None
     try:
         from jnius import autoclass
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Uri = autoclass("android.net.Uri")
-        ctx = PythonActivity.mActivity
-        resolver = ctx.getContentResolver()
-        uri_java = Uri.parse(uri_str)
+        PythonAct = autoclass("org.kivy.android.PythonActivity")
+        Uri       = autoclass("android.net.Uri")
+        ctx       = PythonAct.mActivity
+        resolver  = ctx.getContentResolver()
+        uri_java  = Uri.parse(uri_str)
 
-        pasta = _get_pasta_imagens()
-        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
+        destino = os.path.join(_pasta_imagens(), f"img_{int(time.time())}.jpg")
 
-        # Estrategia: ParcelFileDescriptor → shutil (Python puro, sem bugs de bytearray)
-        pfd = resolver.openFileDescriptor(uri_java, "r")
-        if pfd is not None:
-            py_fd = os.dup(pfd.getFd())
-            pfd.close()
-            with open(py_fd, "rb") as src, open(destino, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+        # Tentativa 1 — Java NIO Files.copy (Android 8+, API 26)
+        try:
+            Files = autoclass("java.nio.file.Files")
+            Paths = autoclass("java.nio.file.Paths")
+            istream = resolver.openInputStream(uri_java)
+            Files.copy(istream, Paths.get(destino))
+            istream.close()
             if os.path.exists(destino) and os.path.getsize(destino) > 0:
                 caminho = destino
-                print(f"[Spica] Imagem copiada: {destino}")
+                print("[Spica] NIO OK")
+        except Exception as e1:
+            print(f"[Spica] NIO: {e1}")
 
-    except Exception as e:
-        print(f"[Spica] _copiar_uri_e_retornar: {e}")
+        # Tentativa 2 — ParcelFileDescriptor (se Files.copy nao funcionar)
+        if not caminho:
+            try:
+                import shutil
+                pfd = resolver.openFileDescriptor(uri_java, "r")
+                if pfd is not None:
+                    py_fd = os.dup(pfd.getFd())
+                    pfd.close()
+                    with open(py_fd, "rb") as src, open(destino, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                        caminho = destino
+                        print("[Spica] PFD OK")
+            except Exception as e2:
+                print(f"[Spica] PFD: {e2}")
+
+        # Tentativa 3 — Bitmap (ultima opcao)
+        if not caminho:
+            try:
+                BitmapFactory = autoclass("android.graphics.BitmapFactory")
+                CompFmt       = autoclass("android.graphics.Bitmap$CompressFormat")
+                FileOutStream = autoclass("java.io.FileOutputStream")
+                istream2 = resolver.openInputStream(uri_java)
+                bm = BitmapFactory.decodeStream(istream2)
+                istream2.close()
+                if bm is not None:
+                    fos = FileOutStream(destino)
+                    bm.compress(CompFmt.JPEG, 90, fos)
+                    fos.flush()
+                    fos.close()
+                    bm.recycle()
+                    if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                        caminho = destino
+                        print("[Spica] Bitmap OK")
+            except Exception as e3:
+                print(f"[Spica] Bitmap: {e3}")
+
+    except BaseException as e:
+        print(f"[Spica] _copiar_imagem geral: {e}")
 
     callback(caminho)
 
 
-# ── Widget bolha de mensagem ──────────────────────────────────────────────────
+# ── Bolhas de mensagem ────────────────────────────────────────────────────────
 
 class Bolha(MDBoxLayout):
     def __init__(self, texto, autor, **kwargs):
@@ -141,31 +178,20 @@ class Bolha(MDBoxLayout):
         self.orientation = "horizontal"
         self.size_hint_y = None
         self.padding = [dp(4), dp(2)]
-
         e_usuario = (autor == "usuario")
         card = MDCard(
-            size_hint=(0.82, None),
-            padding=dp(12),
-            elevation=0,
-            radius=[
-                dp(16), dp(16),
-                dp(4 if e_usuario else 16),
-                dp(16 if e_usuario else 4),
-            ],
+            size_hint=(0.82, None), padding=dp(12), elevation=0,
+            radius=[dp(16), dp(16), dp(4 if e_usuario else 16), dp(16 if e_usuario else 4)],
             md_bg_color=[0.15, 0.38, 0.72, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
         )
         label = MDLabel(
-            text=texto,
-            size_hint_y=None,
-            font_style="Body2",
-            theme_text_color="Custom",
-            text_color=[1, 1, 1, 1],
+            text=texto, size_hint_y=None, font_style="Body2",
+            theme_text_color="Custom", text_color=[1, 1, 1, 1],
         )
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
         label.bind(width=lambda i, w: setattr(i, "text_size", (w, None)))
         card.bind(minimum_height=card.setter("height"))
         card.add_widget(label)
-
         espaco = MDBoxLayout(size_hint_x=0.18)
         self.add_widget(espaco if e_usuario else card)
         self.add_widget(card if e_usuario else espaco)
@@ -177,11 +203,10 @@ class Bolha(MDBoxLayout):
 class ChatScreen(MDScreen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._sessao = datetime.now().strftime("%Y%m%d_%H%M%S")
         _init_db(_get_db_path())
         self._imagem_pendente = None
         self._aguardando = False
-        self._bolha_digitando = None
+        self._digitando = None
         self._construir_layout()
         Clock.schedule_once(self._boas_vindas, 0.4)
 
@@ -191,63 +216,79 @@ class ChatScreen(MDScreen):
             title="Spica \u2736",
             right_action_items=[
                 ["cog-outline",          lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
-                ["delete-sweep-outline", lambda x: self._limpar_chat()],
+                ["delete-sweep-outline", lambda x: self._limpar()],
             ],
         ))
-
         self._scroll = ScrollView(do_scroll_x=False)
         self._msgs = MDBoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            padding=dp(10),
-            spacing=dp(8),
+            orientation="vertical", size_hint_y=None, padding=dp(10), spacing=dp(8),
         )
         self._msgs.bind(minimum_height=self._msgs.setter("height"))
         self._scroll.add_widget(self._msgs)
         raiz.add_widget(self._scroll)
 
-        self._preview_box = MDBoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=0,
-            padding=[dp(8), 0, dp(8), 0],
-            spacing=dp(6),
+        self._prev = MDBoxLayout(
+            orientation="horizontal", size_hint_y=None, height=0,
+            padding=[dp(8), 0, dp(8), 0], spacing=dp(6),
         )
-        raiz.add_widget(self._preview_box)
+        raiz.add_widget(self._prev)
 
-        entrada = MDBoxLayout(
-            size_hint_y=None,
-            height=dp(60),
-            padding=[dp(6), dp(6)],
-            spacing=dp(2),
+        barra = MDBoxLayout(
+            size_hint_y=None, height=dp(60), padding=[dp(6), dp(6)], spacing=dp(2),
         )
-        entrada.add_widget(MDIconButton(
-            icon="image-outline",
-            icon_size=dp(24),
-            on_release=lambda x: self._acao_galeria(),
+        barra.add_widget(MDIconButton(
+            icon="image-outline", icon_size=dp(24),
+            on_release=lambda x: self._galeria(),
         ))
         self._campo = MDTextField(
-            hint_text="Mensagem...",
-            mode="round",
-            multiline=False,
-            size_hint_x=1,
+            hint_text="Mensagem...", mode="round", multiline=False, size_hint_x=1,
         )
         self._campo.bind(on_text_validate=lambda x: self._enviar())
-        entrada.add_widget(self._campo)
-        entrada.add_widget(MDIconButton(
-            icon="send",
-            icon_size=dp(24),
-            theme_icon_color="Custom",
-            icon_color=[0.25, 0.55, 1.0, 1],
+        barra.add_widget(self._campo)
+        barra.add_widget(MDIconButton(
+            icon="send", icon_size=dp(24),
+            theme_icon_color="Custom", icon_color=[0.25, 0.55, 1.0, 1],
             on_release=lambda x: self._enviar(),
         ))
-        raiz.add_widget(entrada)
+        raiz.add_widget(barra)
         self.add_widget(raiz)
+
+    # ── Voz (TTS) ─────────────────────────────────────────────────────────────
+
+    def _falar(self, texto):
+        """TTS usando Android TextToSpeech (sem biblioteca externa)."""
+        try:
+            from kivy.utils import platform
+            if platform != "android":
+                return
+            from jnius import autoclass
+            PythonAct = autoclass("org.kivy.android.PythonActivity")
+            TTS       = autoclass("android.speech.tts.TextToSpeech")
+            Locale    = autoclass("java.util.Locale")
+            ctx       = PythonAct.mActivity
+
+            if not hasattr(self, "_tts") or self._tts is None:
+                self._tts_ready = [False]
+
+                class TtsListener:
+                    def onInit(inner_self, status):
+                        if status == 0:  # SUCCESS
+                            self._tts.setLanguage(Locale("pt", "BR"))
+                            self._tts_ready[0] = True
+
+                self._tts = TTS(ctx, TtsListener())
+
+            if getattr(self, "_tts_ready", [False])[0]:
+                self._tts.speak(texto, 0, None, None)  # QUEUE_FLUSH=0
+        except Exception as e:
+            print(f"[Spica] TTS: {e}")
+
+    # ── Boas-vindas ───────────────────────────────────────────────────────────
 
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._spica("Ola! Sou a Spica \u2736 \u2014 me mande texto ou imagens. Como posso ajudar?")
+            self._spica("Ola! Sou a Spica \u2736 \u2014 fale comigo por texto ou envie imagens!")
         else:
             self._spica(
                 "Ola! Sou a Spica \u2736\n\n"
@@ -255,116 +296,101 @@ class ChatScreen(MDScreen):
                 "(console.groq.com \u2014 gratuito)."
             )
 
+    # ── Envio ─────────────────────────────────────────────────────────────────
+
     def _enviar(self):
         if self._aguardando:
             return
         texto = self._campo.text.strip()
         if not texto and not self._imagem_pendente:
             return
-
         from src.services.groq_service import GroqService
         if not GroqService.get_instance().disponivel:
-            self._spica("\u2699 Sem API Key \u2014 va em Configuracoes e insira sua chave Groq.")
+            self._spica("\u2699 Sem API Key \u2014 va em Configuracoes.")
             return
-
         exibir = texto or "\U0001F5BC Imagem"
         if self._imagem_pendente and texto:
             exibir = f"\U0001F5BC {texto}"
         self._usuario(exibir)
-
         img = self._imagem_pendente
         self._imagem_pendente = None
-        self._limpar_preview()
+        self._limpar_prev()
         self._campo.text = ""
         self._aguardando = True
-        self._mostrar_digitando()
-
+        self._show_typing()
         GroqService.get_instance().perguntar(
             mensagem=texto or "Descreva e analise esta imagem detalhadamente.",
-            callback=self._receber_resposta,
+            callback=self._resposta,
             caminho_imagem=img,
         )
 
-    def _receber_resposta(self, resposta):
-        self._remover_digitando()
+    def _resposta(self, texto):
+        self._hide_typing()
         self._aguardando = False
-        self._spica(resposta)
+        self._spica(texto)
+        Clock.schedule_once(lambda dt: self._falar(texto), 0.3)
 
-    def _acao_galeria(self):
+    # ── Galeria ───────────────────────────────────────────────────────────────
+
+    def _galeria(self):
         if self._aguardando:
             return
-        _abrir_seletor(self._ao_receber_imagem)
+        _abrir_seletor(self._receber_img)
 
-    def _ao_receber_imagem(self, caminho):
+    def _receber_img(self, caminho):
         if not caminho or not os.path.exists(caminho):
             self._spica("Nao consegui carregar a imagem. Tente novamente.")
             return
         self._imagem_pendente = caminho
-        self._mostrar_preview(caminho)
+        self._show_prev(caminho)
 
-    def _mostrar_preview(self, caminho):
-        from kivy.uix.image import Image as KivyImage
-        self._limpar_preview()
-        self._preview_box.height = dp(84)
-        img = KivyImage(
-            source=caminho,
-            size_hint=(None, None),
-            size=(dp(72), dp(72)),
-            allow_stretch=True,
-            keep_ratio=True,
-        )
-        btn_rem = MDIconButton(
-            icon="close-circle-outline",
-            icon_size=dp(20),
-            size_hint=(None, None),
-            size=(dp(36), dp(36)),
-            on_release=lambda x: self._remover_imagem(),
-        )
-        lbl = MDLabel(
-            text="Imagem pronta \u2014 escreva algo ou envie direto",
-            font_style="Caption",
-            theme_text_color="Secondary",
-        )
-        self._preview_box.add_widget(img)
-        self._preview_box.add_widget(btn_rem)
-        self._preview_box.add_widget(lbl)
+    def _show_prev(self, caminho):
+        from kivy.uix.image import Image as KImg
+        self._limpar_prev()
+        self._prev.height = dp(82)
+        img = KImg(source=caminho, size_hint=(None,None), size=(dp(70),dp(70)),
+                   allow_stretch=True, keep_ratio=True)
+        btn = MDIconButton(icon="close-circle-outline", icon_size=dp(18),
+                           size_hint=(None,None), size=(dp(34),dp(34)),
+                           on_release=lambda x: self._del_img())
+        lbl = MDLabel(text="Pronta \u2014 escreva ou envie", font_style="Caption",
+                      theme_text_color="Secondary")
+        self._prev.add_widget(img)
+        self._prev.add_widget(btn)
+        self._prev.add_widget(lbl)
 
-    def _limpar_preview(self):
-        self._preview_box.clear_widgets()
-        self._preview_box.height = 0
+    def _limpar_prev(self):
+        self._prev.clear_widgets()
+        self._prev.height = 0
 
-    def _remover_imagem(self):
+    def _del_img(self):
         self._imagem_pendente = None
-        self._limpar_preview()
+        self._limpar_prev()
 
-    def _usuario(self, texto):
-        self._msgs.add_widget(Bolha(texto=texto, autor="usuario"))
-        self._rolar_baixo()
+    # ── Mensagens ─────────────────────────────────────────────────────────────
 
-    def _spica(self, texto):
-        self._msgs.add_widget(Bolha(texto=texto, autor="spica"))
-        self._rolar_baixo()
+    def _usuario(self, t): self._msgs.add_widget(Bolha(t, "usuario")); self._rolar()
+    def _spica(self, t):   self._msgs.add_widget(Bolha(t, "spica"));   self._rolar()
 
-    def _mostrar_digitando(self):
-        self._bolha_digitando = Bolha(texto="\u2022  \u2022  \u2022", autor="spica")
-        self._msgs.add_widget(self._bolha_digitando)
-        self._rolar_baixo()
+    def _show_typing(self):
+        self._digitando = Bolha("\u2022  \u2022  \u2022", "spica")
+        self._msgs.add_widget(self._digitando)
+        self._rolar()
 
-    def _remover_digitando(self):
-        if self._bolha_digitando and self._bolha_digitando in self._msgs.children:
-            self._msgs.remove_widget(self._bolha_digitando)
-        self._bolha_digitando = None
+    def _hide_typing(self):
+        if self._digitando and self._digitando in self._msgs.children:
+            self._msgs.remove_widget(self._digitando)
+        self._digitando = None
 
-    def _rolar_baixo(self):
+    def _rolar(self):
         Clock.schedule_once(lambda dt: setattr(self._scroll, "scroll_y", 0), 0.1)
 
-    def _limpar_chat(self):
+    def _limpar(self):
         self._msgs.clear_widgets()
         self._imagem_pendente = None
         self._aguardando = False
-        self._bolha_digitando = None
-        self._limpar_preview()
-        self._sessao = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._digitando = None
+        self._limpar_prev()
         from src.services.groq_service import GroqService
         GroqService.get_instance().limpar_historico()
-        Clock.schedule_once(lambda dt: self._spica("Chat limpo! Como posso ajudar?"), 0.1)
+        Clock.schedule_once(lambda dt: self._spica("Chat limpo!"), 0.1)
