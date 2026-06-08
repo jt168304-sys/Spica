@@ -1,4 +1,10 @@
 # bubble.py — Bolha flutuante Spica
+# NOTA: A bolha atual opera DENTRO do app Kivy (Window.add_widget).
+# Para sobrepor outros apps (WhatsApp, Chrome etc.) é necessário implementar
+# um Android Foreground Service com WindowManager TYPE_APPLICATION_OVERLAY,
+# o que requer código Java/Kotlin e alterações no buildozer.spec e AndroidManifest.
+# Isso está documentado como próximo passo de desenvolvimento.
+
 from kivy.core.window import Window
 from kivy.animation import Animation
 from kivy.clock import Clock
@@ -10,8 +16,9 @@ from kivymd.app import MDApp
 
 class FloatingBubble(Label):
     """
-    Usa Label como base — zero comportamento de MDCard/ripple/sombra.
-    Menu abre via MDDialog, que e o componente correto do KivyMD para overlays.
+    Bolha flutuante dentro do contexto Kivy.
+    Aparece sobre as telas do app, mas NÃO sobre outros aplicativos.
+    Para overlay real sobre outros apps, implementar Android Service separado.
     """
     SIZE   = dp(60)
     MARGEM = dp(10)
@@ -29,7 +36,7 @@ class FloatingBubble(Label):
             valign="middle",
             **kwargs,
         )
-        # Circulo azul desenhado antes do texto
+        # Círculo azul desenhado antes do texto
         with self.canvas.before:
             self._cor = Color(0.18, 0.42, 0.82, 1)
             self._circulo = Ellipse(pos=self.pos, size=self.size)
@@ -42,7 +49,7 @@ class FloatingBubble(Label):
         )
         self.text_size = self.size
 
-        # Posicao inicial
+        # Posição inicial
         self.pos = (Window.width - self.SIZE - self.MARGEM, Window.height * 0.70)
         Window.add_widget(self)
 
@@ -60,7 +67,25 @@ class FloatingBubble(Label):
         Clock.schedule_once(
             lambda dt: Animation(opacity=1, duration=0.4).start(self), 0.4
         )
+
+        # Solicitar permissão de overlay (apenas pede a permissão; overlay real requer Service)
         Clock.schedule_once(self._solicitar_overlay, 4.0)
+
+    # ── Pulsação ──────────────────────────────────────────────────────────────
+
+    def pulsar(self):
+        """Anima a bolha pulsando para indicar atividade."""
+        anim = (
+            Animation(opacity=0.5, duration=0.4) +
+            Animation(opacity=1.0, duration=0.4)
+        )
+        anim.repeat = True
+        anim.start(self)
+
+    def parar_pulsar(self):
+        """Para a animação de pulsação."""
+        Animation.cancel_all(self)
+        self.opacity = 1.0
 
     # ── Dialog ────────────────────────────────────────────────────────────────
 
@@ -84,7 +109,7 @@ class FloatingBubble(Label):
                 ],
             )
         except Exception as e:
-            print(f"[Spica] dialog: {e}")
+            print(f"[Spica] dialog criar: {e}")
 
     def _ir(self, tela):
         try:
@@ -133,7 +158,6 @@ class FloatingBubble(Label):
             if self._dragging:
                 self._grudar()
             else:
-                # Toque simples: abre o dialog
                 Clock.schedule_once(self._abrir_menu, 0.05)
             return True
         return False
@@ -152,13 +176,19 @@ class FloatingBubble(Label):
             try:
                 self._dialog.open()
             except Exception as e:
-                # Se dialog falhar, navega direto para o chat
                 print(f"[Spica] open dialog: {e}")
                 MDApp.get_running_app().navigate_to("chat")
 
     # ── Overlay ───────────────────────────────────────────────────────────────
 
     def _solicitar_overlay(self, dt):
+        """
+        Solicita a permissão SYSTEM_ALERT_WINDOW.
+        IMPORTANTE: mesmo com a permissão concedida, a bolha atual só aparece
+        dentro do app Kivy. Para sobreposição real (como Chat Heads do Messenger),
+        é necessário implementar um Android Foreground Service separado com
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY.
+        """
         try:
             from kivy.utils import platform
             if platform != "android":
@@ -170,9 +200,12 @@ class FloatingBubble(Label):
             Uri        = autoclass("android.net.Uri")
             ctx = PythonActivity.mActivity
             if not Settings.canDrawOverlays(ctx):
+                print("[Spica] Solicitando permissao de overlay...")
                 ctx.startActivity(Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse(f"package:{ctx.getPackageName()}"),
                 ))
+            else:
+                print("[Spica] Permissao de overlay ja concedida.")
         except Exception as e:
-            print(f"[Spica] overlay: {e}")
+            print(f"[Spica] overlay request: {e}")

@@ -59,7 +59,7 @@ def _pasta_imagens():
 def _abrir_seletor(callback):
     """
     Seleciona imagem via ACTION_GET_CONTENT.
-    on_result guarda so a URI (string) e delega tudo para a thread Kivy.
+    on_result guarda só a URI (string) e delega tudo para a thread Kivy.
     """
     try:
         from jnius import autoclass
@@ -83,6 +83,7 @@ def _abrir_seletor(callback):
                     uri = data.getData()
                     if uri is not None:
                         uri_str = uri.toString()
+                        print(f"[Spica] URI recebida: {uri_str}")
             except BaseException as e:
                 print(f"[Spica] on_result uri: {e}")
 
@@ -102,8 +103,9 @@ def _abrir_seletor(callback):
 
 
 def _copiar_imagem(uri_str, callback):
-    """Copia via Java NIO Files.copy — sem bytearray, sem PFD mode issues."""
+    """Copia imagem do URI para arquivo local. Três estratégias em cascata."""
     caminho = None
+    print(f"[Spica] _copiar_imagem iniciando para URI: {uri_str}")
     try:
         from jnius import autoclass
         PythonAct = autoclass("org.kivy.android.PythonActivity")
@@ -113,6 +115,7 @@ def _copiar_imagem(uri_str, callback):
         uri_java  = Uri.parse(uri_str)
 
         destino = os.path.join(_pasta_imagens(), f"img_{int(time.time())}.jpg")
+        print(f"[Spica] Destino: {destino}")
 
         # Tentativa 1 — Java NIO Files.copy (Android 8+, API 26)
         try:
@@ -123,51 +126,80 @@ def _copiar_imagem(uri_str, callback):
             istream.close()
             if os.path.exists(destino) and os.path.getsize(destino) > 0:
                 caminho = destino
-                print("[Spica] NIO OK")
+                print(f"[Spica] NIO OK — tamanho: {os.path.getsize(destino)}")
         except Exception as e1:
-            print(f"[Spica] NIO: {e1}")
+            print(f"[Spica] NIO falhou: {e1}")
 
-        # Tentativa 2 — ParcelFileDescriptor (se Files.copy nao funcionar)
+        # Tentativa 2 — ParcelFileDescriptor com os.fdopen (corrigido)
         if not caminho:
             try:
                 import shutil
                 pfd = resolver.openFileDescriptor(uri_java, "r")
                 if pfd is not None:
+                    # CORREÇÃO: usar os.fdopen em vez de open() com fd inteiro
                     py_fd = os.dup(pfd.getFd())
                     pfd.close()
-                    with open(py_fd, "rb") as src, open(destino, "wb") as dst:
+                    with os.fdopen(py_fd, "rb") as src, open(destino, "wb") as dst:
                         shutil.copyfileobj(src, dst)
                     if os.path.exists(destino) and os.path.getsize(destino) > 0:
                         caminho = destino
-                        print("[Spica] PFD OK")
+                        print(f"[Spica] PFD OK — tamanho: {os.path.getsize(destino)}")
             except Exception as e2:
-                print(f"[Spica] PFD: {e2}")
+                print(f"[Spica] PFD falhou: {e2}")
 
-        # Tentativa 3 — Bitmap (ultima opcao)
+        # Tentativa 3 — Bitmap com limite de resolução para evitar OOM
         if not caminho:
             try:
                 BitmapFactory = autoclass("android.graphics.BitmapFactory")
+                BitmapOptions = autoclass("android.graphics.BitmapFactory$Options")
                 CompFmt       = autoclass("android.graphics.Bitmap$CompressFormat")
                 FileOutStream = autoclass("java.io.FileOutputStream")
+
+                # Primeiro passo: verificar dimensões sem decodificar pixels
+                opts_check = BitmapOptions()
+                opts_check.inJustDecodeBounds = True
+                istream_check = resolver.openInputStream(uri_java)
+                BitmapFactory.decodeStream(istream_check, None, opts_check)
+                istream_check.close()
+
+                w = opts_check.outWidth
+                h = opts_check.outHeight
+                print(f"[Spica] Bitmap dimensoes originais: {w}x{h}")
+
+                # Calcular inSampleSize para limitar a ~2048px no maior lado
+                sample = 1
+                limite = 2048
+                while (w // sample) > limite or (h // sample) > limite:
+                    sample *= 2
+
+                opts_dec = BitmapOptions()
+                opts_dec.inSampleSize = sample
+                print(f"[Spica] Bitmap inSampleSize: {sample}")
+
                 istream2 = resolver.openInputStream(uri_java)
-                bm = BitmapFactory.decodeStream(istream2)
+                bm = BitmapFactory.decodeStream(istream2, None, opts_dec)
                 istream2.close()
+
                 if bm is not None:
                     fos = FileOutStream(destino)
-                    bm.compress(CompFmt.JPEG, 90, fos)
+                    bm.compress(CompFmt.JPEG, 85, fos)
                     fos.flush()
                     fos.close()
                     bm.recycle()
                     if os.path.exists(destino) and os.path.getsize(destino) > 0:
                         caminho = destino
-                        print("[Spica] Bitmap OK")
+                        print(f"[Spica] Bitmap OK — tamanho: {os.path.getsize(destino)}")
+                else:
+                    print("[Spica] Bitmap retornou null")
             except Exception as e3:
-                print(f"[Spica] Bitmap: {e3}")
+                print(f"[Spica] Bitmap falhou: {e3}")
 
     except BaseException as e:
-        print(f"[Spica] _copiar_imagem geral: {e}")
+        print(f"[Spica] _copiar_imagem erro geral: {e}")
 
-    callback(caminho)
+    print(f"[Spica] Resultado final: {caminho}")
+    # CORREÇÃO: sempre chamar callback na thread principal do Kivy
+    Clock.schedule_once(lambda dt: callback(caminho), 0)
 
 
 # ── Bolhas de mensagem ────────────────────────────────────────────────────────
@@ -207,6 +239,8 @@ class ChatScreen(MDScreen):
         self._imagem_pendente = None
         self._aguardando = False
         self._digitando = None
+        self._tts = None
+        self._tts_ready = [False]
         self._construir_layout()
         Clock.schedule_once(self._boas_vindas, 0.4)
 
@@ -253,10 +287,10 @@ class ChatScreen(MDScreen):
         raiz.add_widget(barra)
         self.add_widget(raiz)
 
-    # ── Voz (TTS) ─────────────────────────────────────────────────────────────
+    # ── TTS ───────────────────────────────────────────────────────────────────
 
-    def _falar(self, texto):
-        """TTS usando Android TextToSpeech (sem biblioteca externa)."""
+    def _init_tts(self):
+        """Inicializa Android TextToSpeech uma única vez."""
         try:
             from kivy.utils import platform
             if platform != "android":
@@ -267,25 +301,50 @@ class ChatScreen(MDScreen):
             Locale    = autoclass("java.util.Locale")
             ctx       = PythonAct.mActivity
 
-            if not hasattr(self, "_tts") or self._tts is None:
-                self._tts_ready = [False]
+            tts_ref = [None]
 
-                class TtsListener:
-                    def onInit(inner_self, status):
-                        if status == 0:  # SUCCESS
-                            self._tts.setLanguage(Locale("pt", "BR"))
-                            self._tts_ready[0] = True
+            class TtsListener:
+                def onInit(inner_self, status):
+                    if status == 0:  # SUCCESS
+                        tts_ref[0].setLanguage(Locale("pt", "BR"))
+                        self._tts_ready[0] = True
+                        print("[Spica] TTS pronto")
+                    else:
+                        print(f"[Spica] TTS init falhou: status={status}")
 
-                self._tts = TTS(ctx, TtsListener())
-
-            if getattr(self, "_tts_ready", [False])[0]:
-                self._tts.speak(texto, 0, None, None)  # QUEUE_FLUSH=0
+            listener = TtsListener()
+            tts_ref[0] = TTS(ctx, listener)
+            self._tts = tts_ref[0]
         except Exception as e:
-            print(f"[Spica] TTS: {e}")
+            print(f"[Spica] _init_tts: {e}")
+
+    def _falar(self, texto):
+        """Fala o texto usando Android TextToSpeech."""
+        try:
+            from kivy.utils import platform
+            if platform != "android":
+                return
+
+            # Inicializa o TTS na primeira chamada
+            if self._tts is None:
+                self._init_tts()
+                # Agenda tentativa novamente após inicialização
+                Clock.schedule_once(lambda dt: self._falar(texto), 1.5)
+                return
+
+            if self._tts_ready[0]:
+                self._tts.speak(texto, 0, None, None)  # QUEUE_FLUSH=0
+            else:
+                # TTS ainda inicializando, tenta em 1s
+                Clock.schedule_once(lambda dt: self._falar(texto), 1.0)
+        except Exception as e:
+            print(f"[Spica] TTS falar: {e}")
 
     # ── Boas-vindas ───────────────────────────────────────────────────────────
 
     def _boas_vindas(self, dt):
+        # Pré-inicializa TTS em background
+        Clock.schedule_once(lambda dt2: self._init_tts(), 1.0)
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
             self._spica("Ola! Sou a Spica \u2736 \u2014 fale comigo por texto ou envie imagens!")
@@ -308,9 +367,9 @@ class ChatScreen(MDScreen):
         if not GroqService.get_instance().disponivel:
             self._spica("\u2699 Sem API Key \u2014 va em Configuracoes.")
             return
-        exibir = texto or "\U0001F5BC Imagem"
+        exibir = texto or "\U0001f5bc Imagem"
         if self._imagem_pendente and texto:
-            exibir = f"\U0001F5BC {texto}"
+            exibir = f"\U0001f5bc {texto}"
         self._usuario(exibir)
         img = self._imagem_pendente
         self._imagem_pendente = None
@@ -338,6 +397,7 @@ class ChatScreen(MDScreen):
         _abrir_seletor(self._receber_img)
 
     def _receber_img(self, caminho):
+        # Este callback já é chamado na thread principal (via Clock.schedule_once)
         if not caminho or not os.path.exists(caminho):
             self._spica("Nao consegui carregar a imagem. Tente novamente.")
             return

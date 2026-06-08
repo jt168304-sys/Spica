@@ -1,4 +1,4 @@
-# voice_service.py — Reconhecimento de voz via SpeechRecognition (thread separada)
+# voice_service.py — Reconhecimento de voz (STT) via SpeechRecognition
 import threading
 from typing import Optional, Callable
 from src.utils.logger import WindLogger
@@ -26,8 +26,11 @@ class VoiceService:
             self.logger.warning("SpeechRecognition nao instalado.")
 
     def ouvir(self, callback: Optional[Callable[[str], None]] = None):
+        """Inicia reconhecimento de voz em thread separada."""
         if not self._sr:
-            if callback: callback("Modulo de voz nao instalado.")
+            if callback:
+                from kivy.clock import Clock
+                Clock.schedule_once(lambda dt: callback("Modulo de voz nao instalado."), 0)
             return
         if self._ouvindo:
             return
@@ -50,6 +53,7 @@ class VoiceService:
             self._retornar(callback, "Sem conexao para reconhecimento de voz.")
         except Exception as e:
             self.logger.error(f"Erro no reconhecimento: {e}")
+            self._retornar(callback, "Erro no reconhecimento de voz.")
         finally:
             self._ouvindo = False
             self._parar_pulso()
@@ -60,8 +64,11 @@ class VoiceService:
             Clock.schedule_once(lambda dt: callback(texto), 0)
 
     def _parar_pulso(self):
-        from kivymd.app import MDApp
-        from kivy.clock import Clock
-        app = MDApp.get_running_app()
-        if hasattr(app, "bubble"):
-            Clock.schedule_once(lambda dt: app.bubble.parar_pulsar(), 0)
+        try:
+            from kivymd.app import MDApp
+            from kivy.clock import Clock
+            app = MDApp.get_running_app()
+            if hasattr(app, "bubble") and app.bubble is not None:
+                Clock.schedule_once(lambda dt: app.bubble.parar_pulsar(), 0)
+        except Exception:
+            pass
