@@ -8,17 +8,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/kivy/buildozer:latest
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Build APK
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          command: buildozer android debug
+        run: buildozer android debug 2>&1 | tee build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: spica-debug-apk
           path: bin/*.apk
+          if-no-files-found: warn
           retention-days: 30
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
