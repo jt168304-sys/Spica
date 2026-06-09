@@ -71,6 +71,17 @@ class FloatingBubble(Label):
         # Solicitar permissão de overlay (apenas pede a permissão; overlay real requer Service)
         Clock.schedule_once(self._solicitar_overlay, 4.0)
 
+    def pulsar(self):
+        from kivy.animation import Animation
+        anim = (Animation(opacity=0.5, duration=0.4) + Animation(opacity=1.0, duration=0.4))
+        anim.repeat = True
+        anim.start(self)
+
+    def parar_pulsar(self):
+        from kivy.animation import Animation
+        Animation.cancel_all(self)
+        self.opacity = 1.0
+
     # ── Pulsação ──────────────────────────────────────────────────────────────
 
     def pulsar(self):
