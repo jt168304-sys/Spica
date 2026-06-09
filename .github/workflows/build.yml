@@ -8,69 +8,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Cache buildozer
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            ~/.gradle
-          key: buildozer-${{ hashFiles('buildozer.spec') }}-v2
-          restore-keys: buildozer-
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            python3-pip python3-venv git zip unzip \
-            openjdk-17-jdk libffi-dev libssl-dev \
-            zlib1g-dev libbz2-dev build-essential ccache \
-            autoconf automake libtool pkg-config
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install buildozer
-        run: |
-          pip install --upgrade pip
-          pip install buildozer cython==0.29.37
-
-      - name: Fix buildozer.spec for CI
-        run: |
-          sed -i '/^android.sdk_path/d' buildozer.spec
-          sed -i '/^android.ndk_path/d' buildozer.spec
-          sed -i 's/^android.skip_update.*/android.skip_update = False/' buildozer.spec
-
-      - name: Use pre-installed Android SDK/NDK
-        run: |
-          echo "android.sdk_path = /usr/local/lib/android/sdk" >> buildozer.spec
-          echo "android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653" >> buildozer.spec
-          echo "android.skip_update = True" >> buildozer.spec
+      - uses: actions/checkout@v4
 
       - name: Build APK
-        run: |
-          buildozer -v android debug 2>&1 | tee build.log
+        uses: ArtemSBulgakov/buildozer-action@v1
+        with:
+          command: buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: spica-debug-apk
           path: bin/*.apk
-          if-no-files-found: warn
           retention-days: 30
-
-      - name: Upload build log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-log
-          path: build.log
-          retention-days: 7
