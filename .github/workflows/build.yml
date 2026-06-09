@@ -20,39 +20,41 @@ jobs:
           path: |
             ~/.buildozer
             ~/.gradle
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ hashFiles('buildozer.spec') }}-v2
           restore-keys: buildozer-
 
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            python3-pip python3-venv \
-            git zip unzip openjdk-17-jdk \
-            libffi-dev libssl-dev \
-            zlib1g-dev libbz2-dev \
-            build-essential ccache
+            python3-pip python3-venv git zip unzip \
+            openjdk-17-jdk libffi-dev libssl-dev \
+            zlib1g-dev libbz2-dev build-essential ccache \
+            autoconf automake libtool pkg-config
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install buildozer and dependencies
+      - name: Install buildozer
         run: |
           pip install --upgrade pip
           pip install buildozer cython==0.29.37
 
-      - name: Fix buildozer.spec for CI (remove local SDK paths)
+      - name: Fix buildozer.spec for CI
         run: |
-          sed -i '/^android.sdk_path/d'       buildozer.spec
-          sed -i '/^android.ndk_path/d'       buildozer.spec
+          sed -i '/^android.sdk_path/d' buildozer.spec
+          sed -i '/^android.ndk_path/d' buildozer.spec
           sed -i 's/^android.skip_update.*/android.skip_update = False/' buildozer.spec
 
+      - name: Use pre-installed Android SDK/NDK
+        run: |
+          echo "android.sdk_path = /usr/local/lib/android/sdk" >> buildozer.spec
+          echo "android.ndk_path = /usr/local/lib/android/sdk/ndk/25.2.9519653" >> buildozer.spec
+          echo "android.skip_update = True" >> buildozer.spec
+
       - name: Build APK
-        env:
-          ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
-          ANDROIDNDK: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
         run: |
           buildozer -v android debug 2>&1 | tee build.log
 
