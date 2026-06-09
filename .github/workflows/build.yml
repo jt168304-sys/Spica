@@ -1,4 +1,4 @@
-name: Build WindIA APK
+name: Build APK
 
 on:
   push:
@@ -11,109 +11,64 @@ jobs:
     timeout-minutes: 90
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Instalar dependencias
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y python3.11 python3.11-dev python3.11-venv \
-          git zip unzip openjdk-17-jdk autoconf libtool pkg-config \
-          zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 \
-          cmake libffi-dev libssl-dev build-essential ccache
+      - name: Cache buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.gradle
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-
 
-    - name: Configurar Java 17
-      run: |
-        sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
-        sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
-        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-        java -version
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            python3-pip python3-venv \
+            git zip unzip openjdk-17-jdk \
+            libffi-dev libssl-dev \
+            zlib1g-dev libbz2-dev \
+            build-essential ccache
 
-    - name: Configurar Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        cmdline-tools-version: latest
-        accept-android-sdk-licenses: true
-        packages: "build-tools;33.0.2 platforms;android-33 platform-tools ndk;25.2.9519653"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Corrigir paths do SDK para buildozer
-      run: |
-        SDK=/usr/local/lib/android/sdk
-        sudo mkdir -p $SDK/tools/bin
-        sudo ln -sf $SDK/cmdline-tools/latest/bin/sdkmanager $SDK/tools/bin/sdkmanager
-        sudo ln -sf $SDK/cmdline-tools/latest/bin/avdmanager $SDK/tools/bin/avdmanager
-        printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/android
-        printf '#!/bin/sh\nexit 0\n' | sudo tee $SDK/tools/bin/android
-        sudo chmod +x $SDK/tools/android $SDK/tools/bin/android
-        sudo rm -rf $SDK/ndk/27.3.13750724 2>/dev/null || true
+      - name: Install buildozer and dependencies
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.37
 
-    - name: Instalar pip e buildozer
-      run: |
-        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-        python3.11 -m pip install --upgrade pip
-        python3.11 -m pip install git+https://github.com/kivy/buildozer.git cython==0.29.33
+      - name: Fix buildozer.spec for CI (remove local SDK paths)
+        run: |
+          sed -i '/^android.sdk_path/d'       buildozer.spec
+          sed -i '/^android.ndk_path/d'       buildozer.spec
+          sed -i 's/^android.skip_update.*/android.skip_update = False/' buildozer.spec
 
-    - name: Criar script de patch
-      run: |
-        cat > /usr/local/bin/patch_grp.py << 'PYEOF'
-        import glob, re
-        files = glob.glob('/home/runner/.buildozer/**/grpmodule.c', recursive=True)
-        if not files:
-            print("grpmodule.c nao encontrado ainda")
-        for fname in files:
-            with open(fname, 'r') as f:
-                content = f.read()
-            if 'setgrent' in content and '__ANDROID__' not in content:
-                content = content.replace('setgrent();', '/* setgrent(); */')
-                content = re.sub(r'while \(\(gr = getgrent\(\)\) != NULL\)', 'while (0)', content)
-                content = content.replace('endgrent();', '/* endgrent(); */')
-                with open(fname, 'w') as f:
-                    f.write(content)
-                print(f"Patched: {fname}")
-        PYEOF
-        chmod +x /usr/local/bin/patch_grp.py
+      - name: Build APK
+        env:
+          ANDROIDSDK: ${{ github.workspace }}/.buildozer/android/platform/android-sdk
+          ANDROIDNDK: ${{ github.workspace }}/.buildozer/android/platform/android-ndk-r25b
+        run: |
+          buildozer -v android debug 2>&1 | tee build.log
 
-    - name: Cache p4a
-      uses: actions/cache@v4
-      with:
-        path: ~/.buildozer
-        key: buildozer-v17-${{ hashFiles('buildozer.spec') }}
-        restore-keys: buildozer-v17-
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spica-debug-apk
+          path: bin/*.apk
+          if-no-files-found: warn
+          retention-days: 30
 
-    - name: Download dependencias p4a
-      env:
-        GIT_TERMINAL_PROMPT: "0"
-        GIT_ASKPASS: "echo"
-        ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
-        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
-        JAVA_HOME: "/usr/lib/jvm/java-17-openjdk-amd64"
-      run: python3.11 -m buildozer android debug 2>&1 | tee build.log || true
-
-    - name: Aplicar patch grpmodule
-      run: python3.11 /usr/local/bin/patch_grp.py
-
-    - name: Compilar APK
-      env:
-        GIT_TERMINAL_PROMPT: "0"
-        GIT_ASKPASS: "echo"
-        ANDROID_NDK_ROOT: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
-        ANDROIDNDK: "/usr/local/lib/android/sdk/ndk/25.2.9519653"
-        JAVA_HOME: "/usr/lib/jvm/java-17-openjdk-amd64"
-      run: |
-        set -o pipefail
-        python3.11 -m buildozer android debug 2>&1 | tee -a build.log
-
-    - name: Localizar e copiar APK
-      if: always()
-      run: |
-        mkdir -p artifacts
-        cp build.log artifacts/ 2>/dev/null || true
-        find /home/runner $GITHUB_WORKSPACE -name "*.apk" 2>/dev/null -exec cp {} artifacts/ \;
-        ls -lh artifacts/
-
-    - name: Salvar artefatos
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: WindIA-APK
-        path: artifacts/
-        retention-days: 7
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
