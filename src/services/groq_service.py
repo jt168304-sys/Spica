@@ -3,6 +3,8 @@ import threading
 import json
 import base64
 import os
+import time
+import shutil
 from typing import Optional, Callable, List, Dict
 from src.utils.logger import WindLogger
 from src.config.settings import Settings
@@ -13,51 +15,110 @@ Responde em português brasileiro, de forma natural e descontraída.
 Se o usuário enviar uma imagem, analise-a com atenção e responda exatamente ao que foi pedido."""
 
 
-def _resolver_caminho_imagem(caminho: str) -> str:
-    """Converte URI do Android para caminho de arquivo se necessário."""
-    if not caminho:
-        return ""
-    # Se já é um caminho de arquivo válido
-    if os.path.exists(caminho):
-        return caminho
-    # Se é uma URI do Android (content:// ou file://)
-    if caminho.startswith("content://") or caminho.startswith("file://"):
-        return _uri_para_arquivo(caminho)
-    return caminho
+def _pasta_imagens():
+    try:
+        from android.storage import app_storage_path
+        p = os.path.join(app_storage_path(), "imagens")
+    except Exception:
+        p = os.path.join(os.path.expanduser("~"), "imagens")
+    os.makedirs(p, exist_ok=True)
+    return p
 
 
-def _uri_para_arquivo(uri: str) -> str:
-    """Copia conteudo de uma URI Android para arquivo interno (usa PFD)."""
-    import time, shutil
+def _copiar_uri_para_arquivo(uri_str: str) -> str:
+    """
+    Copia conteúdo de uma URI Android para arquivo local.
+    Três estratégias em cascata para máxima compatibilidade.
+    CORREÇÃO: usa os.fdopen() em vez de open() com file descriptor inteiro.
+    """
+    destino = os.path.join(_pasta_imagens(), f"img_{int(time.time())}.jpg")
+    print(f"[Spica/groq] URI: {uri_str} → {destino}")
+
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
         Uri = autoclass("android.net.Uri")
         ctx = PythonActivity.mActivity
         resolver = ctx.getContentResolver()
-        uri_obj = Uri.parse(uri)
+        uri_java = Uri.parse(uri_str)
 
-        # Diretorio interno do app (sempre acessivel por qualquer thread)
+        # Estratégia 1 — Java NIO Files.copy (Android 8+)
         try:
-            from android.storage import app_storage_path
-            pasta = os.path.join(app_storage_path(), "imagens")
-        except Exception:
-            pasta = os.path.join(os.path.expanduser("~"), "imagens")
-        os.makedirs(pasta, exist_ok=True)
-        destino = os.path.join(pasta, f"img_{int(time.time())}.jpg")
-
-        # PFD + shutil: evita bugs de bytearray do pyjnius
-        pfd = resolver.openFileDescriptor(uri_obj, "r")
-        if pfd is not None:
-            py_fd = os.dup(pfd.getFd())
-            pfd.close()
-            with open(py_fd, "rb") as src, open(destino, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+            Files = autoclass("java.nio.file.Files")
+            Paths = autoclass("java.nio.file.Paths")
+            istream = resolver.openInputStream(uri_java)
+            Files.copy(istream, Paths.get(destino))
+            istream.close()
             if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                print(f"[Spica/groq] NIO OK — {os.path.getsize(destino)} bytes")
                 return destino
+        except Exception as e1:
+            print(f"[Spica/groq] NIO falhou: {e1}")
+
+        # Estratégia 2 — ParcelFileDescriptor com os.fdopen (CORRIGIDO)
+        try:
+            pfd = resolver.openFileDescriptor(uri_java, "r")
+            if pfd is not None:
+                py_fd = os.dup(pfd.getFd())
+                pfd.close()
+                with os.fdopen(py_fd, "rb") as src, open(destino, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                    print(f"[Spica/groq] PFD OK — {os.path.getsize(destino)} bytes")
+                    return destino
+        except Exception as e2:
+            print(f"[Spica/groq] PFD falhou: {e2}")
+
+        # Estratégia 3 — Bitmap com inSampleSize (evita OOM em fotos grandes)
+        try:
+            BitmapFactory = autoclass("android.graphics.BitmapFactory")
+            BitmapOptions = autoclass("android.graphics.BitmapFactory$Options")
+            CompFmt = autoclass("android.graphics.Bitmap$CompressFormat")
+            FileOutStream = autoclass("java.io.FileOutputStream")
+
+            opts_check = BitmapOptions()
+            opts_check.inJustDecodeBounds = True
+            istream_check = resolver.openInputStream(uri_java)
+            BitmapFactory.decodeStream(istream_check, None, opts_check)
+            istream_check.close()
+
+            w, h = opts_check.outWidth, opts_check.outHeight
+            sample = 1
+            while (w // sample) > 2048 or (h // sample) > 2048:
+                sample *= 2
+
+            opts_dec = BitmapOptions()
+            opts_dec.inSampleSize = sample
+            istream2 = resolver.openInputStream(uri_java)
+            bm = BitmapFactory.decodeStream(istream2, None, opts_dec)
+            istream2.close()
+
+            if bm is not None:
+                fos = FileOutStream(destino)
+                bm.compress(CompFmt.JPEG, 85, fos)
+                fos.flush()
+                fos.close()
+                bm.recycle()
+                if os.path.exists(destino) and os.path.getsize(destino) > 0:
+                    print(f"[Spica/groq] Bitmap OK — {os.path.getsize(destino)} bytes")
+                    return destino
+        except Exception as e3:
+            print(f"[Spica/groq] Bitmap falhou: {e3}")
+
     except Exception as e:
-        pass
+        print(f"[Spica/groq] _copiar_uri_para_arquivo erro geral: {e}")
+
     return ""
+
+
+def _resolver_caminho_imagem(caminho: str) -> str:
+    if not caminho:
+        return ""
+    if os.path.exists(caminho):
+        return caminho
+    if caminho.startswith("content://") or caminho.startswith("file://"):
+        return _copiar_uri_para_arquivo(caminho)
+    return caminho
 
 
 class GroqService:
@@ -92,11 +153,7 @@ class GroqService:
 
     def _converter_para_base64(self, caminho: str) -> str:
         try:
-            if not os.path.exists(caminho):
-                self.logger.error(f"Arquivo não encontrado: {caminho}")
-                return ""
-            if os.path.getsize(caminho) == 0:
-                self.logger.error(f"Arquivo vazio: {caminho}")
+            if not os.path.exists(caminho) or os.path.getsize(caminho) == 0:
                 return ""
             with open(caminho, "rb") as f:
                 return base64.b64encode(f.read()).decode('utf-8')
@@ -119,12 +176,11 @@ class GroqService:
             import requests, urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-            # Resolve URI para caminho de arquivo se necessário
             caminho_resolvido = None
             if caminho_imagem:
                 caminho_resolvido = _resolver_caminho_imagem(caminho_imagem)
                 if not caminho_resolvido or not os.path.exists(caminho_resolvido):
-                    self.logger.error(f"Imagem nao encontrada: {caminho_imagem} -> {caminho_resolvido}")
+                    self.logger.error(f"Imagem nao encontrada: {caminho_imagem}")
                     caminho_resolvido = None
 
             mensagens_formatadas = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -132,22 +188,15 @@ class GroqService:
             if caminho_resolvido:
                 modelo_atual = self.MODEL_VISAO
                 img_b64 = self._converter_para_base64(caminho_resolvido)
-
                 if not img_b64:
-                    self._retornar(callback, "Erro ao processar a imagem. Verifique se o arquivo e valido.")
+                    self._retornar(callback, "Erro ao processar a imagem. Use JPEG ou PNG.")
                     return
-
                 mime_type = self._obter_mime_type(caminho_resolvido)
-
                 for msg in self._historico[-6:]:
                     txt = msg["content"]
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
-                    mensagens_formatadas.append({
-                        "role": msg["role"],
-                        "content": [{"type": "text", "text": str(txt)}]
-                    })
-
+                    mensagens_formatadas.append({"role": msg["role"], "content": [{"type": "text", "text": str(txt)}]})
                 mensagens_formatadas.append({
                     "role": "user",
                     "content": [
@@ -156,19 +205,14 @@ class GroqService:
                     ]
                 })
                 self._historico.append({"role": "user", "content": f"[Imagem] {mensagem}"})
-
             else:
                 modelo_atual = self.MODEL_TEXTO
                 self._historico.append({"role": "user", "content": mensagem})
-
                 for msg in self._historico[-12:]:
                     txt = msg["content"]
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
-                    mensagens_formatadas.append({
-                        "role": msg["role"],
-                        "content": str(txt)
-                    })
+                    mensagens_formatadas.append({"role": msg["role"], "content": str(txt)})
 
             payload = {
                 "model": modelo_atual,
@@ -185,8 +229,6 @@ class GroqService:
                 verify=False,
             )
 
-            self.logger.info(f"Groq status: {resp.status_code}")
-
             if resp.status_code == 401:
                 self._retornar(callback, "API key invalida. Verifique em Configuracoes.")
                 return
@@ -194,18 +236,7 @@ class GroqService:
                 self._retornar(callback, "Limite de requisicoes atingido. Aguarde.")
                 return
             if resp.status_code != 200:
-                self.logger.error(f"Groq erro {resp.status_code}: {resp.text}")
-                if resp.status_code == 400:
-                    msg_erro = "Erro 400: imagem invalida. Use JPEG ou PNG."
-                    try:
-                        ej = resp.json()
-                        if "error" in ej:
-                            msg_erro += f" {ej['error'].get('message', '')}"
-                    except Exception:
-                        pass
-                    self._retornar(callback, msg_erro)
-                else:
-                    self._retornar(callback, f"Erro na API ({resp.status_code}). Tente novamente.")
+                self._retornar(callback, f"Erro na API ({resp.status_code}). Tente novamente.")
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
