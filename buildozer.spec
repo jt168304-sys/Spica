@@ -7,9 +7,7 @@ source.dir = .
 source.include_exts = py,png,jpg,json
 source.main = main.py
 
-# kivy, kivymd e android sao gerenciados pelo p4a via recipes
-# nao colocar versao fixa em kivy/kivymd
-requirements = python3,kivy,kivymd,requests,certifi,urllib3,plyer
+requirements = python3,kivy,https://github.com/kivymd/KivyMD/archive/master.zip,requests,certifi,urllib3,plyer
 
 orientation = portrait
 fullscreen = 0
