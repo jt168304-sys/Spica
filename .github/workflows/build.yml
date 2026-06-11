@@ -14,12 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Android build-tools
+      - name: Install Android SDK components
         run: |
-          yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platform-tools"
+          yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platforms;android-31" || true
 
       - name: Build APK
-        run: yes | buildozer android debug 2>&1 | tee build.log
+        run: yes | buildozer -v android debug 2>&1 | tee build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
