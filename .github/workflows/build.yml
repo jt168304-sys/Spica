@@ -18,6 +18,13 @@ jobs:
         run: |
           yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platforms;android-31" || true
 
+      - name: Pre-install Gradle to avoid timeout
+        run: |
+          apt-get install -y -qq gradle || true
+          mkdir -p /root/.gradle/wrapper/dists
+          wget -q https://services.gradle.org/distributions/gradle-7.6.4-all.zip \
+            -O /tmp/gradle-7.6.4-all.zip || true
+
       - name: Build APK
         run: yes | buildozer -v android debug 2>&1 | tee build.log
 
