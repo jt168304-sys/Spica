@@ -19,15 +19,13 @@ jobs:
           yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platforms;android-31" || true
 
       - name: Pre-install Gradle
-        run: |
-          apt-get install -y -qq gradle || true
+        run: apt-get install -y -qq gradle || true
+
+      - name: Clean buildozer cache
+        run: buildozer android clean || true
 
       - name: Build APK
         run: yes | buildozer -v android debug 2>&1 | tee build.log
-
-      - name: Check APK
-        run: |
-          ls -lh bin/*.apk && echo "APK OK" || echo "APK NAO ENCONTRADO"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
