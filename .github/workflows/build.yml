@@ -14,7 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Deleta artifacts antigos antes de criar novos (evita encher o storage)
       - name: Delete old artifacts
         uses: c-hive/gha-remove-artifacts@v1
         with:
@@ -36,7 +35,7 @@ jobs:
           name: spica-debug-apk
           path: bin/*.apk
           if-no-files-found: warn
-          retention-days: 3   # era 30, agora 3 dias – suficiente para baixar
+          retention-days: 3
 
       - name: Upload build log
         uses: actions/upload-artifact@v4
@@ -44,4 +43,4 @@ jobs:
         with:
           name: build-log
           path: build.log
-          retention-days: 1   # log só precisa de 1 dia
+          retention-days: 1
