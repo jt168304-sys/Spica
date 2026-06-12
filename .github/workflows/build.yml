@@ -14,16 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Deleta artifacts antigos antes de criar novos (evita encher o storage)
+      - name: Delete old artifacts
+        uses: c-hive/gha-remove-artifacts@v1
+        with:
+          age: '1 day'
+          skip-tags: false
+        continue-on-error: true
+
       - name: Install Android SDK components
         run: |
           yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platforms;android-31" || true
-
-      - name: Pre-install Gradle to avoid timeout
-        run: |
-          apt-get install -y -qq gradle || true
-          mkdir -p /root/.gradle/wrapper/dists
-          wget -q https://services.gradle.org/distributions/gradle-7.6.4-all.zip \
-            -O /tmp/gradle-7.6.4-all.zip || true
 
       - name: Build APK
         run: yes | buildozer -v android debug 2>&1 | tee build.log
@@ -35,7 +36,7 @@ jobs:
           name: spica-debug-apk
           path: bin/*.apk
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 3   # era 30, agora 3 dias – suficiente para baixar
 
       - name: Upload build log
         uses: actions/upload-artifact@v4
@@ -43,4 +44,4 @@ jobs:
         with:
           name: build-log
           path: build.log
-          retention-days: 7
+          retention-days: 1   # log só precisa de 1 dia
