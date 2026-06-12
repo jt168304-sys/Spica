@@ -1,1 +1,45 @@
-# (cola o conteúdo do arquivo acima aqui)
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    container:
+      image: ghcr.io/kivy/buildozer:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager "build-tools;33.0.2" "platforms;android-33" "platforms;android-31" || true
+
+      - name: Pre-install Gradle
+        run: |
+          apt-get install -y -qq gradle || true
+
+      - name: Build APK
+        run: yes | buildozer -v android debug 2>&1 | tee build.log
+
+      - name: Check APK
+        run: |
+          ls -lh bin/*.apk && echo "APK OK" || echo "APK NAO ENCONTRADO"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: spica-debug-apk
+          path: bin/*.apk
+          retention-days: 30
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
