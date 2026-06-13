@@ -22,13 +22,14 @@ import android.widget.TextView;
 
 public class SpicaOverlayService extends Service {
 
-    private static final String CHANNEL_ID = "spica_overlay";
-    private static final int    NOTIF_ID   = 1001;
+    private static final String CHANNEL_ID  = "spica_overlay";
+    private static final int    NOTIF_ID    = 1001;
     private static final int    BUBBLE_SIZE = 160;
 
     private WindowManager windowManager;
     private View          bubbleView;
     private WindowManager.LayoutParams params;
+    private Handler mainHandler;
 
     private int   initialX, initialY;
     private float initialTouchX, initialTouchY;
@@ -37,8 +38,12 @@ public class SpicaOverlayService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        mainHandler = new Handler(Looper.getMainLooper());
+        // CRÍTICO: chamar startForeground IMEDIATAMENTE no onCreate
+        // antes de qualquer outra coisa para evitar ForegroundServiceDidNotStartInTimeException
         criarNotificacao();
-        criarBolha();
+        // Criar bolha logo após (ainda no onCreate)
+        mainHandler.post(this::criarBolha);
     }
 
     @Override
@@ -57,17 +62,18 @@ public class SpicaOverlayService extends Service {
         }
     }
 
-    // ── Notificação sem androidx ──────────────────────────────────────────────
+    // ── Notificação — startForeground IMEDIATO ────────────────────────────────
 
     private void criarNotificacao() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel canal = new NotificationChannel(
-                CHANNEL_ID, "Spica Overlay",
+                CHANNEL_ID, "Spica",
                 NotificationManager.IMPORTANCE_MIN
             );
             canal.setShowBadge(false);
+            canal.setSound(null, null);
             if (nm != null) nm.createNotificationChannel(canal);
         }
 
@@ -84,46 +90,51 @@ public class SpicaOverlayService extends Service {
             builder = new Notification.Builder(this, CHANNEL_ID);
         } else {
             builder = new Notification.Builder(this);
-        }
-
-        builder.setContentTitle("Spica")
-               .setContentText("Bolha ativa")
-               .setSmallIcon(android.R.drawable.ic_dialog_info)
-               .setContentIntent(pi);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
             builder.setPriority(Notification.PRIORITY_MIN);
         }
 
+        builder.setContentTitle("Spica")
+               .setContentText("Assistente ativa")
+               .setSmallIcon(android.R.drawable.ic_dialog_info)
+               .setOngoing(true)
+               .setContentIntent(pi);
+
+        // CRÍTICO: startForeground imediatamente
         startForeground(NOTIF_ID, builder.build());
     }
 
     // ── Bolha flutuante ───────────────────────────────────────────────────────
 
     private void criarBolha() {
-        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        try {
+            windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
-        int tipo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-            ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            : WindowManager.LayoutParams.TYPE_PHONE;
+            int tipo = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;  // Android < 8
 
-        params = new WindowManager.LayoutParams(
-            BUBBLE_SIZE, BUBBLE_SIZE,
-            tipo,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        );
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = 0;
-        params.y = 300;
+            params = new WindowManager.LayoutParams(
+                BUBBLE_SIZE, BUBBLE_SIZE,
+                tipo,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            );
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = 0;
+            params.y = 400;
 
-        bubbleView = criarViewBolha();
-        bubbleView.setOnTouchListener(this::onTouch);
-        windowManager.addView(bubbleView, params);
+            bubbleView = criarViewBolha();
+            bubbleView.setOnTouchListener(this::onTouch);
+            windowManager.addView(bubbleView, params);
+            System.out.println("[Spica] Bolha adicionada ao WindowManager");
+        } catch (Exception e) {
+            System.out.println("[Spica] criarBolha erro: " + e.getMessage());
+        }
     }
 
-    // ── Visual da bolha — substitua aqui pelo design V-Tuber ─────────────────
+    // ── Visual — substitua aqui pelo PNG V-Tuber ──────────────────────────────
 
     private View criarViewBolha() {
         FrameLayout frame = new FrameLayout(this);
@@ -131,14 +142,14 @@ public class SpicaOverlayService extends Service {
 
         GradientDrawable circle = new GradientDrawable();
         circle.setShape(GradientDrawable.OVAL);
-        circle.setColor(Color.parseColor("#2D6FBA"));
-        circle.setStroke(4, Color.WHITE);
+        circle.setColor(Color.parseColor("#1A3A6B"));
+        circle.setStroke(5, Color.parseColor("#4A9EFF"));
         frame.setBackground(circle);
 
         TextView star = new TextView(this);
         star.setText("\u2736");
-        star.setTextSize(32f);
-        star.setTextColor(Color.WHITE);
+        star.setTextSize(34f);
+        star.setTextColor(Color.parseColor("#4A9EFF"));
         star.setGravity(Gravity.CENTER);
         star.setLayoutParams(new FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -147,7 +158,7 @@ public class SpicaOverlayService extends Service {
         frame.addView(star);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            frame.setElevation(10f);
+            frame.setElevation(12f);
         }
         return frame;
     }
@@ -167,14 +178,15 @@ public class SpicaOverlayService extends Service {
             case MotionEvent.ACTION_MOVE:
                 params.x = initialX + (int)(event.getRawX() - initialTouchX);
                 params.y = initialY + (int)(event.getRawY() - initialTouchY);
-                windowManager.updateViewLayout(bubbleView, params);
+                try { windowManager.updateViewLayout(bubbleView, params); }
+                catch (Exception ignored) {}
                 return true;
 
             case MotionEvent.ACTION_UP:
                 float dx = Math.abs(event.getRawX() - initialTouchX);
                 float dy = Math.abs(event.getRawY() - initialTouchY);
                 long  dt = System.currentTimeMillis() - touchDownTime;
-                if (dx < 15 && dy < 15 && dt < 300) {
+                if (dx < 20 && dy < 20 && dt < 350) {
                     abrirApp();
                 } else {
                     grudarNaBorda();
@@ -190,9 +202,8 @@ public class SpicaOverlayService extends Service {
         final int inicio = params.x;
         final int fim    = (params.x + BUBBLE_SIZE / 2 < dm.widthPixels / 2)
                            ? 0 : dm.widthPixels - BUBBLE_SIZE;
-        final long duracao = 200L;
+        final long duracao = 180L;
         final long start   = System.currentTimeMillis();
-        Handler handler = new Handler(Looper.getMainLooper());
         Runnable anim = new Runnable() {
             @Override public void run() {
                 float t    = Math.min(1f, (float)(System.currentTimeMillis() - start) / duracao);
@@ -200,16 +211,20 @@ public class SpicaOverlayService extends Service {
                 params.x   = inicio + (int)((fim - inicio) * ease);
                 try { windowManager.updateViewLayout(bubbleView, params); }
                 catch (Exception ignored) {}
-                if (t < 1f) handler.postDelayed(this, 16);
+                if (t < 1f) mainHandler.postDelayed(this, 16);
             }
         };
-        handler.post(anim);
+        mainHandler.post(anim);
     }
 
     private void abrirApp() {
-        Intent intent = new Intent(this, getMainActivityClass());
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        startActivity(intent);
+        try {
+            Intent intent = new Intent(this, getMainActivityClass());
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+        } catch (Exception e) {
+            System.out.println("[Spica] abrirApp erro: " + e.getMessage());
+        }
     }
 
     @SuppressWarnings("unchecked")

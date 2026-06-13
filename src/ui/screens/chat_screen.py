@@ -56,50 +56,69 @@ def _pasta_imagens():
 
 # ── Seletor de imagem ─────────────────────────────────────────────────────────
 
+# Referência global para evitar garbage collection do callback
+_seletor_callback_ref = [None]
+
 def _abrir_seletor(callback):
     """
-    Seleciona imagem via ACTION_GET_CONTENT.
-    on_result guarda só a URI (string) e delega tudo para a thread Kivy.
+    Seleciona imagem via ACTION_OPEN_DOCUMENT (mais estável no Android 10+).
+    Usa referência global para evitar que o callback seja coletado pelo GC.
     """
+    _seletor_callback_ref[0] = callback
     try:
         from jnius import autoclass
-        from android.activity import bind as ab, unbind as aub
-        Intent      = autoclass("android.content.Intent")
-        PythonAct   = autoclass("org.kivy.android.PythonActivity")
-        ctx         = PythonAct.mActivity
+        from android.activity import bind as ab
+        Intent    = autoclass("android.content.Intent")
+        PythonAct = autoclass("org.kivy.android.PythonActivity")
+        ctx       = PythonAct.mActivity
 
-        intent = Intent(Intent.ACTION_GET_CONTENT)
+        # ACTION_OPEN_DOCUMENT é mais confiável que ACTION_GET_CONTENT no Android 10+
+        intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
         intent.setType("image/*")
         intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.putExtra("android.content.extra.SHOW_ADVANCED", True)
 
-        def on_result(req, res, data):
+        def on_result(requestCode, resultCode, data):
+            print(f"[Spica] on_result: req={requestCode} res={resultCode} data={data}")
+            cb = _seletor_callback_ref[0]
+            _seletor_callback_ref[0] = None
+
             uri_str = None
             try:
-                aub(on_activity_result=on_result)
-            except BaseException:
-                pass
-            try:
-                if res == -1 and data is not None:
+                # resultCode -1 = RESULT_OK
+                if resultCode == -1 and data is not None:
                     uri = data.getData()
                     if uri is not None:
                         uri_str = uri.toString()
-                        print(f"[Spica] URI recebida: {uri_str}")
-            except BaseException as e:
-                print(f"[Spica] on_result uri: {e}")
+                        print(f"[Spica] URI: {uri_str}")
+                        # Persistir permissão de leitura da URI (Android 10+)
+                        try:
+                            flags = intent.getFlags()
+                            Intent2 = autoclass("android.content.Intent")
+                            READ_FLAG = Intent2.FLAG_GRANT_READ_URI_PERMISSION
+                            ctx.getContentResolver().takePersistableUriPermission(uri, READ_FLAG)
+                        except Exception as ep:
+                            print(f"[Spica] takePersistable: {ep}")
+            except Exception as e:
+                print(f"[Spica] on_result erro: {e}")
 
-            if uri_str:
-                Clock.schedule_once(
-                    lambda dt, u=uri_str: _copiar_imagem(u, callback), 0.4
-                )
-            else:
-                Clock.schedule_once(lambda dt: callback(None), 0.3)
+            if cb:
+                if uri_str:
+                    Clock.schedule_once(
+                        lambda dt, u=uri_str, c=cb: _copiar_imagem(u, c), 0.2
+                    )
+                else:
+                    Clock.schedule_once(lambda dt, c=cb: c(None), 0.1)
 
         ab(on_activity_result=on_result)
         ctx.startActivityForResult(intent, 103)
 
     except Exception as e:
-        print(f"[Spica] _abrir_seletor: {e}")
-        Clock.schedule_once(lambda dt: callback(None), 0)
+        print(f"[Spica] _abrir_seletor erro: {e}")
+        cb = _seletor_callback_ref[0]
+        _seletor_callback_ref[0] = None
+        if cb:
+            Clock.schedule_once(lambda dt: cb(None), 0)
 
 
 def _copiar_imagem(uri_str, callback):
