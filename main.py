@@ -1,6 +1,25 @@
 # main.py — Porta de Entrada e Redirecionador de Logs (Spica v16)
 import os, sys, traceback, socket
 
+# --- Faulthandler: captura crashes nativos (segfault) sem precisar de adb ---
+try:
+    import faulthandler
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        _ext_dir = PythonActivity.mActivity.getExternalFilesDir(None).getAbsolutePath()
+    except Exception:
+        _ext_dir = "/storage/emulated/0/Android/data/com.spica.spica/files"
+    os.makedirs(_ext_dir, exist_ok=True)
+    _crash_path = os.path.join(_ext_dir, "spica_native_crash.txt")
+    _crash_fd = open(_crash_path, "w", buffering=1)
+    faulthandler.enable(file=_crash_fd, all_threads=True)
+    _crash_fd.write("=== Faulthandler ativo, Spica iniciando ===\n")
+    _crash_fd.flush()
+except Exception as _e:
+    print("Faulthandler falhou:", _e)
+
+
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
