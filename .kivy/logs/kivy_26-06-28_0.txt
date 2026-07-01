@@ -1,0 +1,28 @@
+[INFO   ] Logger: Record log in /storage/emulated/0/Projetos/WindIA/.kivy/logs/kivy_26-06-28_0.txt
+[DEBUG  ] Config: Upgrading from 0 to 1
+[WARNING] Config: Upgrading configuration in progress.
+[WARNING] Config: Older configuration version detected (0 instead of 27)
+[INFO   ] Kivy: v2.3.1
+[INFO   ] Kivy: Installed at "/data/user/0/ru.iiec.pydroid3/files/aarch64-linux-android/lib/python3.13/site-packages/kivy/__init__.py"
+[INFO   ] Python: v3.13.13 (main, May 12 2026, 00:20:28) [GCC 11.4.0]
+[INFO   ] Python: Interpreter at "/data/user/0/ru.iiec.pydroid3/files/aarch64-linux-android/bin/python3"
+[INFO   ] Logger: Purge log fired. Processing...
+[INFO   ] Logger: Purge finished!
+[WARNING] KivyMD: Version 1.2.0 is deprecated and is no longer supported. Use KivyMD version 2.0.0 from the master branch (pip install https://github.com/kivymd/KivyMD/archive/master.zip)
+[WARNING] stderr: Traceback (most recent call last):
+[WARNING] stderr:   File "/storage/emulated/0/Projetos/WindIA/main.py", line 70, in <module>
+[WARNING] stderr:     app_instance.run()
+[WARNING] stderr:     ~~~~~~~~~~~~~~~~^^
+[WARNING] stderr:   File "/data/user/0/ru.iiec.pydroid3/files/aarch64-linux-android/lib/python3.13/site-packages/kivy/app.py", line 955, in run
+[WARNING] stderr:     self._run_prepare()
+[WARNING] stderr:     ~~~~~~~~~~~~~~~~~^^
+[WARNING] stderr:   File "/data/user/0/ru.iiec.pydroid3/files/aarch64-linux-android/lib/python3.13/site-packages/kivy/app.py", line 925, in _run_prepare
+[WARNING] stderr:     root = self.build()
+[WARNING] stderr:   File "/storage/emulated/0/Projetos/WindIA/src/core/app_manager.py", line 28, in build
+[WARNING] stderr:     self._register_screens()
+[WARNING] stderr:     ~~~~~~~~~~~~~~~~~~~~~~^^
+[WARNING] stderr:   File "/storage/emulated/0/Projetos/WindIA/src/core/app_manager.py", line 45, in _register_screens
+[WARNING] stderr:     from src.ui.screens.chat_screen import ChatScreen
+[WARNING] stderr:   File "/storage/emulated/0/Projetos/WindIA/src/ui/screens/chat_screen.py", line 14, in <module>
+[WARNING] stderr:     from kivymd.uix.appbar import MDTopAppBar, MDTopAppBarTrailingButtonContainer, MDTopAppBarTitle
+[WARNING] stderr: ModuleNotFoundError: No module named 'kivymd.uix.appbar'

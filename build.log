@@ -1,0 +1,52 @@
+# WARNING: Config token app android.sdk is deprecated and ignored, but you set value 33
+# Ensure build layout
+# Check configuration tokens
+# Preparing build
+# Check requirements for android
+# Search for Git (git)
+#  -> found at /data/data/com.termux/files/usr/bin/git
+# Search for Cython (cython)
+#  -> found at /data/data/com.termux/files/usr/bin/cython
+# Search for Java compiler (javac)
+#  -> found at /data/data/com.termux/files/usr/bin/javac
+# Search for Java keytool (keytool)
+#  -> found at /data/data/com.termux/files/usr/bin/keytool
+# Install platform
+# Run 'git config --get remote.origin.url' ...
+# Cwd /data/data/com.termux/files/home/WindIA/.buildozer/android/platform/python-for-android
+https://github.com/kivy/python-for-android.git
+# Run 'git branch -vv' ...
+# Cwd /data/data/com.termux/files/home/WindIA/.buildozer/android/platform/python-for-android
+* master 58d21141 [origin/master] Merge pull request #3321 from kivy/release-2026.05.09
+# Run '/data/data/com.termux/files/usr/bin/python3.13 -m pip install -q --user appdirs colorama>=0.3.3 jinja2 sh>=2, <3.0; sys_platform!="win32" meson ninja build toml packaging setuptools wheel~=0.43.0' ...
+# Cwd None
+# Apache ANT found at /data/data/com.termux/files/home/.buildozer/android/platform/apache-ant-1.9.4
+# Android SDK is missing, downloading
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/usr/bin/buildozer", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/scripts/client.py", line 16, in main
+    Buildozer().run_command(sys.argv[1:])
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/__init__.py", line 684, in run_command
+    self.target.run_commands(args)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/target.py", line 96, in run_commands
+    func(args)
+    ~~~~^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/targets/android.py", line 1008, in cmd_debug
+    super().cmd_debug(*args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/target.py", line 106, in cmd_debug
+    self.buildozer.prepare_for_build()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/__init__.py", line 91, in prepare_for_build
+    self.target.install_platform()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/targets/android.py", line 647, in install_platform
+    self._install_android_sdk()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/data/data/com.termux/files/usr/lib/python3.13/site-packages/buildozer/targets/android.py", line 395, in _install_android_sdk
+    raise SystemError('Unsupported platform: {0}'.format(platform))
+SystemError: Unsupported platform: android

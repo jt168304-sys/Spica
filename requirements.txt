@@ -1,0 +1,28 @@
+# ═══════════════════════════════════════════════════════════
+#  WindIA — Dependências do Projeto
+#  
+#  Instale com: pip install -r requirements.txt
+#  
+#  No Android/Pydroid 3: instale uma por vez pelo gerenciador
+# ═══════════════════════════════════════════════════════════
+
+# ── Interface Gráfica ──────────────────────────────────────
+kivy==2.3.0
+kivymd==2.0.1.dev0
+
+# ── Reconhecimento de Voz ──────────────────────────────────
+SpeechRecognition==3.10.4
+
+# ── Síntese de Voz (Text-to-Speech) ───────────────────────
+# pyttsx3==2.90     # Para desktop (offline)
+# gTTS==2.5.1       # Google TTS (online, melhor qualidade)
+
+# ── Utilitários ───────────────────────────────────────────
+# plyer==2.1.0      # Funcionalidades nativas Android (notif, câmera, etc.)
+# requests==2.31.0  # Requisições HTTP (para APIs de IA)
+
+# ── Nota sobre PyAudio ─────────────────────────────────────
+# PyAudio é necessário para SpeechRecognition capturar o mic.
+# No Linux/Mac: pip install pyaudio
+# No Windows:   pip install pipwin && pipwin install pyaudio
+# No Android:   geralmente já vem com o Pydroid 3
