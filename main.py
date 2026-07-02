@@ -24,9 +24,22 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+# --- Log em arquivo, mais confiável que UDP (nao perde mensagem) ---
+try:
+    _log_dir = "/storage/emulated/0/Android/data/com.spica.spica/files"
+    os.makedirs(_log_dir, exist_ok=True)
+    _log_fd = os.open(os.path.join(_log_dir, "spica_boot_log.txt"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+except Exception:
+    _log_fd = None
+
 # Função para envio de logs manuais
 def salvar_log(msg):
     print(f"[SPICA_LOG] {msg}")
+    if _log_fd is not None:
+        try:
+            os.write(_log_fd, f"{msg}\n".encode("utf-8"))
+        except Exception:
+            pass
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(0.5)
