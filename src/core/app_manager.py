@@ -66,8 +66,8 @@ class WindApp(MDApp):
             self.screen_manager.current = screen_name
 
     def toggle_theme(self):
-        # Alternância de tema corrigida usando strings em minúsculo exigidas pelo MD3
-        novo = "light" if self.theme_cls.theme_style == "dark" else "dark"
+        # KivyMD exige "Light"/"Dark" capitalizado, não minúsculo.
+        novo = "Light" if self.theme_cls.theme_style == "Dark" else "Dark"
         self.theme_cls.theme_style = novo
         self.settings.set("theme_mode", novo)
         self.settings.save()
