@@ -35,6 +35,16 @@ def salvar_log(msg):
     except Exception:
         pass
 
+# --- HEARTBEAT: prova se o processo trava ou morre de fato ---
+import threading, time as _time
+def _heartbeat():
+    n = 0
+    while True:
+        n += 1
+        salvar_log(f"⏱ heartbeat {n}")
+        _time.sleep(1)
+threading.Thread(target=_heartbeat, daemon=True).start()
+
 # REDIRECIONADOR MÁGICO: Tudo que o Kivy printar internamente vai para o Termux
 class TermuxStream:
     def __init__(self, stream_original, prefixo):
