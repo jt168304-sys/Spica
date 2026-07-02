@@ -89,8 +89,10 @@ def _limpeza_emergência():
 salvar_log("🚀 === Spica iniciando no dispositivo ===")
 
 try:
+    salvar_log("🔸 Antes do import kivy.config")
     from kivy.config import Config
-    Config.set("graphics", "resizable", "1")
+    salvar_log("🔸 kivy.config importado, setando valores...")
+    Config.set("graphics", "resizable", "0")
     Config.set("graphics", "width", "400")
     Config.set("graphics", "height", "700")
     Config.set("kivy", "log_level", "warning")
