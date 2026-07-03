@@ -41,11 +41,11 @@ class WindApp(MDApp):
         # Correção KivyMD 2.0 / Material 3: Paletas de cores e temas agora usam strings específicas
         self.theme_cls.primary_palette = "Blue"
         
-        # Obtém o modo salvo e garante que seja convertido para strings estritas do MD3: "dark" ou "light"
-        modo_salvo = self.settings.get("theme_mode", "dark").lower()
-        if modo_salvo not in ["dark", "light"]:
-            modo_salvo = "dark"
-            
+        # Obtém o modo salvo. KivyMD exige "Light" ou "Dark" (capitalizado), não minúsculo.
+        modo_salvo = self.settings.get("theme_mode", "Dark").strip().capitalize()
+        if modo_salvo not in ["Dark", "Light"]:
+            modo_salvo = "Dark"
+
         self.theme_cls.theme_style = modo_salvo
 
     def _register_screens(self):
