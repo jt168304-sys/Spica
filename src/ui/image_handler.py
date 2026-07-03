@@ -34,10 +34,19 @@ def abrir_seletor_seguro(callback):
                 return
                 
             if context['unbind_func']:
-                try:
-                    context['unbind_func'](on_activity_result=on_activity_result)
-                except:
-                    pass
+                # CORREÇÃO: NÃO desvincular direto aqui dentro do callback —
+                # o despachante do Android ainda está iterando a lista de
+                # listeners nesse exato momento, e chamar unbind() agora
+                # causa ConcurrentModificationException. Adiamos pro próximo
+                # frame do Kivy, fora do loop de despacho do Android.
+                _unbind = context['unbind_func']
+                def _unbind_depois(dt, _unbind=_unbind):
+                    try:
+                        _unbind(on_activity_result=on_activity_result)
+                    except Exception:
+                        pass
+                Clock.schedule_once(_unbind_depois, 0)
+                context['unbind_func'] = None
             
             # -1 = RESULT_OK
             if result_code == -1 and data:
