@@ -10,36 +10,11 @@ try:
     TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
     Locale = autoclass("java.util.Locale")
     Bundle = autoclass("android.os.Bundle")
+    HashMap = autoclass("java.util.HashMap")
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
     def run_on_ui_thread(func): return func
-
-class UtteranceProgressListenerImpl(PythonJavaClass if HAS_ANDROID else object):
-    __javainterfaces__ = ['android/speech/tts/UtteranceProgressListener']
-    __javacontext__ = 'app'
-
-    def __init__(self, on_start_callback, on_done_callback):
-        super().__init__()
-        self.on_start = on_start_callback
-        self.on_done = on_done_callback
-
-    @java_method('(Ljava/lang/String;)V')
-    def onStart(self, utteranceId):
-        # Dispara o evento de abrir a boca na UI Thread
-        if self.on_start:
-            Clock.schedule_once(lambda dt: self.on_start(), 0)
-
-    @java_method('(Ljava/lang/String;)V')
-    def onDone(self, utteranceId):
-        # Dispara o evento de fechar a boca na UI Thread
-        if self.on_done:
-            Clock.schedule_once(lambda dt: self.on_done(), 0)
-
-    @java_method('(Ljava/lang/String;Z)V')
-    def onError(self, utteranceId, sampleTimeOut):
-        if self.on_done:
-            Clock.schedule_once(lambda dt: self.on_done(), 0)
 
 class TtsService:
     _instancia = None
@@ -53,7 +28,7 @@ class TtsService:
     def __init__(self):
         self.tts = None
         self._inicializado = False
-        self._listener = None  # ✅ NOVO: Rastrear listener para evitar GC prematuro
+        self._listener = None
         self._on_start_speak = None
         self._on_done_speak = None
         if platform == "android":
@@ -64,18 +39,17 @@ class TtsService:
         class InitListener(PythonJavaClass):
             __javainterfaces__ = ['android/speech/tts/TextToSpeech$OnInitListener']
             __javacontext__ = 'app'
-            
+
             def __init__(self, outer):
                 super().__init__()
                 self.outer = outer
 
             @java_method('(I)V')
             def onInit(self, status):
-                if status == 0: # TextToSpeech.SUCCESS
+                if status == 0:
                     locale_br = Locale("pt", "BR")
                     result = self.outer.tts.setLanguage(locale_br)
                     if result < 0:
-                        # ✅ NOVO: Fallback para português genérico
                         print("[Spica/TTS] PT-BR indisponível, tentando PT...")
                         locale_pt = Locale("pt")
                         self.outer.tts.setLanguage(locale_pt)
@@ -86,29 +60,30 @@ class TtsService:
         self.tts = TextToSpeech(ctx, InitListener(self))
 
     def configurar_callbacks_visuais(self, on_start, on_done):
-        """Vincula as funções da Bolha para alternar os avatares PNG."""
+        """Vincula as funções da Bolha para alternar os avatares PNG.
+        OBS: não usamos TextToSpeech.setOnUtteranceProgressListener porque
+        UtteranceProgressListener é uma CLASSE ABSTRATA no Android, não uma
+        interface — o pyjnius não consegue criar um proxy pra ela (dá
+        IllegalArgumentException: "is not an interface"). Em vez disso,
+        falar() dispara on_start na hora e uma thread monitora
+        tts.isSpeaking() pra saber quando chamar on_done.
+        """
         self._on_start_speak = on_start
         self._on_done_speak = on_done
-        if HAS_ANDROID and self.tts:
-            # ✅ NOVO: Armazenar referência ao listener para evitar GC
-            self._listener = UtteranceProgressListenerImpl(on_start, on_done)
-            self.tts.setOnUtteranceProgressListener(self._listener)
 
     def falar(self, texto):
         if not platform == "android" or not self._inicializado:
             print(f"[Spica/TTS - Fallback Desktop]: {texto}")
             return
 
-        # ✅ NOVO: Dividir texto longo em chunks (limite do Android TTS é ~4000 caracteres)
         MAX_CHARS = 3000
         if len(texto) > MAX_CHARS:
             chunks = [texto[i:i+MAX_CHARS] for i in range(0, len(texto), MAX_CHARS)]
             print(f"[Spica/TTS] Texto dividido em {len(chunks)} chunks")
             for i, chunk in enumerate(chunks):
-                # Agendar com pequeno delay entre chunks
                 Clock.schedule_once(
                     lambda dt, c=chunk: self._falar_chunk(c),
-                    i * 0.1  # 100ms entre chunks
+                    i * 0.1
                 )
         else:
             self._falar_chunk(texto)
@@ -118,13 +93,27 @@ class TtsService:
         if not platform == "android" or not self._inicializado:
             return
 
-        # Roda a execução em uma Thread separada para não travar a bolha ou o chat
         def _falar_async():
             try:
-                params = Bundle()
-                # Define um ID único para a frase para ativar o monitor de progresso
                 utterance_id = f"spica_msg_{id(texto)}"
-                self.tts.speak(texto, 0, params, utterance_id) # 0 = TextToSpeech.QUEUE_FLUSH
+                params = HashMap()
+                params.put("utteranceId", utterance_id)
+                self.tts.speak(texto, 0, params)
+
+                if self._on_start_speak:
+                    Clock.schedule_once(lambda dt: self._on_start_speak(), 0)
+
+                import time
+                tentativas = 0
+                while not self.tts.isSpeaking() and tentativas < 20:
+                    time.sleep(0.05)
+                    tentativas += 1
+
+                while self.tts.isSpeaking():
+                    time.sleep(0.1)
+
+                if self._on_done_speak:
+                    Clock.schedule_once(lambda dt: self._on_done_speak(), 0)
             except Exception as e:
                 print(f"[Spica/TTS] Erro ao sintetizar voz: {e}")
                 if self._on_done_speak:
@@ -142,12 +131,12 @@ class TtsService:
                 print(f"[Spica/TTS] Erro ao parar: {e}")
 
     def destruir(self):
-        """✅ NOVO: Libera recursos de TTS correctamente."""
+        """Libera recursos de TTS corretamente."""
         if HAS_ANDROID and self.tts:
             try:
                 self.tts.stop()
                 self.tts.shutdown()
-                print("[Spica/TTS] Motor de voz destruído correctamente")
+                print("[Spica/TTS] Motor de voz destruído corretamente")
             except Exception as e:
                 print(f"[Spica/TTS] Erro ao destruir TTS: {e}")
             finally:
