@@ -156,12 +156,15 @@ class SettingsScreen(MDScreen):
 
     def _ativar_bolha(self):
         try:
+            from src.services.overlay import SpicaOverlay, tem_permissao_overlay, pedir_permissao_overlay
+            if not tem_permissao_overlay():
+                print("[Spica] Permissão de sobreposição não concedida. Abrindo tela de permissão...")
+                pedir_permissao_overlay()
+                return
             app = MDApp.get_running_app()
-            if hasattr(app, "bubble") and app.bubble:
-                app.bubble.on_resume()
-            else:
-                from src.ui.bubble import FloatingBubble
-                app.bubble = FloatingBubble()
+            if not (hasattr(app, "bubble") and app.bubble):
+                app.bubble = SpicaOverlay()
+            app.bubble.ligar_bolha()
         except Exception as e:
             print(f"[Spica] ativar_bolha: {e}")
 

@@ -5,6 +5,7 @@ from kivy.clock import Clock
 
 try:
     from jnius import autoclass, PythonJavaClass, java_method
+    from android.runnable import run_on_ui_thread
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     TextToSpeech = autoclass("android.speech.tts.TextToSpeech")
     Locale = autoclass("java.util.Locale")
@@ -12,6 +13,7 @@ try:
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
+    def run_on_ui_thread(func): return func
 
 class UtteranceProgressListenerImpl(PythonJavaClass if HAS_ANDROID else object):
     __javainterfaces__ = ['android/speech/tts/UtteranceProgressListener']
@@ -57,6 +59,7 @@ class TtsService:
         if platform == "android":
             self._inicializar_tts()
 
+    @run_on_ui_thread
     def _inicializar_tts(self):
         class InitListener(PythonJavaClass):
             __javainterfaces__ = ['android/speech/tts/TextToSpeech$OnInitListener']
