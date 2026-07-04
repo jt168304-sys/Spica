@@ -29,6 +29,7 @@ class TtsService:
         self.tts = None
         self._inicializado = False
         self._listener = None
+        self._init_listener = None
         self._on_start_speak = None
         self._on_done_speak = None
         if platform == "android":
@@ -57,7 +58,12 @@ class TtsService:
                     print("[Spica/TTS] Motor de voz ativo em pt-BR.")
 
         ctx = PythonActivity.mActivity
-        self.tts = TextToSpeech(ctx, InitListener(self))
+        # IMPORTANTE: guardamos o listener num atributo do self. Se ele for
+        # só passado direto pro construtor sem referência guardada, o Python
+        # coleta ele (garbage collector) antes do Android chamar onInit de
+        # verdade, e a chamada acaba caindo em outro proxy por engano.
+        self._init_listener = InitListener(self)
+        self.tts = TextToSpeech(ctx, self._init_listener)
 
     def configurar_callbacks_visuais(self, on_start, on_done):
         """Vincula as funções da Bolha para alternar os avatares PNG.
@@ -143,6 +149,7 @@ class TtsService:
                 self.tts = None
                 self._inicializado = False
                 self._listener = None
+                self._init_listener = None
                 self._on_start_speak = None
                 self._on_done_speak = None
 
