@@ -67,6 +67,11 @@ class TermuxStream:
         self.stream_original.write(data)
         if data.strip(): # Evita enviar linhas em branco vazias
             try:
+                if _log_fd is not None:
+                    os.write(_log_fd, f"{self.prefixo} {data.strip()}\n".encode("utf-8"))
+            except Exception:
+                pass
+            try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.sendto(f"{self.prefixo} {data.strip()}\n".encode("utf-8"), ("127.0.0.1", 9999))
                 sock.close()
