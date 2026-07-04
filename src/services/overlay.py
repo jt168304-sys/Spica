@@ -13,10 +13,41 @@ try:
     BitmapFactory = autoclass('android.graphics.BitmapFactory')
     PixelFormat = autoclass('android.graphics.PixelFormat')
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
+    AndroidSettings = autoclass('android.provider.Settings')
+    Uri = autoclass('android.net.Uri')
+    Intent = autoclass('android.content.Intent')
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
     def run_on_ui_thread(func): return func
+
+def tem_permissao_overlay():
+    """Verifica se a permissão 'Exibir sobre outros apps' foi concedida."""
+    if not HAS_ANDROID:
+        return False
+    try:
+        ctx = PythonActivity.mActivity
+        return bool(AndroidSettings.canDrawOverlays(ctx))
+    except Exception as e:
+        print(f"[Spica/Overlay] Erro ao checar permissão de overlay: {e}")
+        return False
+
+
+def pedir_permissao_overlay():
+    """Abre a tela do Android onde o usuário libera 'Exibir sobre outros apps'."""
+    if not HAS_ANDROID:
+        return
+    try:
+        ctx = PythonActivity.mActivity
+        intent = Intent(
+            AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse(f"package:{ctx.getPackageName()}")
+        )
+        ctx.startActivity(intent)
+        print("[Spica/Overlay] Tela de permissão de overlay aberta. Ative e volte ao app.")
+    except Exception as e:
+        print(f"[Spica/Overlay] Erro ao abrir tela de permissão de overlay: {e}")
+
 
 class SpicaOverlay:
     def __init__(self):
@@ -37,6 +68,9 @@ class SpicaOverlay:
     @run_on_ui_thread
     def ligar_bolha(self):
         if not HAS_ANDROID or self.iniciado: return
+        if not tem_permissao_overlay():
+            print("[Spica/Overlay] Permissão de sobreposição não concedida, abortando.")
+            return
         
         ctx = PythonActivity.mActivity
         self.window_manager = ctx.getSystemService(Context.WINDOW_SERVICE)
