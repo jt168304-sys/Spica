@@ -163,18 +163,20 @@ class SpicaOverlay:
         if not HAS_ANDROID or not self.image_view:
             return
 
-        ID_FALAR = 1
-        ID_MUTAR = 2
-        ID_FECHAR = 3
+        TEXTO_FALAR = "🎤 Falar agora"
+        TEXTO_FECHAR = "✖ Fechar bolha"
         overlay_ref = self
 
         try:
             ctx = PythonActivity.mActivity
             menu = PopupMenu(ctx, self.image_view)
             texto_mutar = "🔊 Desmutar" if self.mutado else "🔇 Mutar"
-            menu.getMenu().add(0, ID_FALAR, 0, "🎤 Falar agora")
-            menu.getMenu().add(0, ID_MUTAR, 1, texto_mutar)
-            menu.getMenu().add(0, ID_FECHAR, 2, "✖ Fechar bolha")
+            # Usamos add(CharSequence) — a versão com (int,int,int,String) dá
+            # ambiguidade de sobrecarga no pyjnius. Identificamos cada opção
+            # pelo próprio texto do título, não por um ID numérico.
+            menu.getMenu().add(TEXTO_FALAR)
+            menu.getMenu().add(texto_mutar)
+            menu.getMenu().add(TEXTO_FECHAR)
 
             class MenuListener(PythonJavaClass):
                 __javainterfaces__ = ['android/widget/PopupMenu$OnMenuItemClickListener']
@@ -182,14 +184,14 @@ class SpicaOverlay:
 
                 @java_method('(Landroid/view/MenuItem;)Z')
                 def onMenuItemClick(self, item):
-                    item_id = item.getItemId()
-                    if item_id == ID_FALAR:
+                    titulo = str(item.getTitle())
+                    if titulo == TEXTO_FALAR:
                         overlay_ref.capturar_fala_em_background()
-                    elif item_id == ID_MUTAR:
+                    elif "Mutar" in titulo or "Desmutar" in titulo:
                         overlay_ref.mutado = not overlay_ref.mutado
                         estado = "mutada" if overlay_ref.mutado else "desmutada"
                         print(f"[Spica/Overlay] Bolha {estado}.")
-                    elif item_id == ID_FECHAR:
+                    elif titulo == TEXTO_FECHAR:
                         overlay_ref.desligar_bolha()
                     return True
 
