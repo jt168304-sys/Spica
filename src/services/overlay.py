@@ -18,6 +18,7 @@ try:
     Uri = autoclass('android.net.Uri')
     Intent = autoclass('android.content.Intent')
     MotionEvent = autoclass('android.view.MotionEvent')
+    PopupMenu = autoclass('android.widget.PopupMenu')
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
@@ -59,6 +60,8 @@ class SpicaOverlay:
         self.iniciado = False
         self._bitmap_atual = None
         self._touch_listener = None
+        self._menu_listener = None
+        self.mutado = False
 
         self.app_dir = os.environ.get('ANDROID_APP_PATH', os.path.dirname(os.path.abspath(__file__)))
         base_dir = os.path.dirname(os.path.dirname(self.app_dir)) if "src" in self.app_dir else self.app_dir
@@ -101,7 +104,7 @@ class SpicaOverlay:
         print("[Spica/Overlay] Bolha injetada no sistema e sincronizada ao TTS!")
 
     def _configurar_toque_na_bolha(self):
-        """Permite arrastar a bolha pela tela e tocar rápido para ativar a voz."""
+        """Permite arrastar a bolha pela tela e tocar rápido para abrir o menu."""
         if not HAS_ANDROID or not self.image_view:
             return
 
@@ -145,15 +148,60 @@ class SpicaOverlay:
                     return True
                 elif action == MotionEvent.ACTION_UP:
                     if not self.moveu and (time.time() - self.start_time) < 0.3:
-                        overlay_ref.capturar_fala_em_background()
+                        overlay_ref._mostrar_menu_bolha()
                     return True
                 return False
 
         self._touch_listener = TouchListener()
         self.image_view.setOnTouchListener(self._touch_listener)
 
+    @run_on_ui_thread
+    def _mostrar_menu_bolha(self):
+        """Mostra um menu com opções ao tocar na bolha: falar, mutar, fechar."""
+        if not HAS_ANDROID or not self.image_view:
+            return
+
+        ID_FALAR = 1
+        ID_MUTAR = 2
+        ID_FECHAR = 3
+        overlay_ref = self
+
+        try:
+            ctx = PythonActivity.mActivity
+            menu = PopupMenu(ctx, self.image_view)
+            texto_mutar = "🔊 Desmutar" if self.mutado else "🔇 Mutar"
+            menu.getMenu().add(0, ID_FALAR, 0, "🎤 Falar agora")
+            menu.getMenu().add(0, ID_MUTAR, 1, texto_mutar)
+            menu.getMenu().add(0, ID_FECHAR, 2, "✖ Fechar bolha")
+
+            class MenuListener(PythonJavaClass):
+                __javainterfaces__ = ['android/widget/PopupMenu$OnMenuItemClickListener']
+                __javacontext__ = 'app'
+
+                @java_method('(Landroid/view/MenuItem;)Z')
+                def onMenuItemClick(self, item):
+                    item_id = item.getItemId()
+                    if item_id == ID_FALAR:
+                        overlay_ref.capturar_fala_em_background()
+                    elif item_id == ID_MUTAR:
+                        overlay_ref.mutado = not overlay_ref.mutado
+                        estado = "mutada" if overlay_ref.mutado else "desmutada"
+                        print(f"[Spica/Overlay] Bolha {estado}.")
+                    elif item_id == ID_FECHAR:
+                        overlay_ref.desligar_bolha()
+                    return True
+
+            self._menu_listener = MenuListener()
+            menu.setOnMenuItemClickListener(self._menu_listener)
+            menu.show()
+        except Exception as e:
+            print(f"[Spica/Overlay] Erro ao abrir menu da bolha: {e}")
+
     def capturar_fala_em_background(self):
         """Ativa o microfone ao tocar na bolha e processa a resposta da IA."""
+        if self.mutado:
+            print("[Spica/Overlay] Bolha mutada, ignorando pedido de escuta.")
+            return
         try:
             from src.services.voice_service import VoiceService
             from src.services.groq_service import GroqService
@@ -170,6 +218,7 @@ class SpicaOverlay:
         except Exception as e:
             print(f"[Spica/Overlay] Erro ao capturar fala pela bolha: {e}")
 
+    @run_on_ui_thread
     def definir_avatar_png(self, falar=False):
         """Muda o Bitmap do ImageView do Android com limpeza correta de memória."""
         if not HAS_ANDROID or not self.image_view:
