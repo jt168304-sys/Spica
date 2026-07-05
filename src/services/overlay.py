@@ -21,6 +21,7 @@ try:
     LinearLayout = autoclass('android.widget.LinearLayout')
     TextView = autoclass('android.widget.TextView')
     Color = autoclass('android.graphics.Color')
+    JString = autoclass('java.lang.String')
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
@@ -192,7 +193,7 @@ class SpicaOverlay:
             self._click_listeners = []
             for texto, acao in opcoes:
                 tv = TextView(ctx)
-                tv.setText(texto)
+                tv.setText(JString(texto))
                 tv.setTextColor(Color.WHITE)
                 tv.setTextSize(15)
                 tv.setPadding(28, 18, 28, 18)
