@@ -147,7 +147,9 @@ class SpicaOverlay:
                         print(f"[Spica/Overlay] Erro ao mover bolha: {e}")
                     return True
                 elif action == MotionEvent.ACTION_UP:
-                    if not self.moveu and (time.time() - self.start_time) < 0.3:
+                    duracao = time.time() - self.start_time
+                    print(f"[Spica/Overlay] Toque solto: moveu={self.moveu} duracao={duracao:.2f}s")
+                    if not self.moveu and duracao < 0.6:
                         overlay_ref._mostrar_menu_bolha()
                     return True
                 return False
