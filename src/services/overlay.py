@@ -18,7 +18,9 @@ try:
     Uri = autoclass('android.net.Uri')
     Intent = autoclass('android.content.Intent')
     MotionEvent = autoclass('android.view.MotionEvent')
-    PopupMenu = autoclass('android.widget.PopupMenu')
+    LinearLayout = autoclass('android.widget.LinearLayout')
+    TextView = autoclass('android.widget.TextView')
+    Color = autoclass('android.graphics.Color')
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
@@ -60,8 +62,10 @@ class SpicaOverlay:
         self.iniciado = False
         self._bitmap_atual = None
         self._touch_listener = None
-        self._menu_listener = None
         self.mutado = False
+
+        self._menu_view = None
+        self._click_listeners = []
 
         self.app_dir = os.environ.get('ANDROID_APP_PATH', os.path.dirname(os.path.abspath(__file__)))
         base_dir = os.path.dirname(os.path.dirname(self.app_dir)) if "src" in self.app_dir else self.app_dir
@@ -137,7 +141,7 @@ class SpicaOverlay:
                 elif action == MotionEvent.ACTION_MOVE:
                     dx = event.getRawX() - self.initial_touch_x
                     dy = event.getRawY() - self.initial_touch_y
-                    if abs(dx) > 8 or abs(dy) > 8:
+                    if abs(dx) > 25 or abs(dy) > 25:
                         self.moveu = True
                     overlay_ref.params.x = int(self.initial_x + dx)
                     overlay_ref.params.y = int(self.initial_y + dy)
@@ -148,58 +152,100 @@ class SpicaOverlay:
                     return True
                 elif action == MotionEvent.ACTION_UP:
                     duracao = time.time() - self.start_time
-                    print(f"[Spica/Overlay] Toque solto: moveu={self.moveu} duracao={duracao:.2f}s")
                     if not self.moveu and duracao < 0.6:
-                        overlay_ref._mostrar_menu_bolha()
+                        overlay_ref._alternar_menu_bolha()
                     return True
                 return False
 
         self._touch_listener = TouchListener()
         self.image_view.setOnTouchListener(self._touch_listener)
 
+    def _alternar_menu_bolha(self):
+        """Abre o menu se estiver fechado, ou fecha se já estiver aberto."""
+        if self._menu_view is not None:
+            self._fechar_menu_bolha()
+        else:
+            self._mostrar_menu_bolha()
+
     @run_on_ui_thread
     def _mostrar_menu_bolha(self):
-        """Mostra um menu com opções ao tocar na bolha: falar, mutar, fechar."""
-        if not HAS_ANDROID or not self.image_view:
+        """Mostra um mini-menu (janela de overlay própria) com opções: falar, mutar, fechar."""
+        if not HAS_ANDROID or not self.image_view or self._menu_view is not None:
             return
 
-        TEXTO_FALAR = "🎤 Falar agora"
-        TEXTO_FECHAR = "✖ Fechar bolha"
         overlay_ref = self
 
         try:
             ctx = PythonActivity.mActivity
-            menu = PopupMenu(ctx, self.image_view)
+            container = LinearLayout(ctx)
+            container.setOrientation(LinearLayout.VERTICAL)
+            container.setBackgroundColor(Color.parseColor("#EE222222"))
+            container.setPadding(12, 12, 12, 12)
+
             texto_mutar = "🔊 Desmutar" if self.mutado else "🔇 Mutar"
-            # Usamos add(CharSequence) — a versão com (int,int,int,String) dá
-            # ambiguidade de sobrecarga no pyjnius. Identificamos cada opção
-            # pelo próprio texto do título, não por um ID numérico.
-            menu.getMenu().add(TEXTO_FALAR)
-            menu.getMenu().add(texto_mutar)
-            menu.getMenu().add(TEXTO_FECHAR)
+            opcoes = [
+                ("🎤 Falar agora", "falar"),
+                (texto_mutar, "mutar"),
+                ("✖ Fechar bolha", "fechar"),
+            ]
 
-            class MenuListener(PythonJavaClass):
-                __javainterfaces__ = ['android/widget/PopupMenu$OnMenuItemClickListener']
-                __javacontext__ = 'app'
+            self._click_listeners = []
+            for texto, acao in opcoes:
+                tv = TextView(ctx)
+                tv.setText(texto)
+                tv.setTextColor(Color.WHITE)
+                tv.setTextSize(15)
+                tv.setPadding(28, 18, 28, 18)
 
-                @java_method('(Landroid/view/MenuItem;)Z')
-                def onMenuItemClick(self, item):
-                    titulo = str(item.getTitle())
-                    if titulo == TEXTO_FALAR:
-                        overlay_ref.capturar_fala_em_background()
-                    elif "Mutar" in titulo or "Desmutar" in titulo:
-                        overlay_ref.mutado = not overlay_ref.mutado
-                        estado = "mutada" if overlay_ref.mutado else "desmutada"
-                        print(f"[Spica/Overlay] Bolha {estado}.")
-                    elif titulo == TEXTO_FECHAR:
-                        overlay_ref.desligar_bolha()
-                    return True
+                class ClickListener(PythonJavaClass):
+                    __javainterfaces__ = ['android/view/View$OnClickListener']
+                    __javacontext__ = 'app'
 
-            self._menu_listener = MenuListener()
-            menu.setOnMenuItemClickListener(self._menu_listener)
-            menu.show()
+                    def __init__(self, acao):
+                        super().__init__()
+                        self.acao = acao
+
+                    @java_method('(Landroid/view/View;)V')
+                    def onClick(self, view):
+                        overlay_ref._fechar_menu_bolha()
+                        if self.acao == "falar":
+                            overlay_ref.capturar_fala_em_background()
+                        elif self.acao == "mutar":
+                            overlay_ref.mutado = not overlay_ref.mutado
+                            estado = "mutada" if overlay_ref.mutado else "desmutada"
+                            print(f"[Spica/Overlay] Bolha {estado}.")
+                        elif self.acao == "fechar":
+                            overlay_ref.desligar_bolha()
+
+                listener = ClickListener(acao)
+                self._click_listeners.append(listener)
+                tv.setOnClickListener(listener)
+                container.addView(tv)
+
+            menu_params = LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
+                2038, LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+            )
+            menu_params.gravity = 51
+            menu_params.x = self.params.x
+            menu_params.y = self.params.y + 230
+
+            self.window_manager.addView(container, menu_params)
+            self._menu_view = container
+            print("[Spica/Overlay] Menu da bolha aberto.")
         except Exception as e:
             print(f"[Spica/Overlay] Erro ao abrir menu da bolha: {e}")
+
+    @run_on_ui_thread
+    def _fechar_menu_bolha(self):
+        if self._menu_view is not None and self.window_manager is not None:
+            try:
+                self.window_manager.removeView(self._menu_view)
+            except Exception as e:
+                print(f"[Spica/Overlay] Erro ao fechar menu da bolha: {e}")
+            finally:
+                self._menu_view = None
+                self._click_listeners = []
 
     def capturar_fala_em_background(self):
         """Ativa o microfone ao tocar na bolha e processa a resposta da IA."""
@@ -248,6 +294,8 @@ class SpicaOverlay:
     def desligar_bolha(self):
         if HAS_ANDROID and self.window_manager and self.image_view and self.iniciado:
             try:
+                self._fechar_menu_bolha()
+
                 if self._bitmap_atual:
                     try:
                         self._bitmap_atual.recycle()

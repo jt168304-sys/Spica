@@ -58,22 +58,11 @@ class TtsService:
                     print("[Spica/TTS] Motor de voz ativo em pt-BR.")
 
         ctx = PythonActivity.mActivity
-        # IMPORTANTE: guardamos o listener num atributo do self. Se ele for
-        # só passado direto pro construtor sem referência guardada, o Python
-        # coleta ele (garbage collector) antes do Android chamar onInit de
-        # verdade, e a chamada acaba caindo em outro proxy por engano.
         self._init_listener = InitListener(self)
         self.tts = TextToSpeech(ctx, self._init_listener)
 
     def configurar_callbacks_visuais(self, on_start, on_done):
-        """Vincula as funções da Bolha para alternar os avatares PNG.
-        OBS: não usamos TextToSpeech.setOnUtteranceProgressListener porque
-        UtteranceProgressListener é uma CLASSE ABSTRATA no Android, não uma
-        interface — o pyjnius não consegue criar um proxy pra ela (dá
-        IllegalArgumentException: "is not an interface"). Em vez disso,
-        falar() dispara on_start na hora e uma thread monitora
-        tts.isSpeaking() pra saber quando chamar on_done.
-        """
+        """Vincula as funções da Bolha para alternar os avatares PNG."""
         self._on_start_speak = on_start
         self._on_done_speak = on_done
 
@@ -107,7 +96,7 @@ class TtsService:
                 self.tts.speak(texto, 0, params)
 
                 if self._on_start_speak:
-                    Clock.schedule_once(lambda dt: self._on_start_speak(), 0)
+                    self._on_start_speak()
 
                 import time
                 tentativas = 0
@@ -119,11 +108,11 @@ class TtsService:
                     time.sleep(0.1)
 
                 if self._on_done_speak:
-                    Clock.schedule_once(lambda dt: self._on_done_speak(), 0)
+                    self._on_done_speak()
             except Exception as e:
                 print(f"[Spica/TTS] Erro ao sintetizar voz: {e}")
                 if self._on_done_speak:
-                    Clock.schedule_once(lambda dt: self._on_done_speak(), 0)
+                    self._on_done_speak()
 
         threading.Thread(target=_falar_async, daemon=True).start()
 
@@ -154,7 +143,6 @@ class TtsService:
                 self._on_done_speak = None
 
     def __del__(self):
-        """Destrutor para limpeza automática."""
         try:
             self.destruir()
         except:
