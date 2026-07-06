@@ -61,7 +61,7 @@ class CalculatorScreen(MDScreen):
         linha_ia = MDBoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
         self.campo_ia = MDTextField(hint_text="Ex: quanto é 15% de 200?", mode="outlined", size_hint_x=1)
         linha_ia.add_widget(self.campo_ia)
-        linha_ia.add_widget(MDRaisedButton(text="→", size_hint_x=None, width=dp(50), on_release=self._perguntar_ia))
+        linha_ia.add_widget(MDIconButton(icon="send", on_release=self._perguntar_ia))
         corpo.add_widget(linha_ia)
 
         self.label_ia = MDLabel(text="", font_style="Body2", size_hint_y=None, height=dp(40))

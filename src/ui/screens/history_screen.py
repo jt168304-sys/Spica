@@ -96,7 +96,7 @@ class HistoryScreen(MDScreen):
                 )
                 linha1 = MDBoxLayout(size_hint_y=None, height=dp(28))
                 linha1.add_widget(MDLabel(
-                    text=f"📅  {data}   🕐 {hora_i} – {hora_f}",
+                    text=f"{data}   {hora_i} - {hora_f}",
                     font_style="Subtitle2"
                 ))
                 linha2 = MDLabel(

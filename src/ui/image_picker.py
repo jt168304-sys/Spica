@@ -147,7 +147,7 @@ class _CameraCapture(ModalView):
 
         botoes = MDBoxLayout(size_hint_y=None, height=dp(60), spacing=dp(10), padding=dp(8))
         botoes.add_widget(MDFlatButton(text="Cancelar", on_release=lambda x: self.dismiss()))
-        botoes.add_widget(MDRaisedButton(text="📸 Tirar Foto", on_release=self._capturar))
+        botoes.add_widget(MDRaisedButton(text="Tirar Foto", on_release=self._capturar))
         layout.add_widget(botoes)
         self.add_widget(layout)
 

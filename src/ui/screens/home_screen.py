@@ -37,7 +37,7 @@ class HomeScreen(MDScreen):
     def _criar_card_status(self):
         card = MDCard(orientation="horizontal", size_hint_y=None, height=dp(80),
                       padding=dp(16), spacing=dp(12), radius=[dp(16)], elevation=4)
-        card.add_widget(MDLabel(text="✦", font_size=dp(32), size_hint=(None, None), size=(dp(50), dp(50))))
+        card.add_widget(MDIconButton(icon="check-circle-outline", disabled=True, pos_hint={"center_y": 0.5}))
         col = MDBoxLayout(orientation="vertical")
         self.label_status = MDLabel(text="Spica esta pronta!", font_style="Subtitle1")
         self.label_status_sub = MDLabel(text="Toque na bolha ou diga 'Hey Spica'",

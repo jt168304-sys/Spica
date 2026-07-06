@@ -49,7 +49,7 @@ class TranslatorScreen(MDScreen):
 
         # --- Botão de imagem (único, abre popup) ---
         self.btn_imagem = MDRaisedButton(
-            text="📎  Adicionar imagem",
+            text="Adicionar imagem",
             size_hint_y=None, height=dp(46),
             on_release=self._abrir_opcoes_imagem
         )
@@ -139,14 +139,14 @@ class TranslatorScreen(MDScreen):
             text="Escolha a origem:",
             buttons=[
                 MDFlatButton(
-                    text="📷  Câmera",
+                    text="Câmera",
                     on_release=lambda x: (
                         self._dialogo.dismiss(),
                         Clock.schedule_once(lambda dt: self._usar_camera(), 0.3)
                     )
                 ),
                 MDFlatButton(
-                    text="📁  Arquivos",
+                    text="Arquivos",
                     on_release=lambda x: (
                         self._dialogo.dismiss(),
                         Clock.schedule_once(lambda dt: self._usar_arquivos(), 0.3)
@@ -170,8 +170,8 @@ class TranslatorScreen(MDScreen):
             return
         self.caminho_imagem = caminho
         nome = os.path.basename(caminho)
-        self.label_imagem.text = f"✅ {nome}"
-        self.btn_imagem.text = "📎  Trocar imagem"
+        self.label_imagem.text = f"{nome}"
+        self.btn_imagem.text = "Trocar imagem"
 
     def _traduzir(self, *args):
         texto = self.campo_entrada.text.strip()

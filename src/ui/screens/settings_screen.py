@@ -78,7 +78,7 @@ class SettingsScreen(MDScreen):
             padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
-            text="🔑  Groq API Key",
+            text="Groq API Key",
             font_style="Title", role="medium", halign="left",
         ))
         btn = MDButton(
@@ -96,7 +96,7 @@ class SettingsScreen(MDScreen):
             padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
-            text="🎤  Sistema de Voz",
+            text="Sistema de Voz",
             font_style="Title", role="medium", halign="left",
         ))
         card.add_widget(MDLabel(
@@ -129,7 +129,7 @@ class SettingsScreen(MDScreen):
             padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
-            text="✦  Bolha Flutuante",
+            text="Bolha Flutuante",
             font_style="Title", role="medium", halign="left",
         ))
         card.add_widget(MDLabel(

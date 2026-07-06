@@ -99,7 +99,7 @@ class ChatScreen(MDScreen):
         raiz = MDBoxLayout(orientation="vertical")
 
         barra_superior = MDTopAppBar(type="small")
-        titulo_app = MDTopAppBarTitle(text="Spica ✶")
+        titulo_app = MDTopAppBarTitle(text="Spica")
         barra_superior.add_widget(titulo_app)
         
         container_acoes = MDTopAppBarTrailingButtonContainer()
@@ -247,7 +247,7 @@ class ChatScreen(MDScreen):
         if not GroqService.get_instance().disponivel:
             self._spica("Configure sua chave Groq.")
             return
-        self._usuario(f"🎙 {texto}")
+        self._usuario(f"{texto}")
         self._aguardando = True
         self._show_typing()
         GroqService.get_instance().perguntar(
@@ -270,9 +270,9 @@ class ChatScreen(MDScreen):
     def _boas_vindas(self, dt):
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
-            self._spica("Ola! Sou a Spica ✶ — fale, escreva ou envie imagens!")
+            self._spica("Ola! Sou a Spica — fale, escreva ou envie imagens!")
         else:
-            self._spica("Ola! Sou a Spica ✶\n\nVa em ⚙ Configuracoes e insira sua chave Groq.")
+            self._spica("Ola! Sou a Spica\n\nVa em Configuracoes e insira sua chave Groq.")
 
     def _enviar(self):
         if self._aguardando:
@@ -282,11 +282,11 @@ class ChatScreen(MDScreen):
             return
         from src.services.groq_service import GroqService
         if not GroqService.get_instance().disponivel:
-            self._spica("⚙ Sem API Key.")
+            self._spica("Sem API Key.")
             return
-        exibir = texto or "🖼 Imagem"
+        exibir = texto or "Imagem"
         if self._imagem_pendente and texto:
-            exibir = f"🖼 {texto}"
+            exibir = f"{texto}"
         self._usuario(exibir)
         img = self._imagem_pendente
         self._imagem_pendente = None
