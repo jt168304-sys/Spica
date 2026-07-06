@@ -265,7 +265,7 @@ class SpicaOverlay:
                 if texto_capturado and texto_capturado != "Nao ouvi":
                     GroqService.get_instance().perguntar(texto_capturado, processar_resposta_ia, usar_clock=False)
 
-            VoiceService.get_instance().ouvir(callback_voz)
+            VoiceService.get_instance().ouvir(callback_voz, usar_clock=False)
         except Exception as e:
             print(f"[Spica/Overlay] Erro ao capturar fala pela bolha: {e}")
 

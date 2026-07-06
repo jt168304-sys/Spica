@@ -21,10 +21,17 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
     __javainterfaces__ = ['android/speech/RecognitionListener']
     __javacontext__ = 'app'
 
-    def __init__(self, callback):
+    def __init__(self, callback, usar_clock=True):
         super().__init__()
         self.callback = callback
+        self.usar_clock = usar_clock
         self.logger = WindLogger()
+
+    def _entregar(self, texto):
+        if self.usar_clock:
+            Clock.schedule_once(lambda dt: self.callback(texto), 0)
+        else:
+            self.callback(texto)
 
     @java_method('(Landroid/os/Bundle;)V')
     def onReadyForSpeech(self, params):
@@ -45,18 +52,17 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
     @java_method('(I)V')
     def onError(self, error):
         self.logger.error(f"[Spica/Voice] Erro no Reconhecedor Android cod: {error}")
-        # Retorna amigavelmente uma mensagem legível para a UI do chat
         msg = "Nao ouvi" if error == 7 else f"Erro ao ouvir ({error})"
-        Clock.schedule_once(lambda dt: self.callback(msg), 0)
+        self._entregar(msg)
 
     @java_method('(Landroid/os/Bundle;)V')
     def onResults(self, results):
         matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if matches and matches.size() > 0:
             texto = matches.get(0)
-            Clock.schedule_once(lambda dt: self.callback(texto), 0)
+            self._entregar(texto)
         else:
-            Clock.schedule_once(lambda dt: self.callback("Nao ouvi"), 0)
+            self._entregar("Nao ouvi")
 
     @java_method('(Landroid/os/Bundle;)V')
     def onPartialResults(self, partialResults): pass
@@ -76,18 +82,17 @@ class VoiceService:
     def __init__(self):
         self.logger = WindLogger()
         self.recognizer = None
-        self._listener_persistente = None  # Proteção contra o Coletor de Lixo da JNI
+        self._listener_persistente = None
 
-    def ouvir(self, callback):
+    def ouvir(self, callback, usar_clock=True):
         if not HAS_ANDROID:
             callback("Microfone indisponivel neste sistema.")
             return
-        self._ouvir_android(callback)
+        self._ouvir_android(callback, usar_clock)
 
     @run_on_ui_thread
-    def _ouvir_android(self, callback):
+    def _ouvir_android(self, callback, usar_clock=True):
         try:
-            # Limpeza completa e segura de recursos anteriores
             if self.recognizer is not None:
                 try:
                     self.recognizer.stopListening()
@@ -96,11 +101,9 @@ class VoiceService:
                     pass
                 self.recognizer = None
 
-            # Instancia o motor nativo
             self.recognizer = SpeechRecognizer.createSpeechRecognizer(context)
-            
-            # Armazena a referência no escopo do objeto para impedir que seja coletada pelo GC
-            self._listener_persistente = RecognitionListenerImpl(callback)
+
+            self._listener_persistente = RecognitionListenerImpl(callback, usar_clock)
             self.recognizer.setRecognitionListener(self._listener_persistente)
 
             intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -112,10 +115,12 @@ class VoiceService:
             self.logger.info("[Spica/Voice] Hardware de áudio ativado com sucesso na UI Thread.")
         except Exception as e:
             self.logger.error(f"[Spica/Voice] Falha crítica ao instanciar microfone: {e}")
-            Clock.schedule_once(lambda dt: callback("Erro ao inicializar hardware de voz."), 0)
+            if usar_clock:
+                Clock.schedule_once(lambda dt: callback("Erro ao inicializar hardware de voz."), 0)
+            else:
+                callback("Erro ao inicializar hardware de voz.")
 
     def destruir(self):
-        """✅ NOVO: Libera recursos de reconhecimento de voz correctamente."""
         try:
             if self.recognizer:
                 try:
@@ -127,14 +132,13 @@ class VoiceService:
                 except:
                     pass
                 self.recognizer = None
-            
+
             self._listener_persistente = None
             self.logger.info("[Spica/Voice] Reconhecedor de voz destruído")
         except Exception as e:
             self.logger.error(f"[Spica/Voice] Erro ao destruir: {e}")
 
     def __del__(self):
-        """Destrutor para limpeza automática."""
         try:
             self.destruir()
         except:
