@@ -263,7 +263,7 @@ class SpicaOverlay:
 
             def callback_voz(texto_capturado):
                 if texto_capturado and texto_capturado != "Nao ouvi":
-                    GroqService.get_instance().perguntar(texto_capturado, processar_resposta_ia)
+                    GroqService.get_instance().perguntar(texto_capturado, processar_resposta_ia, usar_clock=False)
 
             VoiceService.get_instance().ouvir(callback_voz)
         except Exception as e:

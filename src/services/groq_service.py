@@ -27,10 +27,10 @@ class GroqService:
         self.logger = WindLogger()
         self.settings = Settings()
         self._historico: List[Dict] = []
-        self._cache_imagens = {}  # ✅ NOVO: Cache de imagens em base64
-        self.MAX_HISTORICO = 100  # ✅ NOVO: Limitar histórico
-        self.WINDOW_API = 6  # ✅ NOVO: Usar últimas 6 mensagens para API
-        self.TIMEOUT_API = 35  # ✅ NOVO: Timeout configurável
+        self._cache_imagens = {}
+        self.MAX_HISTORICO = 100
+        self.WINDOW_API = 6
+        self.TIMEOUT_API = 35
 
     @property
     def api_key(self):
@@ -51,39 +51,38 @@ class GroqService:
         return "image/jpeg"
 
     def _converter_para_base64(self, caminho: str) -> str:
-        # ✅ NOVO: Verificar cache primeiro
         if caminho in self._cache_imagens:
             return self._cache_imagens[caminho]
-        
+
         try:
             if not os.path.exists(caminho) or os.path.getsize(caminho) == 0:
                 return ""
             with open(caminho, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode("utf-8")
-                self._cache_imagens[caminho] = b64  # ✅ NOVO: Armazenar em cache
+                self._cache_imagens[caminho] = b64
                 return b64
         except Exception as e:
             self.logger.error(f"Erro base64: {e}")
             return ""
 
-    def perguntar(self, mensagem: str, callback: Callable[[str], None], caminho_imagem: str = None):
+    def perguntar(self, mensagem: str, callback: Callable[[str], None], caminho_imagem: str = None, usar_clock: bool = True):
         if not self.disponivel:
             callback("Sem API key. Va em Configuracoes e insira sua chave Groq.")
             return
 
         caminho_resolvido = caminho_imagem
-        # Como o image_handler.py já validou a imagem, apenas checamos a existência aqui
         if caminho_resolvido and not os.path.exists(caminho_resolvido):
             self.logger.error(f"Imagem ausente ou inválida no sistema de arquivos: {caminho_resolvido}")
             caminho_resolvido = None
 
         threading.Thread(
             target=self._chamar_api,
-            args=(mensagem, callback, caminho_resolvido),
+            args=(mensagem, callback, caminho_resolvido, usar_clock),
             daemon=True,
         ).start()
 
-    def _chamar_api(self, mensagem: str, callback: Callable[[str], None], caminho_resolvido: str = None):
+    def _chamar_api(self, mensagem: str, callback: Callable[[str], None], caminho_resolvido: str = None, usar_clock: bool = True):
+        retornar = lambda texto: self._retornar(callback, texto, usar_clock)
         try:
             import requests
             import urllib3
@@ -95,10 +94,9 @@ class GroqService:
                 modelo_atual = self.MODEL_VISAO
                 img_b64 = self._converter_para_base64(caminho_resolvido)
                 if not img_b64:
-                    self._retornar(callback, "Erro ao processar arquivo de imagem.")
+                    retornar("Erro ao processar arquivo de imagem.")
                     return
                 mime_type = self._obter_mime_type(caminho_resolvido)
-                # ✅ NOVO: Usar WINDOW_API em vez de hardcoded -6
                 for msg in self._historico[-self.WINDOW_API:]:
                     txt = msg["content"]
                     if isinstance(txt, list):
@@ -115,14 +113,12 @@ class GroqService:
             else:
                 modelo_atual = self.MODEL_TEXTO
                 self._historico.append({"role": "user", "content": mensagem})
-                # ✅ NOVO: Usar WINDOW_API em vez de hardcoded -12
                 for msg in self._historico[-self.WINDOW_API:]:
                     txt = msg["content"]
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
                     mensagens_formatadas.append({"role": msg["role"], "content": str(txt)})
 
-            # ✅ NOVO: Manter apenas últimas MAX_HISTORICO mensagens
             if len(self._historico) > self.MAX_HISTORICO:
                 self._historico = self._historico[-self.MAX_HISTORICO:]
 
@@ -133,7 +129,6 @@ class GroqService:
                 "temperature": 0.5 if caminho_resolvido else 0.7,
             }
 
-            # ✅ NOVO: Usar TIMEOUT_API configurável
             resp = requests.post(
                 self.URL,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
@@ -143,33 +138,36 @@ class GroqService:
             )
 
             if resp.status_code == 401:
-                self._retornar(callback, "API key invalida.")
+                retornar("API key invalida.")
                 return
             if resp.status_code == 429:
-                self._retornar(callback, "Limite atingido. Aguarde.")
+                retornar("Limite atingido. Aguarde.")
                 return
             if resp.status_code != 200:
-                self._retornar(callback, f"Erro na API ({resp.status_code}).")
+                retornar(f"Erro na API ({resp.status_code}).")
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
             self._historico.append({"role": "assistant", "content": resposta})
-            self._retornar(callback, resposta)
+            retornar(resposta)
 
         except Exception as e:
             self.logger.error(f"Erro Groq: {type(e).__name__}: {e}")
             if "ConnectionError" in type(e).__name__:
-                self._retornar(callback, "Sem conexao com a internet.")
+                retornar("Sem conexao com a internet.")
             elif "Timeout" in type(e).__name__:
-                self._retornar(callback, "Tempo esgotado.")
+                retornar("Tempo esgotado.")
             else:
-                self._retornar(callback, f"Erro: {type(e).__name__}.")
+                retornar(f"Erro: {type(e).__name__}.")
 
-    def _retornar(self, callback, texto):
+    def _retornar(self, callback, texto, usar_clock=True):
+        if not usar_clock:
+            callback(texto)
+            return
         from kivy.clock import Clock
         Clock.schedule_once(lambda dt: callback(texto), 0)
 
     def limpar_historico(self):
         self._historico = []
-        self._cache_imagens.clear()  # ✅ NOVO: Limpar cache também
+        self._cache_imagens.clear()
         print("[Spica/IA] Histórico e cache de imagens limpos")
