@@ -1,161 +1,63 @@
-Spica — Assistente Virtual Android
+# Spica
 
-> **Assistente virtual inteligente com bolha flutuante, desenvolvido em Python + KivyMD**
+Assistente virtual para Android, feita em Python com Kivy/KivyMD. Roda como app normal e também como uma bolha flutuante que continua funcionando mesmo com o app fechado.
 
----
+## O que ela faz
 
-## O que é a Spica?
+- Conversa por texto, usando a API da Groq (Llama 3.1) como motor de IA.
+- Entende imagens: você manda uma foto e ela analisa e responde sobre o conteúdo.
+- Ouve e responde em voz alta, usando o reconhecimento de voz e o motor de texto-para-voz nativos do Android.
+- Tem uma bolha flutuante que fica na tela por cima de outros apps. Dá pra arrastar ela pra qualquer lugar, e um toque rápido abre um menuzinho com as opções de falar, mutar ou fechar. A conversa por voz através da bolha funciona mesmo com você fora do app.
+- Tema claro/escuro, alternável nas configurações.
 
-A **Spica** é uma assistente virtual para Android feito 100% em Python.
-Funciona com uma bolha flutuante que
-fica sempre visível na tela e pode ser tocada para abrir o painel principal.
+## Como funciona por baixo dos panos
 
-### Funcionalidades
+O app inteiro é Python puro, sem nenhuma linha de Java/Kotlin escrita à mão. O acesso às APIs nativas do Android (TextToSpeech, SpeechRecognizer, janela de overlay, seletor de imagens) é feito via [pyjnius](https://github.com/kivy/pyjnius), que permite chamar classes Java diretamente do Python.
 
-| Função | Status |
-|---|---|
-| 🌬️ Bolha flutuante arrastável | ✅ Pronto |
-| 💬 Chat com comandos por texto | ✅ Pronto |
-| 📝 Criar e gerenciar notas | ✅ Pronto |
-| 🧮 Calculadora inteligente | ✅ Pronto |
-| 🌙 Modo escuro/claro | ✅ Pronto |
-| 🎙️ Reconhecimento de voz | ✅ Pronto |
-| ⚙️ Configurações salvas | ✅ Pronto |
-| 🤖 Chat com IA (Groq/Gemini) |  Em breve |
-| ⏰ Alarmes e lembretes |  Em breve |
-| 🌐 Tradução de texto |  Em breve |
+Estrutura principal:
+main.py                        Ponto de entrada, inicializacao e captura de erros
+service.py                     Servico de segundo plano (ainda nao usado pela build atual)
+buildozer.spec                 Configuracao de build para gerar o APK
+src/
+├── core/
+│   └── app_manager.py         App principal: tema, telas, permissoes
+├── ui/
+│   ├── image_handler.py       Seletor de imagem (camera/galeria)
+│   └── screens/
+│       ├── chat_screen.py     Tela de conversa
+│       └── settings_screen.py Configuracoes (API key, tema, voz, bolha)
+├── services/
+│   ├── groq_service.py        Chamadas a API da Groq (texto e visao)
+│   ├── tts_service.py         Texto-para-voz nativo do Android
+│   ├── voice_service.py       Reconhecimento de voz nativo do Android
+│   └── overlay.py             Bolha flutuante (janela, arrastar, menu, permissoes)
+├── utils/
+│   ├── logger.py
+│   ├── permissions.py
+│   └── thread_safe.py
+└── config/
+└── settings.py            Configuracoes persistentes (JSON local)
+assets/
+├── boca_aberta.png             Avatar da bolha falando
+└── boca_fechada.png            Avatar da bolha em silencio
+## Build
 
----
+O APK é gerado via GitHub Actions, usando Buildozer com python-for-android. O workflow está em `.github/workflows/`. Basta dar push na branch `main` ou disparar manualmente pela aba Actions do repositório.
 
-## 📁 Estrutura do Projeto
-
-```
-WindIA/
-├── main.py                     ← Ponto de entrada (execute este!)
-├── buildozer.spec              ← Configuração para gerar APK
-├── requirements.txt            ← Dependências Python
-│
-├── assets/
-│   ├── images/                 ← Ícones, splash screen
-│   └── sounds/                 ← Sons de notificação
-│
-├── src/
-│   ├── core/
-│   │   └── app_manager.py      ← Coração do app (tema, telas, ciclo de vida)
-│   │
-│   ├── ui/
-│   │   ├── bubble.py           ← A bolha flutuante (widget principal!)
-│   │   ├── main_screen.py      ← Tela base
-│   │   └── screens/
-│   │       ├── home_screen.py     ← Tela inicial com atalhos
-│   │       ├── chat_screen.py     ← Chat com WindIA
-│   │       ├── notes_screen.py    ← Gerenciador de notas
-│   │       └── settings_screen.py ← Configurações
-│   │
-│   ├── services/
-│   │   └── voice_service.py    ← Reconhecimento de voz (microfone)
-│   │
-│   ├── modules/
-│   │   ├── commands.py         ← Processador central de comandos
-│   │   ├── notes.py            ← Lógica de notas
-│   │   └── calculator.py       ← Calculadora inteligente
-│   │
-│   ├── utils/
-│   │   ├── logger.py           ← Sistema de logs
-│   │   └── permissions.py      ← Permissões Android
-│   │
-│   ├── database/
-│   │   └── storage.py          ← Banco de dados JSON local
-│   │
-│   └── config/
-│       └── settings.py         ← Configurações persistentes
-│
-├── data/                       ← Criado automaticamente ao rodar
-│   ├── notas.json
-│   ├── settings.json
-│   ├── storage.json
-│   └── wind.log
-│
-└── docs/
-    └── tutorial_instalacao.md
-```
-
----
-
-##  Como Executar
-
-### No PC (Windows / Linux / Mac)
+Build local também funciona (só em Linux/WSL):
 
 ```bash
-# 1. Clone ou baixe o projeto
-
-# 2. Instale as dependências
-pip install -r requirements.txt
-
-# 3. Execute
-python main.py
-```
-
-### No Celular com Pydroid 3
-
-1. Instale o **Pydroid 3** na Play Store
-2. Abra o Pydroid 3 → vá em **Pip** → instale: `kivy`, `kivymd`
-3. Abra o arquivo `main.py` e execute
-
-### No Celular com Termux
-
-```bash
-pkg install python
-pip install kivy kivymd
-python main.py
-```
-
----
-
-##  Gerar APK com Buildozer
-
-> Requer Linux ou WSL no Windows
-
-```bash
-# Instalar Buildozer
 pip install buildozer
-
-# Na pasta do projeto:
 buildozer android debug
-
-# O APK ficará em:
-# bin/WindIA-1.0-armeabi-v7a-debug.apk
-```
-
----
-
-## Comandos Disponíveis
-
-| Exemplo | O que faz |
-|---|---|
-| `Anota que preciso comprar leite` | Cria uma nota |
-| `Calcule 10 + 5 × 3` | Realiza o cálculo |
-| `Que horas são?` | Mostra a hora atual |
-| `Qual a data de hoje?` | Mostra a data |
-| `Me conta uma piada` | Conta uma piada |
-| `Ajuda` | Lista todos os comandos |
-
----
-
-##  Configurar API de IA (Opcional)
-
-Para habilitar respostas mais inteligentes:
-
-1. Crie uma conta em [console.groq.com](https://console.groq.com) (gratuito)
-2. Gere uma API Key
-3. No app: **Configurações → API Key → Cole a chave**
-
----
-
-##  Licença
-
-Incondicionalmente privada.
-
----
-
-*Spica — Feita com Python e KivyMD*
+O APK final fica em bin/.
+Configuração
+A Spica precisa de uma chave de API da Groq pra funcionar (gratuita):
+Crie uma conta em console.groq.com
+Gere uma API Key
+No app: Configurações → cole a chave
+Pra usar a bolha flutuante, é preciso liberar manualmente a permissão "Exibir sobre outros apps" — o próprio app leva você até a tela certa nas Configurações.
+Requisitos
+Android 7.0 (API 24) ou superior
+Conexão com internet (a IA roda na nuvem, não no aparelho)
+Estado atual
+Em desenvolvimento ativo. Chat, visão, voz e bolha flutuante já funcionam de ponta a ponta, inclusive com o app em segundo plano. Não há por enquanto notas, calculadora, tradutor ou outras ferramentas — o foco é só a assistente conversacional.
