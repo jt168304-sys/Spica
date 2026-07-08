@@ -146,7 +146,7 @@ class ChatScreen(MDScreen):
         self._indicador = MDLabel(
             text="", size_hint_y=None, height=0,
             halign="center", font_style="Label", role="small",
-            theme_text_color="Custom", text_color=[0.4, 0.8, 1, 1],
+            theme_text_color="Primary",
         )
         raiz.add_widget(self._indicador)
 
@@ -164,29 +164,28 @@ class ChatScreen(MDScreen):
             hint_text="Mensagem...", mode="outlined",
             multiline=False, size_hint_x=1,
             input_type="text", keyboard_suggestions=True,
+            radius=[dp(20)],
         )
         self._campo.bind(on_text_validate=lambda x: self._enviar())
         barra.add_widget(self._campo)
 
         self._btn_mic = MDIconButton(
             icon="microphone-outline", 
-            theme_icon_color="Custom",
-            icon_color=[0.4, 0.8, 1, 1],
+            theme_icon_color="Primary",
             on_release=lambda x: self._toggle_mic(),
         )
         barra.add_widget(self._btn_mic)
 
         self._btn_som = MDIconButton(
             icon="volume-high", 
-            theme_icon_color="Custom",
-            icon_color=[0.4, 0.8, 1, 1],
+            theme_icon_color="Primary",
             on_release=lambda x: self._toggle_som(),
         )
         barra.add_widget(self._btn_som)
 
         barra.add_widget(MDIconButton(
             icon="send", 
-            theme_icon_color="Custom", icon_color=[0.25, 0.55, 1.0, 1],
+            theme_icon_color="Primary",
             on_release=lambda x: self._enviar(),
         ))
 
@@ -238,7 +237,7 @@ class ChatScreen(MDScreen):
     def _parar_mic(self):
         self._ouvindo = False
         self._btn_mic.icon = "microphone-outline"
-        self._btn_mic.icon_color = [0.4, 0.8, 1, 1]
+        self._btn_mic.theme_icon_color = "Primary"
         self._indicador.text = ""
         self._indicador.height = 0
 
@@ -250,7 +249,7 @@ class ChatScreen(MDScreen):
             self._tts.parar()
         else:
             self._btn_som.icon = "volume-high"
-            self._btn_som.icon_color = [0.4, 0.8, 1, 1]
+            self._btn_som.theme_icon_color = "Primary"
 
     def _voz_recebida(self, texto):
         self._parar_mic()
