@@ -39,7 +39,7 @@ class SettingsScreen(MDScreen):
         raiz.add_widget(barra_superior)
 
         scroll = ScrollView()
-        lista = MDList(padding=dp(8))
+        lista = MDList(padding=dp(8), spacing=dp(14))
 
         # Adicionando os cards dinâmicos existentes
         if hasattr(self, '_card_api_key'): 
