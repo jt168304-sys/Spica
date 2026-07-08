@@ -75,7 +75,7 @@ class SettingsScreen(MDScreen):
     def _card_api_key(self):
         card = MDCard(
             orientation="vertical", size_hint_y=None, height=dp(110),
-            padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
+            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
             text="Groq API Key",
@@ -93,7 +93,7 @@ class SettingsScreen(MDScreen):
     def _card_voz(self):
         card = MDCard(
             orientation="vertical", size_hint_y=None, height=dp(160),
-            padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
+            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
             text="Sistema de Voz",
@@ -126,7 +126,7 @@ class SettingsScreen(MDScreen):
     def _card_bolha(self):
         card = MDCard(
             orientation="vertical", size_hint_y=None, height=dp(180),
-            padding=dp(16), spacing=dp(8), radius=[dp(12)], elevation=4,
+            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
         )
         card.add_widget(MDLabel(
             text="Bolha Flutuante",
