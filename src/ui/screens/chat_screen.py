@@ -127,6 +127,7 @@ class ChatScreen(MDScreen):
             do_scroll_x=False, do_scroll_y=True, size_hint=(1, 1),
             bar_width=dp(3), scroll_type=["bars", "content"],
             bar_color=[0.4, 0.6, 1, 0.7],
+            always_overscroll=False,
         )
         self._msgs = GridLayout(
             cols=1, size_hint_y=None,
