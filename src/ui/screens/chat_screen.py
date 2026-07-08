@@ -8,6 +8,18 @@ from kivy.utils import platform
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
+
+
+class _CardMensagem(MDCard):
+    """MDCard sem o comportamento de botao/ripple do KivyMD 2.0, que
+    consome o toque e atrapalha o ScrollView de rolar por cima das
+    bolhas de mensagem. Mantem a aparencia igual, so nao reage a toque."""
+    def on_touch_down(self, touch):
+        return False
+    def on_touch_move(self, touch):
+        return False
+    def on_touch_up(self, touch):
+        return False
 from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.button import MDIconButton
@@ -29,7 +41,7 @@ class Bolha(MDBoxLayout):
         self._texto = texto
         e_usuario = (autor == "usuario")
 
-        card = MDCard(
+        card = _CardMensagem(
             style="filled",
             size_hint=(0.82, None), padding=dp(12),
             radius=[dp(16), dp(16),
@@ -150,6 +162,7 @@ class ChatScreen(MDScreen):
         self._campo = MDTextField(
             hint_text="Mensagem...", mode="outlined",
             multiline=False, size_hint_x=1,
+            input_type="text", keyboard_suggestions=True,
         )
         self._campo.bind(on_text_validate=lambda x: self._enviar())
         barra.add_widget(self._campo)
