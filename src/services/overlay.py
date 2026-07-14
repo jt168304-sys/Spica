@@ -277,11 +277,15 @@ class SpicaOverlay:
                 return
 
             def processar_resposta_ia(texto_resposta):
-                TtsService.get_instance().falar(texto_resposta, on_finish=self._ciclo_escuta_continua)
+                # Como o seu TtsService.falar(texto) não aceita on_finish nativamente,
+                # nós executamos a fala e agendamos a reativação do microfone por tempo estimado.
+                TtsService.get_instance().falar(texto_resposta)
+                tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
+                Clock.schedule_once(lambda dt: self._ciclo_escuta_continua(), tempo_estimado)
 
             GroqService.get_instance().perguntar(
+            GroqService.get_instance().perguntar(
                 texto_capturado, processar_resposta_ia,
-                usar_clock=False, modo_continuo=True
             )
         except Exception as e:
             print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
