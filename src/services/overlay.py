@@ -314,3 +314,4 @@ class SpicaOverlay:
     def destruir(self):
         """Destrói completamente o overlay."""
         self.desligar_bolha()
+# Teste forcado pelo terminal
