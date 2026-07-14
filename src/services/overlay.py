@@ -64,6 +64,7 @@ class SpicaOverlay:
         self._bitmap_atual = None
         self._touch_listener = None
         self.mutado = False
+        self.escuta_continua = False
 
         self._menu_view = None
         self._click_listeners = []
@@ -183,10 +184,9 @@ class SpicaOverlay:
             container.setBackgroundColor(Color.parseColor("#EE222222"))
             container.setPadding(12, 12, 12, 12)
 
-            texto_mutar = "🔊 Desmutar" if self.mutado else "🔇 Mutar"
+            texto_escuta = "🔇 Desativar escuta" if self.escuta_continua else "🎤 Ativar escuta"
             opcoes = [
-                ("🎤 Falar agora", "falar"),
-                (texto_mutar, "mutar"),
+                (texto_escuta, "escuta"),
                 ("✖ Fechar bolha", "fechar"),
             ]
 
@@ -209,12 +209,8 @@ class SpicaOverlay:
                     @java_method('(Landroid/view/View;)V')
                     def onClick(self, view):
                         overlay_ref._fechar_menu_bolha()
-                        if self.acao == "falar":
-                            overlay_ref.capturar_fala_em_background()
-                        elif self.acao == "mutar":
-                            overlay_ref.mutado = not overlay_ref.mutado
-                            estado = "mutada" if overlay_ref.mutado else "desmutada"
-                            print(f"[Spica/Overlay] Bolha {estado}.")
+                        if self.acao == "escuta":
+                            overlay_ref._alternar_escuta_continua()
                         elif self.acao == "fechar":
                             overlay_ref.desligar_bolha()
 
@@ -248,26 +244,48 @@ class SpicaOverlay:
                 self._menu_view = None
                 self._click_listeners = []
 
-    def capturar_fala_em_background(self):
-        """Ativa o microfone ao tocar na bolha e processa a resposta da IA."""
-        if self.mutado:
-            print("[Spica/Overlay] Bolha mutada, ignorando pedido de escuta.")
+    def _alternar_escuta_continua(self):
+        """Liga/desliga o modo de escuta continua (toggle unico de mutar/desmutar)."""
+        self.escuta_continua = not self.escuta_continua
+        self.mutado = not self.escuta_continua
+        estado = "ativada" if self.escuta_continua else "desativada"
+        print(f"[Spica/Overlay] Escuta continua {estado}.")
+        if self.escuta_continua:
+            self._ciclo_escuta_continua()
+
+    def _ciclo_escuta_continua(self):
+        """Escuta uma fala. Ao terminar de processar e responder, chama a si mesmo de novo."""
+        if not self.escuta_continua:
             return
         try:
             from src.services.voice_service import VoiceService
+            VoiceService.get_instance().ouvir(self._processar_escuta_continua, usar_clock=False)
+        except Exception as e:
+            print(f"[Spica/Overlay] Erro no ciclo de escuta continua: {e}")
+
+    def _processar_escuta_continua(self, texto_capturado):
+        """Recebe o texto reconhecido, manda pra IA (com o tom de conversa continua) e fala a resposta."""
+        if not self.escuta_continua:
+            return
+        try:
             from src.services.groq_service import GroqService
             from src.services.tts_service import TtsService
 
+            invalido = (not texto_capturado) or texto_capturado.startswith("Nao ouvi") or texto_capturado.startswith("Erro ao ouvir")
+            if invalido:
+                self._ciclo_escuta_continua()
+                return
+
             def processar_resposta_ia(texto_resposta):
-                TtsService.get_instance().falar(texto_resposta)
+                TtsService.get_instance().falar(texto_resposta, on_finish=self._ciclo_escuta_continua)
 
-            def callback_voz(texto_capturado):
-                if texto_capturado and texto_capturado != "Nao ouvi":
-                    GroqService.get_instance().perguntar(texto_capturado, processar_resposta_ia, usar_clock=False)
-
-            VoiceService.get_instance().ouvir(callback_voz, usar_clock=False)
+            GroqService.get_instance().perguntar(
+                texto_capturado, processar_resposta_ia,
+                usar_clock=False, modo_continuo=True
+            )
         except Exception as e:
-            print(f"[Spica/Overlay] Erro ao capturar fala pela bolha: {e}")
+            print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
+            self._ciclo_escuta_continua()
 
     @run_on_ui_thread
     def definir_avatar_png(self, falar=False):
@@ -293,6 +311,7 @@ class SpicaOverlay:
 
     @run_on_ui_thread
     def desligar_bolha(self):
+        self.escuta_continua = False
         if HAS_ANDROID and self.window_manager and self.image_view and self.iniciado:
             try:
                 self._fechar_menu_bolha()
