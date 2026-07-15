@@ -218,13 +218,28 @@ class SpicaOverlay:
                 tv.setOnClickListener(listener)
                 container.addView(tv)
 
+            # Usamos a constante oficial de overlay do WindowManager
+            from android.view import WindowManager
+            tipo_overlay = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            
+            # Combinamos flags para garantir foco e renderização correta na UI Thread
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            
             menu_params = LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
-                2038, LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+                LayoutParams.WRAP_CONTENT,
+                LayoutParams.WRAP_CONTENT,
+                tipo_overlay,
+                flags,
+                PixelFormat.TRANSLUCENT
             )
             menu_params.gravity = 51
             menu_params.x = self.params.x
-            menu_params.y = self.params.y + 230
+            
+            # Posiciona o menu abaixo da bolha, mas se estiver muito baixo, joga para cima
+            if self.params.y > 1200:
+                menu_params.y = self.params.y - 200
+            else:
+                menu_params.y = self.params.y + 180
 
             self.window_manager.addView(container, menu_params)
             self._menu_view = container
