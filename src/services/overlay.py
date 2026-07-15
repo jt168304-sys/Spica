@@ -183,10 +183,9 @@ class SpicaOverlay:
             container.setBackgroundColor(Color.parseColor("#EE222222"))
             container.setPadding(12, 12, 12, 12)
 
-            texto_mutar = "🔊 Desmutar" if self.mutado else "🔇 Mutar"
+            texto_escuta = "🔇 Desativar escuta" if self.escuta_continua else "🎤 Ativar escuta"
             opcoes = [
-                ("🎤 Falar agora", "falar"),
-                (texto_mutar, "mutar"),
+                (texto_escuta, "escuta"),
                 ("✖ Fechar bolha", "fechar"),
             ]
 
@@ -209,12 +208,8 @@ class SpicaOverlay:
                     @java_method('(Landroid/view/View;)V')
                     def onClick(self, view):
                         overlay_ref._fechar_menu_bolha()
-                        if self.acao == "falar":
-                            overlay_ref.capturar_fala_em_background()
-                        elif self.acao == "mutar":
-                            overlay_ref.mutado = not overlay_ref.mutado
-                            estado = "mutada" if overlay_ref.mutado else "desmutada"
-                            print(f"[Spica/Overlay] Bolha {estado}.")
+                        if self.acao == "escuta":
+                            overlay_ref._alternar_escuta_continua()
                         elif self.acao == "fechar":
                             overlay_ref.desligar_bolha()
 
