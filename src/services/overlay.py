@@ -183,7 +183,8 @@ class SpicaOverlay:
             container.setBackgroundColor(Color.parseColor("#EE222222"))
             container.setPadding(12, 12, 12, 12)
 
-            texto_escuta = "🔇 Desativar escuta" if self.escuta_continua else "🎤 Ativar escuta"
+            ta_escutando = getattr(self, "escuta_continua", False)
+            texto_escuta = "🔇 Desativar escuta" if ta_escutando else "🎤 Falar / Ativar"
             opcoes = [
                 (texto_escuta, "escuta"),
                 ("✖ Fechar bolha", "fechar"),
@@ -209,7 +210,7 @@ class SpicaOverlay:
                     def onClick(self, view):
                         overlay_ref._fechar_menu_bolha()
                         if self.acao == "escuta":
-                            overlay_ref._alternar_escuta_continua()
+                            overlay_ref._alternar_escuta_continua() if hasattr(overlay_ref, "_alternar_escuta_continua") else overlay_ref.capturar_fala_em_background()
                         elif self.acao == "fechar":
                             overlay_ref.desligar_bolha()
 
