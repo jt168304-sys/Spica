@@ -142,7 +142,7 @@ class SpicaOverlay:
                 elif action == MotionEvent.ACTION_MOVE:
                     dx = event.getRawX() - self.initial_touch_x
                     dy = event.getRawY() - self.initial_touch_y
-                    if abs(dx) > 25 or abs(dy) > 25:
+                    if abs(dx) > 40 or abs(dy) > 40:  # Aumentado para 40 para evitar falsos arrastos
                         self.moveu = True
                     overlay_ref.params.x = int(self.initial_x + dx)
                     overlay_ref.params.y = int(self.initial_y + dy)
@@ -150,6 +150,12 @@ class SpicaOverlay:
                         overlay_ref.window_manager.updateViewLayout(overlay_ref.image_view, overlay_ref.params)
                     except Exception as e:
                         print(f"[Spica/Overlay] Erro ao mover bolha: {e}")
+                elif action == MotionEvent.ACTION_UP:
+                    duracao = time.time() - self.start_time
+                    # Se não moveu significativamente ou foi um toque rápido, abre o menu
+                    if not self.moveu or duracao < 0.35:
+                        overlay_ref._alternar_menu_bolha()
+                    return True
                     return True
                 elif action == MotionEvent.ACTION_UP:
                     duracao = time.time() - self.start_time
