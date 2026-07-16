@@ -288,8 +288,16 @@ class SpicaOverlay:
 
             invalido = (not texto_capturado) or texto_capturado.startswith("Nao ouvi") or texto_capturado.startswith("Erro ao ouvir")
             if invalido:
-                self._ciclo_escuta_continua()
+                self._silencios_seguidos = getattr(self, "_silencios_seguidos", 0) + 1
+                LIMITE_SILENCIO = 6  # ciclos seguidos sem ninguem falar
+                if self._silencios_seguidos >= LIMITE_SILENCIO:
+                    self._silencios_seguidos = 0
+                    self._puxar_assunto_sozinha()
+                else:
+                    self._ciclo_escuta_continua()
                 return
+
+            self._silencios_seguidos = 0
 
             def processar_resposta_ia(texto_resposta):
                 TtsService.get_instance().falar(texto_resposta)
@@ -302,6 +310,30 @@ class SpicaOverlay:
             )
         except Exception as e:
             print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
+            self._ciclo_escuta_continua()
+
+    def _puxar_assunto_sozinha(self):
+        """Depois de muito tempo sem ouvir nada, ela puxa um assunto por conta propria."""
+        if not self.escuta_continua:
+            return
+        try:
+            from src.services.groq_service import GroqService
+            from src.services.tts_service import TtsService
+
+            print("[Spica/Overlay] Muito tempo em silencio, puxando assunto por conta propria.")
+
+            def processar_resposta_ia(texto_resposta):
+                TtsService.get_instance().falar(texto_resposta)
+                tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
+                Clock.schedule_once(lambda dt: self._ciclo_escuta_continua(), tempo_estimado)
+
+            GroqService.get_instance().perguntar(
+                "(silencio prolongado - puxe um assunto novo e casual por conta propria, como faria uma amiga quando ninguem fala nada por um tempo)",
+                processar_resposta_ia,
+                usar_clock=False, modo_continuo=True
+            )
+        except Exception as e:
+            print(f"[Spica/Overlay] Erro ao puxar assunto sozinha: {e}")
             self._ciclo_escuta_continua()
 
     @run_on_ui_thread

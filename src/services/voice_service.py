@@ -110,6 +110,13 @@ class VoiceService:
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
             intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, False)
+            # Define quanto tempo de silencio o reconhecedor espera antes de
+            # considerar que a pessoa terminou de falar (essas chaves nao tem
+            # constante oficial na classe RecognizerIntent, mas sao aceitas
+            # pelo reconhecedor padrao do Google).
+            intent.putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2500)
+            intent.putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500)
+            intent.putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1500)
 
             self.recognizer.startListening(intent)
             self.logger.info("[Spica/Voice] Hardware de áudio ativado com sucesso na UI Thread.")
