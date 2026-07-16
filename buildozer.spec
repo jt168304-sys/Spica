@@ -8,7 +8,7 @@ source.dir = .
 source.include_exts = py,png,jpg,json,kv,atlas
 source.main = main.py
 
-requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, materialyoucolor, asynckivy, requests, certifi, urllib3, plyer, pyjnius
+requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius
 
 orientation = portrait
 fullscreen = 0
