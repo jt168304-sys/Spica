@@ -12,6 +12,14 @@ Tem opiniao propria: discorda quando faz sentido, brinca, implica com leveza - n
 Vai direto ao assunto sem enrolar, mas sem parecer seca ou robotica - o jeito e casual, nao burocratico.
 Se o usuario enviar uma imagem, analise-a com atencao e responda exatamente ao que foi pedido."""
 
+SYSTEM_PROMPT_CONTINUO = """Voce e Spica, e agora esta no modo de escuta continua - uma conversa de verdade,
+tipo estar no viva-voz com uma amiga, nao uma troca de comandos formais.
+Trate cada fala como parte de uma conversa em andamento, nao como um pedido isolado.
+Responda com naturalidade: pode usar pausas, interjeicoes ("hmm", "ah", "opa"), mudar de assunto se a pessoa mudar.
+Nao espere frases "completas" ou formatadas como comando - interprete o contexto e a intencao, mesmo se vier picotado.
+Se a pessoa disser algo casual, tipo comentando sobre o dia dela, reaja como reagiria numa conversa de verdade - nao force uma resposta "util" a cada fala.
+Continue espirituosa e com personalidade forte, mas no ritmo de bate-papo continuo, nao de pergunta-resposta."""
+
 class GroqService:
     _instancia: Optional["GroqService"] = None
     URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -66,7 +74,7 @@ class GroqService:
             self.logger.error(f"Erro base64: {e}")
             return ""
 
-    def perguntar(self, mensagem: str, callback: Callable[[str], None], caminho_imagem: str = None, usar_clock: bool = True):
+    def perguntar(self, mensagem: str, callback: Callable[[str], None], caminho_imagem: str = None, usar_clock: bool = True, modo_continuo: bool = False):
         if not self.disponivel:
             callback("Sem API key. Va em Configuracoes e insira sua chave Groq.")
             return
@@ -78,18 +86,19 @@ class GroqService:
 
         threading.Thread(
             target=self._chamar_api,
-            args=(mensagem, callback, caminho_resolvido, usar_clock),
+            args=(mensagem, callback, caminho_resolvido, usar_clock, modo_continuo),
             daemon=True,
         ).start()
 
-    def _chamar_api(self, mensagem: str, callback: Callable[[str], None], caminho_resolvido: str = None, usar_clock: bool = True):
+    def _chamar_api(self, mensagem: str, callback: Callable[[str], None], caminho_resolvido: str = None, usar_clock: bool = True, modo_continuo: bool = False):
         retornar = lambda texto: self._retornar(callback, texto, usar_clock)
         try:
             import requests
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-            mensagens_formatadas = [{"role": "system", "content": SYSTEM_PROMPT}]
+            prompt_ativo = SYSTEM_PROMPT_CONTINUO if modo_continuo else SYSTEM_PROMPT
+            mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
 
             if caminho_resolvido:
                 modelo_atual = self.MODEL_VISAO
