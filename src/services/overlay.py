@@ -1,6 +1,7 @@
 # overlay.py — Controlador de Janela Flutuante e Máquina de Estados (v16 Estável)
 import os
 import time
+import threading
 from kivy.utils import platform
 from kivy.clock import Clock
 
@@ -302,7 +303,7 @@ class SpicaOverlay:
             def processar_resposta_ia(texto_resposta):
                 TtsService.get_instance().falar(texto_resposta)
                 tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
-                Clock.schedule_once(lambda dt: self._ciclo_escuta_continua(), tempo_estimado)
+                threading.Timer(tempo_estimado, self._ciclo_escuta_continua).start()
 
             GroqService.get_instance().perguntar(
                 texto_capturado, processar_resposta_ia,
@@ -325,10 +326,10 @@ class SpicaOverlay:
             def processar_resposta_ia(texto_resposta):
                 TtsService.get_instance().falar(texto_resposta)
                 tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
-                Clock.schedule_once(lambda dt: self._ciclo_escuta_continua(), tempo_estimado)
+                threading.Timer(tempo_estimado, self._ciclo_escuta_continua).start()
 
             GroqService.get_instance().perguntar(
-                "(silencio prolongado - puxe um assunto novo e casual por conta propria, como faria uma amiga quando ninguem fala nada por um tempo)",
+                "(silencio prolongado - a pessoa parou de responder depois da ultima fala dela. Comente com humor e leveza sobre esse silencio, fazendo referencia especifica a ultima coisa que ela disse antes de ficar quieta - tipo brincando que a conversa esfriou ou cobrando ela de leve por ter sumido. Nao mude de assunto do nada, reaja ao silencio em si.)",
                 processar_resposta_ia,
                 usar_clock=False, modo_continuo=True
             )
