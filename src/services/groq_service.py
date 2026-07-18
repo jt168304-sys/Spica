@@ -5,6 +5,7 @@ import os
 from typing import Optional, Callable, List, Dict
 from src.utils.logger import WindLogger
 from src.config.settings import Settings
+from src.database.storage import Storage
 
 SYSTEM_PROMPT = """Voce e Spica, uma amiga virtual espirituosa e com personalidade forte - like uma amiga de verdade, nao uma atendente.
 Fala portugues brasileiro de um jeito solto e natural, como numa conversa real entre amigos.
@@ -35,10 +36,11 @@ class GroqService:
     def __init__(self):
         self.logger = WindLogger()
         self.settings = Settings()
-        self._historico: List[Dict] = []
+        self.storage = Storage()
+        self._historico: List[Dict] = self.storage.get("historico_conversa", [])
         self._cache_imagens = {}
-        self.MAX_HISTORICO = 100
-        self.WINDOW_API = 6
+        self.MAX_HISTORICO = 300
+        self.WINDOW_API = 10
         self.TIMEOUT_API = 35
 
     @property
@@ -159,6 +161,7 @@ class GroqService:
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
             self._historico.append({"role": "assistant", "content": resposta})
+            self.storage.set("historico_conversa", self._historico)
             retornar(resposta)
 
         except Exception as e:
@@ -180,4 +183,5 @@ class GroqService:
     def limpar_historico(self):
         self._historico = []
         self._cache_imagens.clear()
+        self.storage.set("historico_conversa", [])
         print("[Spica/IA] Histórico e cache de imagens limpos")
