@@ -25,7 +25,7 @@ class GroqService:
     _instancia: Optional["GroqService"] = None
     URL = "https://api.groq.com/openai/v1/chat/completions"
     MODEL_TEXTO = "llama-3.1-8b-instant"
-    MODEL_VISAO = "meta-llama/llama-4-scout-17b-16e-instruct"
+    MODEL_VISAO = "qwen/qwen3.6-27b"
 
     @classmethod
     def get_instance(cls):
