@@ -160,6 +160,11 @@ class GroqService:
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
+            # Alguns modelos (como o Qwen3.6) mandam um bloco de "raciocinio"
+            # dentro de <think>...</think> antes da resposta final - isso nao
+            # deveria aparecer pra o usuario, entao removemos.
+            import re
+            resposta = re.sub(r"<think>.*?</think>", "", resposta, flags=re.DOTALL).strip()
             self._historico.append({"role": "assistant", "content": resposta})
             self.storage.set("historico_conversa", self._historico)
             retornar(resposta)
