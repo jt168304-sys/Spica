@@ -31,7 +31,7 @@ android.archs = arm64-v8a
 android.allow_backup = True
 
 # 4. ADICIONADO: Adiciona a tag no manifesto para liberar o recurso especial de segundo plano
-android.manifest.application_meta = android.image_picker_v2=true
+android.manifest.application_meta = android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE=SpicaForegroundService
 
 [buildozer]
 log_level = 2
