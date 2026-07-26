@@ -2,10 +2,12 @@
 import threading
 import base64
 import os
+import re
 from typing import Optional, Callable, List, Dict
 from src.utils.logger import WindLogger
 from src.config.settings import Settings
 from src.database.storage import Storage
+from src.services.web_service import WebService  # Importando o novo cérebro web
 
 SYSTEM_PROMPT = """Voce e Spica, uma amiga virtual espirituosa e com personalidade forte - like uma amiga de verdade, nao uma atendente.
 Fala portugues brasileiro de um jeito solto e natural, como numa conversa real entre amigos.
@@ -64,7 +66,6 @@ class GroqService:
     def _converter_para_base64(self, caminho: str) -> str:
         if caminho in self._cache_imagens:
             return self._cache_imagens[caminho]
-
         try:
             if not os.path.exists(caminho) or os.path.getsize(caminho) == 0:
                 return ""
@@ -124,12 +125,31 @@ class GroqService:
                 self._historico.append({"role": "user", "content": f"[Imagem] {mensagem}"})
             else:
                 modelo_atual = self.MODEL_TEXTO
+                
+                # --- INTEGRAÇÃO WEB AUTÔNOMA ---
+                contexto_web = ""
+                # Só pesquisa se a mensagem tiver mais de 2 palavras para evitar buscas desnecessárias
+                if mensagem and len(mensagem.split()) > 2:
+                    try:
+                        contexto_web = WebService.get_instance().pesquisar(mensagem)
+                    except Exception as e:
+                        self.logger.error(f"Erro na pesquisa web: {e}")
+
+                # Salva a mensagem limpa no histórico para não poluir a tela do usuário
                 self._historico.append({"role": "user", "content": mensagem})
+                
+                # Monta as mensagens formatadas para a API
                 for msg in self._historico[-self.WINDOW_API:]:
                     txt = msg["content"]
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
                     mensagens_formatadas.append({"role": msg["role"], "content": str(txt)})
+                
+                # Injeta a pesquisa da web silenciosamente na última mensagem (escondida do histórico)
+                if contexto_web and "Nenhuma informação" not in contexto_web:
+                    instrucao_web = f"\n\n[INFORMAÇÃO DA WEB EM TEMPO REAL]\nO sistema fez uma busca na internet para te ajudar. Use esses dados recentes se fizer sentido para responder de forma mais precisa, mantendo a sua personalidade forte:\n{contexto_web}"
+                    mensagens_formatadas[-1]["content"] += instrucao_web
+                # -----------------------------------
 
             if len(self._historico) > self.MAX_HISTORICO:
                 self._historico = self._historico[-self.MAX_HISTORICO:]
@@ -160,11 +180,9 @@ class GroqService:
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
-            # Alguns modelos (como o Qwen3.6) mandam um bloco de "raciocinio"
-            # dentro de <think>...</think> antes da resposta final - isso nao
-            # deveria aparecer pra o usuario, entao removemos.
-            import re
+            # Remove tags de raciocínio de alguns modelos
             resposta = re.sub(r"<think>.*?</think>", "", resposta, flags=re.DOTALL).strip()
+            
             self._historico.append({"role": "assistant", "content": resposta})
             self.storage.set("historico_conversa", self._historico)
             retornar(resposta)
