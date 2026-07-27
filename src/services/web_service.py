@@ -1,5 +1,4 @@
 # web_service.py — O "Navegador" autônomo e leve da Spica
-import re
 import urllib.parse
 
 class WebService:
@@ -13,36 +12,50 @@ class WebService:
 
     def pesquisar(self, termo, max_resultados=3):
         """
-        Faz uma busca HTTP direta no DuckDuckGo (versão HTML leve) sem bibliotecas C/C++.
+        Faz uma busca HTTP leve usando endpoints JSON do DuckDuckGo.
         """
         print(f"[Spica/Web] 🌐 Buscando na internet por: '{termo}'...")
         try:
             import requests
-            
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            
-            url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(termo)}"
-            resp = requests.get(url, headers=headers, timeout=10)
-            
-            if resp.status_code != 200:
-                return "Não foi possível conectar ao motor de busca."
 
-            # Extrai títulos e trechos (snippets) do HTML retornado usando Regex
-            html = resp.text
-            titulos = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html, re.DOTALL)
-            snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</span>', html, re.DOTALL)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            }
+
+            # Tenta via API Instant Answer JSON em português
+            url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(termo)}&format=json&no_html=1&kl=br-pt"
+            resp = requests.get(url, headers=headers, timeout=8)
 
             resultados = []
-            for t, s in zip(titulos, snippets):
-                # Limpa tags HTML remanescentes e entidades do texto
-                t_limpo = re.sub(r'<[^>]+>', '', t).strip()
-                s_limpo = re.sub(r'<[^>]+>', '', s).strip()
-                if t_limpo and s_limpo:
-                    resultados.append(f"- {t_limpo}: {s_limpo}")
-                if len(resultados) >= max_resultados:
-                    break
+
+            if resp.status_code == 200:
+                data = resp.json()
+
+                # Pega resposta direta se houver
+                if data.get("AbstractText"):
+                    resultados.append(f"- Resumo: {data.get('AbstractText')}")
+
+                # Pega tópicos relacionados
+                related = data.get("RelatedTopics", [])
+                for item in related:
+                    if isinstance(item, dict) and "Text" in item:
+                        resultados.append(f"- {item['Text']}")
+                    if len(resultados) >= max_resultados:
+                        break
+
+            # Fallback para busca HTML lite se a API principal não retornar tópicos suficientes
+            if not resultados:
+                url_lite = f"https://lite.duckduckgo.com/lite/"
+                payload = {"q": termo, "kl": "br-pt"}
+                resp_lite = requests.post(url_lite, data=payload, headers=headers, timeout=8)
+
+                if resp_lite.status_code == 200:
+                    import re
+                    snippets = re.findall(r'<td class="result-snippet">(.*?)</td>', resp_lite.text, re.DOTALL)
+                    for snip in snippets[:max_resultados]:
+                        snip_limpo = re.sub(r'<[^>]+>', '', snip).strip()
+                        if snip_limpo:
+                            resultados.append(f"- {snip_limpo}")
 
             if not resultados:
                 return "Nenhuma informação relevante encontrada na web."
