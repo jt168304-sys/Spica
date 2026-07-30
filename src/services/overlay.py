@@ -26,6 +26,9 @@ try:
     WebView = autoclass('android.webkit.WebView')
     WebViewClient = autoclass('android.webkit.WebViewClient')
     WebSettings = autoclass('android.webkit.WebSettings')
+    Toast = autoclass('android.widget.Toast')
+    Looper = autoclass('android.os.Looper')
+    Handler = autoclass('android.os.Handler')
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
@@ -99,10 +102,41 @@ class SpicaOverlay:
         # Página local que carrega o modelo Live2D via pixi-live2d-display
         self.path_live2d_html = "file://" + os.path.join(base_dir, "assets", "live2d", "index.html")
 
+    def _toast(self, mensagem):
+        """Mostra um Toast nativo do Android com a mensagem — usado pra
+        diagnosticar erros diretamente na tela do usuário, sem precisar de
+        PC/logcat. Usa Handler+Looper.getMainLooper() em vez de
+        runOnUiThread(), porque isso funciona tanto vindo da Activity quanto
+        do service.py (onde PythonActivity.mActivity vira um Service, que
+        não tem o método runOnUiThread)."""
+        if not HAS_ANDROID:
+            print(f"[Spica/Overlay] {mensagem}")
+            return
+        try:
+            ctx = PythonActivity.mActivity
+
+            def _mostrar():
+                try:
+                    Toast.makeText(ctx, mensagem, Toast.LENGTH_LONG).show()
+                except Exception as e:
+                    print(f"[Spica/Overlay] Falha ao mostrar Toast: {e}")
+
+            Handler(Looper.getMainLooper()).post(_mostrar)
+        except Exception as e:
+            print(f"[Spica/Overlay] Falha ao agendar Toast: {e} | Mensagem original: {mensagem}")
+
     @run_on_ui_thread
     def ligar_bolha(self):
         if not HAS_ANDROID or self.iniciado: return
+        try:
+            self._ligar_bolha_interno()
+        except Exception as e:
+            import traceback
+            erro_completo = traceback.format_exc()
+            print(f"[Spica/Overlay] ERRO CRÍTICO ao ligar bolha:\n{erro_completo}")
+            self._toast(f"[Spica] Erro ao ligar bolha: {type(e).__name__}: {e}")
 
+    def _ligar_bolha_interno(self):
         ctx = PythonActivity.mActivity
         self.window_manager = ctx.getSystemService(Context.WINDOW_SERVICE)
         self.image_view = WebView(ctx)  # nome mantido por compatibilidade com o resto do arquivo
@@ -145,6 +179,7 @@ class SpicaOverlay:
         self.window_manager.addView(self.image_view, self.params)
         self.iniciado = True
         SpicaOverlay._instancia_ativa = self
+        self._toast("[Spica] Bolha Live2D ligada! Se não aparecer, o problema é no carregamento do modelo (JS).")
 
         from src.services.tts_service import TtsService
         TtsService.get_instance().configurar_callbacks_visuais(

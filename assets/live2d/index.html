@@ -14,9 +14,22 @@
     background: transparent !important;
     display: block;
   }
+  #erro-visivel {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    background: rgba(180, 0, 0, 0.85);
+    color: #fff;
+    font-family: monospace;
+    font-size: 10px;
+    padding: 4px;
+    word-break: break-all;
+    z-index: 9999;
+  }
 </style>
 </head>
 <body>
+<div id="erro-visivel"></div>
 <canvas id="canvas"></canvas>
 
 <!-- Cubism Core: PROPRIETÁRIO, baixe no site oficial da Live2D e coloque aqui como
@@ -29,6 +42,29 @@
 
 <script>
 (function () {
+  // Mostra qualquer erro (script que não carregou, exceção JS, falha no
+  // modelo) direto na tela da bolha — sem isso não tem como diagnosticar
+  // sem PC/logcat.
+  function mostrarErro(msg) {
+    var div = document.getElementById("erro-visivel");
+    div.style.display = "block";
+    div.textContent = (div.textContent ? div.textContent + " | " : "") + msg;
+  }
+  window.addEventListener("error", function (e) {
+    if (e.target && (e.target.tagName === "SCRIPT" || e.target.tagName === "LINK")) {
+      mostrarErro("Falha ao carregar: " + (e.target.src || e.target.href));
+    } else {
+      mostrarErro("Erro JS: " + (e.message || e));
+    }
+  }, true);
+
+  if (typeof Live2DCubismCore === "undefined") {
+    mostrarErro("Cubism Core NAO encontrado (live2dcubismcore.min.js ausente ou nao carregou)");
+  }
+  if (typeof PIXI === "undefined") {
+    mostrarErro("PIXI nao carregou (sem internet? CDN bloqueado?)");
+  }
+
   window.PIXI = window.PIXI || {};
 
   var app = new PIXI.Application({
@@ -46,6 +82,10 @@
   window.SpicaLive2D = {
 
     carregar: function (modelUrl) {
+      if (!PIXI.live2d) {
+        mostrarErro("pixi-live2d-display nao carregou (sem internet? CDN bloqueado?)");
+        return;
+      }
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
         app.stage.addChild(model);
@@ -53,7 +93,7 @@
         // idle animation / respiração e física já rodam automaticamente
         // via pixi-live2d-display assim que o modelo é adicionado ao stage.
       }).catch(function (err) {
-        console.error("[Live2D] Falha ao carregar modelo:", err);
+        mostrarErro("Falha ao carregar modelo: " + err);
       });
     },
 
