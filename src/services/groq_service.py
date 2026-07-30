@@ -3,11 +3,15 @@ import threading
 import base64
 import os
 import re
+from datetime import datetime
 from typing import Optional, Callable, List, Dict
 from src.utils.logger import WindLogger
 from src.config.settings import Settings
 from src.database.storage import Storage
-from src.services.web_service import WebService  # Importando o novo cérebro web
+# WebService não é mais chamado direto aqui: o groq/compound já faz busca web
+# nativa e server-side (mais confiável que o scraper do DDG). O arquivo
+# web_service.py continua no projeto — útil como ferramenta local quando
+# formos implementar o Agente com tool-calling.
 
 SYSTEM_PROMPT = """Voce e Spica, uma amiga virtual espirituosa e com personalidade forte - like uma amiga de verdade, nao uma atendente.
 Fala portugues brasileiro de um jeito solto e natural, como numa conversa real entre amigos.
@@ -26,8 +30,29 @@ Continue espirituosa e com personalidade forte, mas no ritmo de bate-papo contin
 class GroqService:
     _instancia: Optional["GroqService"] = None
     URL = "https://api.groq.com/openai/v1/chat/completions"
-    MODEL_TEXTO = "llama-3.1-8b-instant"
+    # ATUALIZADO: llama-3.1-8b-instant foi descontinuado pela Groq.
+    # groq/compound faz busca web NATIVA e server-side quando julga necessário
+    # (substitui o scraper manual do DuckDuckGo, que estava quebrado) e cita as fontes.
+    MODEL_TEXTO = "groq/compound"
     MODEL_VISAO = "qwen/qwen3.6-27b"
+
+    _DIAS_SEMANA = ["segunda-feira", "terca-feira", "quarta-feira", "quinta-feira",
+                    "sexta-feira", "sabado", "domingo"]
+    _MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho",
+              "agosto", "setembro", "outubro", "novembro", "dezembro"]
+
+    def _bloco_data_hora(self) -> str:
+        """Monta a data/hora atual do aparelho em pt-BR (sem depender de locale
+        do sistema, que costuma vir em 'C'/en-US no Android/Termux)."""
+        agora = datetime.now()
+        dia_semana = self._DIAS_SEMANA[agora.weekday()]
+        mes = self._MESES[agora.month - 1]
+        return (
+            f"\n\n[DATA E HORA ATUAIS DO DISPOSITIVO]\n"
+            f"Agora e {dia_semana}, {agora.day} de {mes} de {agora.year}, {agora.strftime('%H:%M')}.\n"
+            f"Use isso diretamente se perguntarem que horas sao, que dia e hoje, etc. "
+            f"Nao precisa buscar isso na web."
+        )
 
     @classmethod
     def get_instance(cls):
@@ -97,10 +122,9 @@ class GroqService:
         retornar = lambda texto: self._retornar(callback, texto, usar_clock)
         try:
             import requests
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
             prompt_ativo = SYSTEM_PROMPT_CONTINUO if modo_continuo else SYSTEM_PROMPT
+            prompt_ativo = prompt_ativo + self._bloco_data_hora()
             mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
 
             if caminho_resolvido:
@@ -125,15 +149,6 @@ class GroqService:
                 self._historico.append({"role": "user", "content": f"[Imagem] {mensagem}"})
             else:
                 modelo_atual = self.MODEL_TEXTO
-                
-                # --- INTEGRAÇÃO WEB AUTÔNOMA ---
-                contexto_web = ""
-                # Só pesquisa se a mensagem tiver mais de 2 palavras para evitar buscas desnecessárias
-                if mensagem and len(mensagem.split()) > 2:
-                    try:
-                        contexto_web = WebService.get_instance().pesquisar(mensagem)
-                    except Exception as e:
-                        self.logger.error(f"Erro na pesquisa web: {e}")
 
                 # Salva a mensagem limpa no histórico para não poluir a tela do usuário
                 self._historico.append({"role": "user", "content": mensagem})
@@ -144,12 +159,6 @@ class GroqService:
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
                     mensagens_formatadas.append({"role": msg["role"], "content": str(txt)})
-                
-                # Injeta a pesquisa da web silenciosamente na última mensagem (escondida do histórico)
-                if contexto_web and "Nenhuma informação" not in contexto_web:
-                    instrucao_web = f"\n\n[INFORMAÇÃO DA WEB EM TEMPO REAL]\nO sistema fez uma busca na internet para te ajudar. Use esses dados recentes se fizer sentido para responder de forma mais precisa, mantendo a sua personalidade forte:\n{contexto_web}"
-                    mensagens_formatadas[-1]["content"] += instrucao_web
-                # -----------------------------------
 
             if len(self._historico) > self.MAX_HISTORICO:
                 self._historico = self._historico[-self.MAX_HISTORICO:]
@@ -160,13 +169,17 @@ class GroqService:
                 "max_tokens": 1024,
                 "temperature": 0.5 if caminho_resolvido else 0.7,
             }
+            # A visão (qwen3.6-27b) tem "thinking mode" ligado por padrão, o que vazava
+            # o raciocínio interno do modelo antes da análise final. reasoning_effort="none"
+            # desliga o thinking mode na raiz (mais confiável que só filtrar <think> depois).
+            if caminho_resolvido:
+                payload["reasoning_effort"] = "none"
 
             resp = requests.post(
                 self.URL,
                 headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
                 json=payload,
                 timeout=self.TIMEOUT_API,
-                verify=False,
             )
 
             if resp.status_code == 401:

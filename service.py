@@ -17,14 +17,20 @@ if platform == "android":
     # Captura o contexto nativo do Serviço Android que está rodando este script
     service_context = PythonService.mService
     
-    # Adquire o WakeLock para evitar que a CPU durma em segundo plano no Android 14
-    power_manager = service_context.getSystemService(Context.POWER_SERVICE)
-    wake_lock = power_manager.newWakeLock(
-        PowerManager.PARTIAL_WAKE_LOCK, 
-        "Spica::BackgroundServiceWakeLock"
-    )
-    wake_lock.acquire()
-    print("[Spica/Service] 🔒 WakeLock adquirido com sucesso!")
+    # Adquire o WakeLock para evitar que a CPU durma em segundo plano no Android 14.
+    # Envolvido em try/except: se a permissão WAKE_LOCK não estiver no manifest (como
+    # estava faltando antes), isso lançava SecurityException e derrubava o service.py
+    # INTEIRO antes mesmo da bolha/escuta serem religadas — silenciosamente, sem log.
+    try:
+        power_manager = service_context.getSystemService(Context.POWER_SERVICE)
+        wake_lock = power_manager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "Spica::BackgroundServiceWakeLock"
+        )
+        wake_lock.acquire()
+        print("[Spica/Service] 🔒 WakeLock adquirido com sucesso!")
+    except Exception as e:
+        print(f"[Spica/Service] ⚠️ Falha ao adquirir WakeLock (verifique permissão WAKE_LOCK no buildozer.spec): {e}")
 
     # Redireciona o ponto de atividade do Pyjnius para o contexto do Serviço
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
