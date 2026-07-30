@@ -5,7 +5,7 @@ package.domain = com.spica
 version = 1.0
 source.dir = .
 # 1. ADICIONADO: Garantindo que a extensão .kv (se houver) e os atlas entrem no APK
-source.include_exts = py,png,jpg,json,kv,atlas
+source.include_exts = py,png,jpg,json,kv,atlas,moc3,html,js
 source.main = main.py
 
 # 5. ADICIONADO: bloco <queries> obrigatório desde o Android 11 (package visibility) para

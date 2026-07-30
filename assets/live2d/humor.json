@@ -1,0 +1,26 @@
+{
+  "neutro": {
+    "expressao": null,
+    "descricao": "Estado padrao, conversa normal, sem reacao especial"
+  },
+  "feliz": {
+    "expressao": null,
+    "descricao": "Contente, animada, empolgada (ainda sem asset proprio no modelo)"
+  },
+  "surpresa": {
+    "expressao": "eyes_bikkuri",
+    "descricao": "Espantada, olhos arregalados — algo inesperado ou impressionante"
+  },
+  "confusa": {
+    "expressao": "eyes_guruguru",
+    "descricao": "Confusa, meio zonza, nao entendeu direito ou achou bizarro"
+  },
+  "triste": {
+    "expressao": "eyes_zetubou",
+    "descricao": "Desanimada, desapontada, resignada"
+  },
+  "chocada": {
+    "expressao": "face_aozame",
+    "descricao": "Chocada, sem graca, gelou — noticia ruim ou situacao constrangedora"
+  }
+}

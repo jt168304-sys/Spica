@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: transparent !important;
+    overflow: hidden;
+  }
+  canvas {
+    background: transparent !important;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- Cubism Core: PROPRIETÁRIO, baixe no site oficial da Live2D e coloque aqui como
+     assets/live2d/live2dcubismcore.min.js (veja LEIA-ME_LIVE2D.md) -->
+<script src="live2dcubismcore.min.js"></script>
+
+<!-- PixiJS 6 e pixi-live2d-display (cubism4), carregados via CDN em runtime -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.9/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+<script>
+(function () {
+  window.PIXI = window.PIXI || {};
+
+  var app = new PIXI.Application({
+    view: document.getElementById("canvas"),
+    autoStart: true,
+    backgroundAlpha: 0,       // fundo transparente
+    resizeTo: window,
+    antialias: true,
+  });
+
+  var model = null;
+  var mouthTimer = null;
+
+  // ------- API exposta para o Python (via webview.evaluateJavascript) -------
+  window.SpicaLive2D = {
+
+    carregar: function (modelUrl) {
+      PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
+        model = m;
+        app.stage.addChild(model);
+        SpicaLive2D._ajustarTamanho();
+        // idle animation / respiração e física já rodam automaticamente
+        // via pixi-live2d-display assim que o modelo é adicionado ao stage.
+      }).catch(function (err) {
+        console.error("[Live2D] Falha ao carregar modelo:", err);
+      });
+    },
+
+    _ajustarTamanho: function () {
+      if (!model) return;
+      var escala = Math.min(
+        app.renderer.width / model.internalModel.originalWidth,
+        app.renderer.height / model.internalModel.originalHeight
+      ) * 0.95;
+      model.scale.set(escala);
+      model.anchor.set(0.5, 0.5);
+      model.position.set(app.renderer.width / 2, app.renderer.height / 2);
+    },
+
+    // valor de 0.0 (fechada) a 1.0 (aberta) — chamado a cada "tick" do lip-sync
+    setBoca: function (valor) {
+      if (!model) return;
+      model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", valor);
+    },
+
+    // liga/desliga um ciclo automático simples de abre-fecha de boca
+    // (fallback simplificado enquanto não há análise real de amplitude do áudio)
+    falarSimples: function (falando) {
+      if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null; }
+      if (!falando) { SpicaLive2D.setBoca(0); return; }
+      var aberto = false;
+      mouthTimer = setInterval(function () {
+        aberto = !aberto;
+        SpicaLive2D.setBoca(aberto ? 0.85 : 0.1);
+      }, 120);
+    },
+
+    setExpressao: function (nome) {
+      if (!model) return;
+      model.expression(nome);
+    },
+
+    piscar: function () {
+      // pixi-live2d-display já faz o EyeBlink automático via o grupo "EyeBlink"
+      // do model3.json; método aqui reservado caso queira forçar manualmente.
+    }
+  };
+
+  window.addEventListener("resize", function () {
+    SpicaLive2D._ajustarTamanho();
+  });
+
+  // Carrega o modelo assim que os scripts externos terminarem
+  window.addEventListener("load", function () {
+    SpicaLive2D.carregar("osagegirl/osagegirl.model3.json");
+  });
+})();
+</script>
+</body>
+</html>

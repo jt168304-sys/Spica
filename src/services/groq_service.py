@@ -8,6 +8,7 @@ from typing import Optional, Callable, List, Dict
 from src.utils.logger import WindLogger
 from src.config.settings import Settings
 from src.database.storage import Storage
+from src.services.mood_service import MoodService
 # WebService não é mais chamado direto aqui: o groq/compound já faz busca web
 # nativa e server-side (mais confiável que o scraper do DDG). O arquivo
 # web_service.py continua no projeto — útil como ferramenta local quando
@@ -64,6 +65,7 @@ class GroqService:
         self.logger = WindLogger()
         self.settings = Settings()
         self.storage = Storage()
+        self.mood = MoodService.get_instance()
         self._historico: List[Dict] = self.storage.get("historico_conversa", [])
         self._cache_imagens = {}
         self.MAX_HISTORICO = 300
@@ -124,7 +126,7 @@ class GroqService:
             import requests
 
             prompt_ativo = SYSTEM_PROMPT_CONTINUO if modo_continuo else SYSTEM_PROMPT
-            prompt_ativo = prompt_ativo + self._bloco_data_hora()
+            prompt_ativo = prompt_ativo + self._bloco_data_hora() + self.mood.bloco_prompt_humor()
             mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
 
             if caminho_resolvido:
@@ -195,7 +197,18 @@ class GroqService:
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
             # Remove tags de raciocínio de alguns modelos
             resposta = re.sub(r"<think>.*?</think>", "", resposta, flags=re.DOTALL).strip()
-            
+
+            # Sistema de humor: a IA se autoclassifica no final da resposta com
+            # [HUMOR:xxx] — aqui a tag é extraída (removida do texto que o usuário
+            # vê/ouve) e a expressão correspondente é disparada no modelo Live2D.
+            resposta, nome_expressao = self.mood.extrair_humor(resposta)
+            if nome_expressao:
+                try:
+                    from src.services.overlay import SpicaOverlay
+                    SpicaOverlay.aplicar_humor(nome_expressao)
+                except Exception as e:
+                    self.logger.error(f"[Spica/Humor] Falha ao aplicar expressão: {e}")
+
             self._historico.append({"role": "assistant", "content": resposta})
             self.storage.set("historico_conversa", self._historico)
             retornar(resposta)
