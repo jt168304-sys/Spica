@@ -10,7 +10,6 @@ try:
     SpeechRecognizer = autoclass("android.speech.SpeechRecognizer")
     Intent = autoclass("android.content.Intent")
     RecognizerIntent = autoclass("android.speech.RecognizerIntent")
-    context = PythonActivity.mActivity
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
@@ -101,7 +100,14 @@ class VoiceService:
                     pass
                 self.recognizer = None
 
-            self.recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+            # BUGFIX: antes usava um 'context' capturado uma única vez no
+            # import do módulo — se essa primeira captura acontecesse dentro
+            # do service.py (contexto do Serviço, não da Activity), o
+            # reconhecedor ficava preso nesse contexto para sempre, mesmo com
+            # o app aberto normalmente depois. Agora busca sempre o contexto
+            # atual, igual o tts_service.py já fazia.
+            context_atual = PythonActivity.mActivity
+            self.recognizer = SpeechRecognizer.createSpeechRecognizer(context_atual)
 
             self._listener_persistente = RecognitionListenerImpl(callback, usar_clock)
             self.recognizer.setRecognitionListener(self._listener_persistente)
