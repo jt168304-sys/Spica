@@ -8,6 +8,11 @@ source.dir = .
 source.include_exts = py,png,jpg,json,kv,atlas
 source.main = main.py
 
+# 5. ADICIONADO: bloco <queries> obrigatório desde o Android 11 (package visibility) para
+# o SpeechRecognizer e o TextToSpeech conseguirem enxergar/vincular os serviços do sistema.
+# Sem isso, a escuta falha rapidamente em ciclos curtos no Android 11+ (funciona no 10 e antes).
+android.extra_manifest_xml = extra_manifest.xml
+
 requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius
 
 orientation = portrait
