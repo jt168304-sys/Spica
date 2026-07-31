@@ -32,19 +32,10 @@
 <div id="erro-visivel"></div>
 <canvas id="canvas"></canvas>
 
-<!-- Cubism Core: PROPRIETÁRIO, baixe no site oficial da Live2D e coloque aqui como
-     assets/live2d/live2dcubismcore.min.js (veja LEIA-ME_LIVE2D.md) -->
-<script src="live2dcubismcore.min.js"></script>
-
-<!-- PixiJS 6 e pixi-live2d-display (cubism4), carregados via CDN em runtime -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.9/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
-
 <script>
-(function () {
-  // Mostra qualquer erro (script que não carregou, exceção JS, falha no
-  // modelo) direto na tela da bolha — sem isso não tem como diagnosticar
-  // sem PC/logcat.
+  // Registrado ANTES de qualquer script externo, pra pegar erro de
+  // carregamento (ex: CDN fora do ar) dos próprios scripts abaixo — antes
+  // esse listener só era criado depois deles, então não pegava nada.
   function mostrarErro(msg) {
     var div = document.getElementById("erro-visivel");
     div.style.display = "block";
@@ -57,12 +48,27 @@
       mostrarErro("Erro JS: " + (e.message || e));
     }
   }, true);
+</script>
 
+<!-- Cubism Core: PROPRIETÁRIO, baixe no site oficial da Live2D e coloque aqui como
+     assets/live2d/live2dcubismcore.min.js (veja LEIA-ME_LIVE2D.md) -->
+<script src="live2dcubismcore.min.js"></script>
+
+<!-- PixiJS 6 e pixi-live2d-display (cubism4), carregados via CDN em runtime.
+     IMPORTANTE: a partir da v6 do pixi.js, o bundle correto fica em
+     dist/cjs/pixi.min.js — dist/pixi.min.js (sem "/cjs/") só existe até a v5
+     e no cdnjs pode servir um arquivo incompleto, o que causava
+     "PIXI.Application is not a constructor". -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.5.9/cjs/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+<script>
+(function () {
   if (typeof Live2DCubismCore === "undefined") {
     mostrarErro("Cubism Core NAO encontrado (live2dcubismcore.min.js ausente ou nao carregou)");
   }
-  if (typeof PIXI === "undefined") {
-    mostrarErro("PIXI nao carregou (sem internet? CDN bloqueado?)");
+  if (typeof PIXI === "undefined" || typeof PIXI.Application !== "function") {
+    mostrarErro("PIXI nao carregou corretamente (sem internet? CDN bloqueado?)");
   }
 
   window.PIXI = window.PIXI || {};
