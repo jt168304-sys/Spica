@@ -7,6 +7,7 @@
 		],
 		"Physics": "osagegirl.physics3.json",
 		"DisplayInfo": "osagegirl.cdi3.json",
+"Motions": {},
 		"Expressions": [
 			{
 				"Name": "びっくり目",
