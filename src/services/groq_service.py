@@ -195,6 +195,8 @@ class GroqService:
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
+            from src.utils.service_log import slog
+            slog(f"Groq respondeu HTTP {resp.status_code}, texto bruto: {resposta[:60]!r}")
             # Remove tags de raciocínio de alguns modelos
             resposta = re.sub(r"<think>.*?</think>", "", resposta, flags=re.DOTALL).strip()
 
@@ -214,6 +216,11 @@ class GroqService:
             retornar(resposta)
 
         except Exception as e:
+            try:
+                from src.utils.service_log import slog
+                slog(f"EXCEÇÃO em _chamar_api: {type(e).__name__}: {e}")
+            except Exception:
+                pass
             self.logger.error(f"Erro Groq: {type(e).__name__}: {e}")
             if "ConnectionError" in type(e).__name__:
                 retornar("Sem conexao com a internet.")

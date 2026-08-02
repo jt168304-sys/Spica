@@ -362,6 +362,8 @@ class SpicaOverlay:
 
     def _processar_escuta_continua(self, texto_capturado):
         """Recebe o texto reconhecido, manda pra IA e fala a resposta, depois volta a escutar."""
+        from src.utils.service_log import slog
+        slog(f"_processar_escuta_continua recebeu: {texto_capturado!r}")
         if not self.escuta_continua:
             return
         try:
@@ -382,15 +384,19 @@ class SpicaOverlay:
             self._silencios_seguidos = 0
 
             def processar_resposta_ia(texto_resposta):
+                slog(f"processar_resposta_ia recebeu resposta da Groq: {texto_resposta[:60]!r}")
                 TtsService.get_instance().falar(texto_resposta)
+                slog("TtsService.falar() chamado (retornou sem lançar exceção)")
                 tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
                 threading.Timer(tempo_estimado, self._ciclo_escuta_continua).start()
 
+            slog(f"Chamando GroqService.perguntar() com: {texto_capturado!r}")
             GroqService.get_instance().perguntar(
                 texto_capturado, processar_resposta_ia,
                 usar_clock=False, modo_continuo=True
             )
         except Exception as e:
+            slog(f"EXCEÇÃO em _processar_escuta_continua: {type(e).__name__}: {e}")
             print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
             self._ciclo_escuta_continua()
 

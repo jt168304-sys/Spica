@@ -37,6 +37,9 @@ class TtsService:
 
     @run_on_ui_thread
     def _inicializar_tts(self):
+        from src.utils.service_log import slog
+        slog("_inicializar_tts iniciado")
+
         class InitListener(PythonJavaClass):
             __javainterfaces__ = ['android/speech/tts/TextToSpeech$OnInitListener']
             __javacontext__ = 'app'
@@ -47,6 +50,7 @@ class TtsService:
 
             @java_method('(I)V')
             def onInit(self, status):
+                slog(f"TTS onInit chamado, status={status}")
                 if status == 0:
                     locale_br = Locale("pt", "BR")
                     result = self.outer.tts.setLanguage(locale_br)
@@ -67,8 +71,11 @@ class TtsService:
         self._on_done_speak = on_done
 
     def falar(self, texto):
+        from src.utils.service_log import slog
+        slog(f"falar() chamado, _inicializado={self._inicializado}, platform={platform}")
         if not platform == "android" or not self._inicializado:
             print(f"[Spica/TTS - Fallback Desktop]: {texto}")
+            slog("falar() abortou: platform != android OU _inicializado=False")
             return
 
         MAX_CHARS = 3000
@@ -89,30 +96,44 @@ class TtsService:
             return
 
         def _falar_async():
+            from src.utils.service_log import slog
             try:
                 utterance_id = f"spica_msg_{id(texto)}"
                 params = HashMap()
                 params.put("utteranceId", utterance_id)
+                slog("Chamando tts.speak()...")
                 self.tts.speak(texto, 0, params)
+                slog("tts.speak() retornou sem lançar exceção")
 
                 if self._on_start_speak:
-                    self._on_start_speak()
+                    try:
+                        self._on_start_speak()
+                    except Exception as e:
+                        slog(f"EXCEÇÃO em _on_start_speak (ignorada, não impede a fala): {type(e).__name__}: {e}")
 
                 import time
                 tentativas = 0
                 while not self.tts.isSpeaking() and tentativas < 20:
                     time.sleep(0.05)
                     tentativas += 1
+                slog(f"isSpeaking() após espera inicial: {self.tts.isSpeaking()} (tentativas={tentativas})")
 
                 while self.tts.isSpeaking():
                     time.sleep(0.1)
 
                 if self._on_done_speak:
-                    self._on_done_speak()
+                    try:
+                        self._on_done_speak()
+                    except Exception as e:
+                        slog(f"EXCEÇÃO em _on_done_speak (ignorada): {type(e).__name__}: {e}")
             except Exception as e:
+                slog(f"EXCEÇÃO em _falar_async: {type(e).__name__}: {e}")
                 print(f"[Spica/TTS] Erro ao sintetizar voz: {e}")
                 if self._on_done_speak:
-                    self._on_done_speak()
+                    try:
+                        self._on_done_speak()
+                    except Exception:
+                        pass
 
         threading.Thread(target=_falar_async, daemon=True).start()
 

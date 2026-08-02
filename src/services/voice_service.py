@@ -56,11 +56,14 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
 
     @java_method('(Landroid/os/Bundle;)V')
     def onResults(self, results):
+        from src.utils.service_log import slog
         matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if matches and matches.size() > 0:
             texto = matches.get(0)
+            slog(f"onResults capturou: {texto!r}")
             self._entregar(texto)
         else:
+            slog("onResults sem matches, entregando 'Nao ouvi'")
             self._entregar("Nao ouvi")
 
     @java_method('(Landroid/os/Bundle;)V')
