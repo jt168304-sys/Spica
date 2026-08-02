@@ -23,8 +23,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.buildozer
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-
+          key: buildozer-v2-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v2-
 
       - name: Install System Dependencies
         run: |
