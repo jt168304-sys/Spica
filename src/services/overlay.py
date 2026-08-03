@@ -356,6 +356,18 @@ class SpicaOverlay:
             return
         try:
             from src.services.voice_service import VoiceService
+            from src.services.tts_service import TtsService
+            from src.utils.service_log import slog
+            # Para qualquer fala da Spica que ainda esteja tocando ANTES de
+            # começar a escutar de novo — o chat normal já fazia isso
+            # (self._tts.parar() em chat_screen.py) e a bolha não fazia.
+            # Sem isso, a própria voz dela pode estar sendo captada pelo
+            # microfone bem no início do próximo ciclo.
+            try:
+                TtsService.get_instance().parar()
+                slog("TTS parado antes de reiniciar escuta")
+            except Exception as e:
+                slog(f"Falha ao parar TTS antes de escutar: {e}")
             VoiceService.get_instance().ouvir(self._processar_escuta_continua, usar_clock=False)
         except Exception as e:
             print(f"[Spica/Overlay] Erro no ciclo de escuta continua: {e}")
@@ -383,18 +395,25 @@ class SpicaOverlay:
                     # dar tempo do recognizer anterior liberar o microfone de
                     # verdade antes do próximo tentar pegar ele — casando com o
                     # "ligando e desligando" percebido no aparelho.
-                    slog("Reiniciando ciclo apos pausa de 0.8s (antes era instantaneo)")
-                    threading.Timer(0.8, self._ciclo_escuta_continua).start()
+                    slog("Reiniciando ciclo apos pausa de 1.2s (era instantaneo, depois 0.8s)")
+                    threading.Timer(1.2, self._ciclo_escuta_continua).start()
                 return
 
             self._silencios_seguidos = 0
 
             def processar_resposta_ia(texto_resposta):
                 slog(f"processar_resposta_ia recebeu resposta da Groq: {texto_resposta[:60]!r}")
-                TtsService.get_instance().falar(texto_resposta)
+
+                def _voltar_a_escutar():
+                    # Pausa extra de segurança depois que a fala REALMENTE
+                    # terminou, pra dar tempo do sistema de áudio soltar o
+                    # canal de reprodução e liberar o microfone direito.
+                    slog("Fala terminou de verdade — aguardando 0.6s antes de reativar o microfone")
+                    time.sleep(0.6)
+                    self._ciclo_escuta_continua()
+
+                TtsService.get_instance().falar(texto_resposta, ao_terminar=_voltar_a_escutar)
                 slog("TtsService.falar() chamado (retornou sem lançar exceção)")
-                tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
-                threading.Timer(tempo_estimado, self._ciclo_escuta_continua).start()
 
             slog(f"Chamando GroqService.perguntar() com: {texto_capturado!r}")
             GroqService.get_instance().perguntar(
@@ -417,9 +436,10 @@ class SpicaOverlay:
             print("[Spica/Overlay] Muito tempo em silencio, puxando assunto por conta propria.")
 
             def processar_resposta_ia(texto_resposta):
-                TtsService.get_instance().falar(texto_resposta)
-                tempo_estimado = max(1.5, len(texto_resposta) / 13.0)
-                threading.Timer(tempo_estimado, self._ciclo_escuta_continua).start()
+                def _voltar_a_escutar():
+                    time.sleep(0.6)
+                    self._ciclo_escuta_continua()
+                TtsService.get_instance().falar(texto_resposta, ao_terminar=_voltar_a_escutar)
 
             GroqService.get_instance().perguntar(
                 "(silencio prolongado - a pessoa parou de responder depois da ultima fala dela. Comente com humor e leveza sobre esse silencio, fazendo referencia especifica a ultima coisa que ela disse antes de ficar quieta - tipo brincando que a conversa esfriou ou cobrando ela de leve por ter sumido. Nao mude de assunto do nada, reaja ao silencio em si.)",

@@ -151,6 +151,14 @@ class VoiceService:
                 audio_manager = context_atual.getSystemService(Context.AUDIO_SERVICE)
                 if not hasattr(self, "_audio_focus_listener") or self._audio_focus_listener is None:
                     self._audio_focus_listener = _AudioFocusNoOp()
+                # Devolve o foco anterior antes de pedir de novo — higiene:
+                # sem isso, cada ciclo pedia foco sem nunca devolver o de
+                # antes, o que podia ir degradando a estabilidade ao longo
+                # de muitos ciclos seguidos.
+                try:
+                    audio_manager.abandonAudioFocus(self._audio_focus_listener)
+                except Exception:
+                    pass
                 resultado_foco = audio_manager.requestAudioFocus(
                     self._audio_focus_listener,
                     AudioManager.STREAM_MUSIC,

@@ -70,12 +70,17 @@ class TtsService:
         self._on_start_speak = on_start
         self._on_done_speak = on_done
 
-    def falar(self, texto):
+    def falar(self, texto, ao_terminar=None):
         from src.utils.service_log import slog
         slog(f"falar() chamado, _inicializado={self._inicializado}, platform={platform}")
         if not platform == "android" or not self._inicializado:
             print(f"[Spica/TTS - Fallback Desktop]: {texto}")
             slog("falar() abortou: platform != android OU _inicializado=False")
+            if ao_terminar:
+                try:
+                    ao_terminar()
+                except Exception:
+                    pass
             return
 
         MAX_CHARS = 3000
@@ -83,16 +88,22 @@ class TtsService:
             chunks = [texto[i:i+MAX_CHARS] for i in range(0, len(texto), MAX_CHARS)]
             print(f"[Spica/TTS] Texto dividido em {len(chunks)} chunks")
             for i, chunk in enumerate(chunks):
+                eh_ultimo = (i == len(chunks) - 1)
                 Clock.schedule_once(
-                    lambda dt, c=chunk: self._falar_chunk(c),
+                    lambda dt, c=chunk, ult=eh_ultimo: self._falar_chunk(c, ao_terminar if ult else None),
                     i * 0.1
                 )
         else:
-            self._falar_chunk(texto)
+            self._falar_chunk(texto, ao_terminar)
 
-    def _falar_chunk(self, texto):
+    def _falar_chunk(self, texto, ao_terminar=None):
         """Fala um chunk de texto."""
         if not platform == "android" or not self._inicializado:
+            if ao_terminar:
+                try:
+                    ao_terminar()
+                except Exception:
+                    pass
             return
 
         def _falar_async():
@@ -120,18 +131,30 @@ class TtsService:
 
                 while self.tts.isSpeaking():
                     time.sleep(0.1)
+                slog("tts.isSpeaking() virou False — fala REALMENTE terminou agora")
 
                 if self._on_done_speak:
                     try:
                         self._on_done_speak()
                     except Exception as e:
                         slog(f"EXCEÇÃO em _on_done_speak (ignorada): {type(e).__name__}: {e}")
+
+                if ao_terminar:
+                    try:
+                        ao_terminar()
+                    except Exception as e:
+                        slog(f"EXCEÇÃO em ao_terminar (ignorada): {type(e).__name__}: {e}")
             except Exception as e:
                 slog(f"EXCEÇÃO em _falar_async: {type(e).__name__}: {e}")
                 print(f"[Spica/TTS] Erro ao sintetizar voz: {e}")
                 if self._on_done_speak:
                     try:
                         self._on_done_speak()
+                    except Exception:
+                        pass
+                if ao_terminar:
+                    try:
+                        ao_terminar()
                     except Exception:
                         pass
 
