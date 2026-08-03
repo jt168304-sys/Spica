@@ -10,11 +10,23 @@ try:
     SpeechRecognizer = autoclass("android.speech.SpeechRecognizer")
     Intent = autoclass("android.content.Intent")
     RecognizerIntent = autoclass("android.speech.RecognizerIntent")
+    AudioManager = autoclass("android.media.AudioManager")
+    Context = autoclass("android.content.Context")
     HAS_ANDROID = True
 except Exception:
     HAS_ANDROID = False
     def run_on_ui_thread(func):
         return func
+
+if HAS_ANDROID:
+    class _AudioFocusNoOp(PythonJavaClass):
+        __javainterfaces__ = ['android/media/AudioManager$OnAudioFocusChangeListener']
+        __javacontext__ = 'app'
+
+        @java_method('(I)V')
+        def onAudioFocusChange(self, focusChange):
+            pass
+
 
 class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
     __javainterfaces__ = ['android/speech/RecognitionListener']
@@ -50,6 +62,8 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
 
     @java_method('(I)V')
     def onError(self, error):
+        from src.utils.service_log import slog
+        slog(f"onError chamado, codigo={error}")
         self.logger.error(f"[Spica/Voice] Erro no Reconhecedor Android cod: {error}")
         msg = "Nao ouvi" if error == 7 else f"Erro ao ouvir ({error})"
         self._entregar(msg)
@@ -126,6 +140,26 @@ class VoiceService:
             intent.putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 2500)
             intent.putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 1500)
             intent.putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 1500)
+
+            # TENTATIVA: solicitar foco de áudio explicitamente antes de escutar.
+            # Suspeita: fora do app (sem foco de UI), o SpeechRecognizer padrão do
+            # Android pode não estar recebendo o foco de áudio necessário pra
+            # capturar o microfone de verdade, mesmo com RECORD_AUDIO concedido —
+            # resultando em erro rápido (ERROR_NO_MATCH) em vez de escutar de fato.
+            try:
+                from src.utils.service_log import slog
+                audio_manager = context_atual.getSystemService(Context.AUDIO_SERVICE)
+                if not hasattr(self, "_audio_focus_listener") or self._audio_focus_listener is None:
+                    self._audio_focus_listener = _AudioFocusNoOp()
+                resultado_foco = audio_manager.requestAudioFocus(
+                    self._audio_focus_listener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                )
+                # 1 = AUDIOFOCUS_REQUEST_GRANTED, 0 = FAILED, 2 = DELAYED
+                slog(f"requestAudioFocus() retornou: {resultado_foco} (1=concedido, 0=falhou, 2=adiado)")
+            except Exception as e:
+                slog(f"Falha ao solicitar foco de áudio (seguindo sem isso): {type(e).__name__}: {e}")
 
             self.recognizer.startListening(intent)
             self.logger.info("[Spica/Voice] Hardware de áudio ativado com sucesso na UI Thread.")

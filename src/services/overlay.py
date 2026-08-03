@@ -378,7 +378,13 @@ class SpicaOverlay:
                     self._silencios_seguidos = 0
                     self._puxar_assunto_sozinha()
                 else:
-                    self._ciclo_escuta_continua()
+                    # TENTATIVA: pequena pausa antes de reiniciar o ciclo. Antes
+                    # reiniciava instantaneamente (0 segundos), o que pode não
+                    # dar tempo do recognizer anterior liberar o microfone de
+                    # verdade antes do próximo tentar pegar ele — casando com o
+                    # "ligando e desligando" percebido no aparelho.
+                    slog("Reiniciando ciclo apos pausa de 0.8s (antes era instantaneo)")
+                    threading.Timer(0.8, self._ciclo_escuta_continua).start()
                 return
 
             self._silencios_seguidos = 0
