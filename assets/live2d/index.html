@@ -55,10 +55,11 @@
 <script src="live2dcubismcore.min.js"></script>
 
 <!-- PixiJS 6 e pixi-live2d-display (cubism4), carregados via CDN em runtime.
-     IMPORTANTE: a partir da v6 do pixi.js, o bundle correto fica em
-     dist/cjs/pixi.min.js — dist/pixi.min.js (sem "/cjs/") só existe até a v5
-     e no cdnjs pode servir um arquivo incompleto, o que causava
-     "PIXI.Application is not a constructor". -->
+     IMPORTANTE: cdnjs/jsdelivr servem em "/cjs/" um bundle CommonJS incompleto
+     pra script tag direto (causava "exports is not defined" / "PIXI.Application
+     is not a constructor"). O CDN oficial da PixiJS (pixijs.download) serve o
+     bundle certo, pronto pra uso direto via <script>, confirmado no issue
+     oficial: github.com/pixijs/pixijs/issues/7858 -->
 <script src="https://pixijs.download/v6.5.9/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
 
@@ -147,9 +148,29 @@
     SpicaLive2D._ajustarTamanho();
   });
 
-  // Carrega o modelo assim que os scripts externos terminarem
+  // Espera as bibliotecas estarem REALMENTE prontas antes de carregar o
+  // modelo — antes tentava direto no evento "load", mas scripts externos
+  // (principalmente o pixi-live2d-display, que é bem pesado) podem levar
+  // um instante a mais pra terminar de se inicializar internamente mesmo
+  // depois do <script> "carregar" no sentido de download.
+  function esperarPronto(tentativas) {
+    tentativas = tentativas || 0;
+    var pronto = (typeof PIXI !== "undefined") &&
+                 (typeof PIXI.live2d !== "undefined") &&
+                 (typeof Live2DCubismCore !== "undefined");
+    if (pronto) {
+      SpicaLive2D.carregar("osagegirl/osagegirl.model3.json");
+      return;
+    }
+    if (tentativas >= 40) {  // ~10s de espera máxima (40 x 250ms)
+      mostrarErro("Timeout esperando bibliotecas ficarem prontas (PIXI/live2d/CubismCore)");
+      return;
+    }
+    setTimeout(function () { esperarPronto(tentativas + 1); }, 250);
+  }
+
   window.addEventListener("load", function () {
-    SpicaLive2D.carregar("osagegirl/osagegirl.model3.json");
+    esperarPronto(0);
   });
 })();
 </script>
