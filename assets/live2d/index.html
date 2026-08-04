@@ -54,14 +54,13 @@
      assets/live2d/live2dcubismcore.min.js (veja LEIA-ME_LIVE2D.md) -->
 <script src="live2dcubismcore.min.js"></script>
 
-<!-- PixiJS 6 e pixi-live2d-display (cubism4), carregados via CDN em runtime.
-     IMPORTANTE: cdnjs/jsdelivr servem em "/cjs/" um bundle CommonJS incompleto
-     pra script tag direto (causava "exports is not defined" / "PIXI.Application
-     is not a constructor"). O CDN oficial da PixiJS (pixijs.download) serve o
-     bundle certo, pronto pra uso direto via <script>, confirmado no issue
-     oficial: github.com/pixijs/pixijs/issues/7858 -->
-<script src="https://pixijs.download/v6.5.9/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+<!-- PixiJS 7 e pixi-live2d-display-advanced (cubism4), carregados via CDN em runtime.
+     TROCADO: a combinação anterior (PixiJS 6 + pixi-live2d-display@0.4.0) tem um bug
+     upstream conhecido e ainda em aberto (issue #177 no repo oficial, mesmo erro
+     "Cannot read properties of undefined") — trocamos pro fork mantido ativamente
+     pixi-live2d-display-advanced, que já suporta PixiJS 7. -->
+<script src="https://pixijs.download/v7.4.2/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display-advanced/dist/cubism4.min.js"></script>
 
 <script>
 (function () {
