@@ -33,9 +33,6 @@
 <canvas id="canvas"></canvas>
 
 <script>
-  // Registrado ANTES de qualquer script externo, pra pegar erro de
-  // carregamento (ex: CDN fora do ar) dos próprios scripts abaixo — antes
-  // esse listener só era criado depois deles, então não pegava nada.
   function mostrarErro(msg) {
     var div = document.getElementById("erro-visivel");
     div.style.display = "block";
@@ -91,6 +88,15 @@
       if (!PIXI.live2d) {
         mostrarErro("pixi-live2d-display nao carregou (sem internet? CDN bloqueado?)");
         return;
+      }
+      // Essa versão (advanced) exige configurar o runtime Cubism 4 antes de
+      // carregar qualquer modelo — na versão anterior isso não era preciso.
+      try {
+        if (typeof PIXI.live2d.configureCubism4 === "function") {
+          PIXI.live2d.configureCubism4({ memorySizeMB: 128 });
+        }
+      } catch (err) {
+        mostrarErro("Falha ao configurar Cubism4: " + err);
       }
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
