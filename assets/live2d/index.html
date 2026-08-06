@@ -51,13 +51,13 @@
      assets/live2d/live2dcubismcore.min.js (veja LEIA-ME_LIVE2D.md) -->
 <script src="live2dcubismcore.min.js"></script>
 
-<!-- PixiJS 7 e pixi-live2d-display-advanced (cubism4), carregados via CDN em runtime.
-     TROCADO: a combinação anterior (PixiJS 6 + pixi-live2d-display@0.4.0) tem um bug
-     upstream conhecido e ainda em aberto (issue #177 no repo oficial, mesmo erro
-     "Cannot read properties of undefined") — trocamos pro fork mantido ativamente
-     pixi-live2d-display-advanced, que já suporta PixiJS 7. -->
-<script src="https://pixijs.download/v7.4.2/pixi.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display-advanced/dist/cubism4.min.js"></script>
+<!-- PixiJS 6 e pixi-live2d-display (cubism4), agora HOSPEDADOS LOCAL em vez de CDN.
+     Motivo: elimina de vez a dependência de internet no momento de abrir a bolha,
+     e a variável "qual versão o CDN está servindo hoje" que já causou vários
+     bugs diferentes nas últimas tentativas. Veja LEIA-ME_LIVE2D.md pra saber
+     como baixar esses dois arquivos (curl direto no Termux). -->
+<script src="vendor/pixi.min.js"></script>
+<script src="vendor/cubism4.min.js"></script>
 
 <script>
 (function () {
@@ -65,7 +65,7 @@
     mostrarErro("Cubism Core NAO encontrado (live2dcubismcore.min.js ausente ou nao carregou)");
   }
   if (typeof PIXI === "undefined" || typeof PIXI.Application !== "function") {
-    mostrarErro("PIXI nao carregou corretamente (sem internet? CDN bloqueado?)");
+    mostrarErro("PIXI nao carregou corretamente (arquivo vendor/pixi.min.js ausente ou corrompido?)");
   }
 
   window.PIXI = window.PIXI || {};
@@ -84,19 +84,11 @@
   // ------- API exposta para o Python (via webview.evaluateJavascript) -------
   window.SpicaLive2D = {
 
-    carregar: function (modelUrl) {
+    carregar: function (modelUrl, tentativa) {
+      tentativa = tentativa || 1;
       if (!PIXI.live2d) {
-        mostrarErro("pixi-live2d-display nao carregou (sem internet? CDN bloqueado?)");
+        mostrarErro("pixi-live2d-display nao carregou (arquivo local ausente? veja vendor/)");
         return;
-      }
-      // Essa versão (advanced) exige configurar o runtime Cubism 4 antes de
-      // carregar qualquer modelo — na versão anterior isso não era preciso.
-      try {
-        if (typeof PIXI.live2d.configureCubism4 === "function") {
-          PIXI.live2d.configureCubism4({ memorySizeMB: 128 });
-        }
-      } catch (err) {
-        mostrarErro("Falha ao configurar Cubism4: " + err);
       }
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
@@ -105,7 +97,16 @@
         // idle animation / respiração e física já rodam automaticamente
         // via pixi-live2d-display assim que o modelo é adicionado ao stage.
       }).catch(function (err) {
-        mostrarErro("Falha ao carregar modelo: " + err);
+        // Retry automático: a issue conhecida da biblioteca (falha ao ler
+        // propriedades durante o parse do modelo) às vezes é intermitente —
+        // tenta de novo até 2 vezes antes de desistir e mostrar o erro.
+        if (tentativa < 3) {
+          setTimeout(function () {
+            SpicaLive2D.carregar(modelUrl, tentativa + 1);
+          }, 500);
+        } else {
+          mostrarErro("Falha ao carregar modelo (tentativa " + tentativa + "): " + err);
+        }
       });
     },
 
@@ -120,14 +121,11 @@
       model.position.set(app.renderer.width / 2, app.renderer.height / 2);
     },
 
-    // valor de 0.0 (fechada) a 1.0 (aberta) — chamado a cada "tick" do lip-sync
     setBoca: function (valor) {
       if (!model) return;
       model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", valor);
     },
 
-    // liga/desliga um ciclo automático simples de abre-fecha de boca
-    // (fallback simplificado enquanto não há análise real de amplitude do áudio)
     falarSimples: function (falando) {
       if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null; }
       if (!falando) { SpicaLive2D.setBoca(0); return; }
@@ -153,11 +151,6 @@
     SpicaLive2D._ajustarTamanho();
   });
 
-  // Espera as bibliotecas estarem REALMENTE prontas antes de carregar o
-  // modelo — antes tentava direto no evento "load", mas scripts externos
-  // (principalmente o pixi-live2d-display, que é bem pesado) podem levar
-  // um instante a mais pra terminar de se inicializar internamente mesmo
-  // depois do <script> "carregar" no sentido de download.
   function esperarPronto(tentativas) {
     tentativas = tentativas || 0;
     var pronto = (typeof PIXI !== "undefined") &&
@@ -167,7 +160,7 @@
       SpicaLive2D.carregar("osagegirl/osagegirl.model3.json");
       return;
     }
-    if (tentativas >= 40) {  // ~10s de espera máxima (40 x 250ms)
+    if (tentativas >= 40) {
       mostrarErro("Timeout esperando bibliotecas ficarem prontas (PIXI/live2d/CubismCore)");
       return;
     }
