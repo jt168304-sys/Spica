@@ -1,43 +1,48 @@
 {
-	"Version": 3,
-	"FileReferences": {
-		"Moc": "osagegirl.moc3",
-		"Textures": [
-			"osagegirl.8192/texture_00.png"
-		],
-		"Physics": "osagegirl.physics3.json",
-		"DisplayInfo": "osagegirl.cdi3.json",
+"Version": 3,
+"FileReferences": {
+"Moc": "osagegirl.moc3",
+"Textures": [
+"osagegirl.8192/texture_00.png"
+],
+"Physics": "osagegirl.physics3.json",
+"DisplayInfo": "osagegirl.cdi3.json",
 "Motions": {},
-		"Expressions": [
-			{
-				"Name": "びっくり目",
-				"File": "eyes_bikkuri.exp3.json"
-			},
-			{
-				"Name": "ぐるぐる目",
-				"File": "eyes_guruguru.exp3.json"
-			},
-			{
-				"Name": "ぜつぼう目",
-				"File": "eyes_zetubou.exp3.json"
-			},
-			{
-				"Name": "あおざめ顔",
-				"File": "face_aozame.exp3.json"
-			}
-		]
-	},
-	"Groups": [
-		{
-			"Target": "Parameter",
-			"Name": "LipSync",
-			"Ids": []
-		},
-		{
-			"Target": "Parameter",
-			"Name": "EyeBlink",
-			"Ids": []
-		}
-	],
-	"HitAreas": []
+"Expressions": [
+{
+"Name": "びっくり目",
+"File": "eyes_bikkuri.exp3.json"
+},
+{
+"Name": "ぐるぐる目",
+"File": "eyes_guruguru.exp3.json"
+},
+{
+"Name": "ぜつぼう目",
+"File": "eyes_zetubou.exp3.json"
+},
+{
+"Name": "あおざめ顔",
+"File": "face_aozame.exp3.json"
+}
+]
+},
+"Groups": [
+{
+"Target": "Parameter",
+"Name": "LipSync",
+"Ids": [
+"ParamMouthOpenY"
+]
+},
+{
+"Target": "Parameter",
+"Name": "EyeBlink",
+"Ids": [
+"ParamEyeLOpen",
+"ParamEyeROpen"
+]
+}
+],
+"HitAreas": []
 }
