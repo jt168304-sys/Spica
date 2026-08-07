@@ -23,9 +23,6 @@ try:
     TextView = autoclass('android.widget.TextView')
     Color = autoclass('android.graphics.Color')
     JString = autoclass('java.lang.String')
-    WebView = autoclass('android.webkit.WebView')
-    WebViewClient = autoclass('android.webkit.WebViewClient')
-    WebSettings = autoclass('android.webkit.WebSettings')
     Toast = autoclass('android.widget.Toast')
     Looper = autoclass('android.os.Looper')
     Handler = autoclass('android.os.Handler')
@@ -80,7 +77,7 @@ class SpicaOverlay:
 
     def __init__(self):
         self.window_manager = None
-        self.image_view = None  # mantém o nome por compatibilidade: agora é a WebView
+        self.image_view = None
         self.params = None
         self.iniciado = False
         self._bitmap_atual = None
@@ -88,6 +85,7 @@ class SpicaOverlay:
         self.mutado = False
         self.escuta_continua = False
         self._falando = False
+        self._humor_atual = "neutro"  # humor exibido agora; muda via definir_expressao()
 
         self._menu_view = None
         self._click_listeners = []
@@ -95,12 +93,22 @@ class SpicaOverlay:
         self.app_dir = os.environ.get('ANDROID_APP_PATH', os.path.dirname(os.path.abspath(__file__)))
         base_dir = os.path.dirname(os.path.dirname(self.app_dir)) if "src" in self.app_dir else self.app_dir
 
-        # Antigo sistema de PNGs (mantido apenas como fallback caso o WebView falhe)
-        self.path_boca_fechada = os.path.join(base_dir, "assets", "boca_fechada.png")
-        self.path_boca_aberta = os.path.join(base_dir, "assets", "boca_aberta.png")
+        # Pasta com os PNGs de expressão: <humor>_aberta.png / <humor>_fechada.png
+        # Ex: feliz_aberta.png, triste_fechada.png. Se um humor específico ainda
+        # não tiver arquivo próprio, cai automaticamente pro "neutro" (ver
+        # _resolver_caminho_expressao) — assim o sistema já funciona hoje com
+        # cobertura parcial e vai enriquecendo conforme mais PNGs forem
+        # adicionados, sem precisar mexer em código.
+        self.path_expressoes_dir = os.path.join(base_dir, "assets", "expressoes")
 
-        # Página local que carrega o modelo Live2D via pixi-live2d-display
-        self.path_live2d_html = "file://" + os.path.join(base_dir, "assets", "live2d", "index.html")
+    def _resolver_caminho_expressao(self, humor, falar):
+        sufixo = "aberta" if falar else "fechada"
+        caminho = os.path.join(self.path_expressoes_dir, f"{humor}_{sufixo}.png")
+        if os.path.exists(caminho):
+            return caminho
+        # Fallback: humor sem PNG próprio ainda -> usa neutro
+        caminho_neutro = os.path.join(self.path_expressoes_dir, f"neutro_{sufixo}.png")
+        return caminho_neutro
 
     def _toast(self, mensagem):
         """Mostra um Toast nativo do Android com a mensagem — usado pra
@@ -139,37 +147,15 @@ class SpicaOverlay:
     def _ligar_bolha_interno(self):
         ctx = PythonActivity.mActivity
         self.window_manager = ctx.getSystemService(Context.WINDOW_SERVICE)
-        self.image_view = WebView(ctx)  # nome mantido por compatibilidade com o resto do arquivo
+        self.image_view = ImageView(ctx)
 
-        settings = self.image_view.getSettings()
-        settings.setJavaScriptEnabled(True)
-        settings.setDomStorageEnabled(True)
-        settings.setLoadWithOverviewMode(True)
-        settings.setUseWideViewPort(True)
-        # necessário para o Cubism Core/pixi carregarem via file:// sem bloqueio
-        try:
-            settings.setAllowFileAccess(True)
-            settings.setAllowFileAccessFromFileURLs(True)
-            settings.setAllowUniversalAccessFromFileURLs(True)
-        except Exception as e:
-            print(f"[Spica/Overlay] Aviso ao configurar acesso a arquivo da WebView: {e}")
-
-        # fundo transparente de verdade (senão a WebView vem com fundo branco)
-        self.image_view.setBackgroundColor(0)
-        try:
-            LAYER_TYPE_SOFTWARE = 1
-            self.image_view.setLayerType(LAYER_TYPE_SOFTWARE, None)
-        except Exception as e:
-            print(f"[Spica/Overlay] Aviso ao setar layer type da WebView: {e}")
-
-        self.image_view.setWebViewClient(WebViewClient())
-        self.image_view.loadUrl(self.path_live2d_html)
+        self.definir_avatar_png(falar=False)
 
         window_type = 2038
         flags = LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
         self.params = LayoutParams(
-            320, 320,
+            220, 220,
             window_type, flags, PixelFormat.TRANSLUCENT
         )
         self.params.gravity = 51
@@ -179,7 +165,6 @@ class SpicaOverlay:
         self.window_manager.addView(self.image_view, self.params)
         self.iniciado = True
         SpicaOverlay._instancia_ativa = self
-        self._toast("[Spica] Bolha Live2D ligada! Se não aparecer, o problema é no carregamento do modelo (JS).")
 
         from src.services.tts_service import TtsService
         TtsService.get_instance().configurar_callbacks_visuais(
@@ -189,7 +174,7 @@ class SpicaOverlay:
 
         self._configurar_toque_na_bolha()
 
-        print("[Spica/Overlay] Bolha Live2D (WebView) injetada no sistema e sincronizada ao TTS!")
+        print("[Spica/Overlay] Bolha (PNG por humor) injetada no sistema e sincronizada ao TTS!")
 
     def _configurar_toque_na_bolha(self):
         """Permite arrastar a bolha pela tela e tocar rápido para abrir o menu."""
@@ -451,29 +436,39 @@ class SpicaOverlay:
             self._ciclo_escuta_continua()
 
     @run_on_ui_thread
+    @run_on_ui_thread
     def definir_avatar_png(self, falar=False):
-        """Aciona o lip-sync do modelo Live2D via ponte JS na WebView.
-        Nome mantido por compatibilidade (era troca de PNG, agora é JS)."""
+        """Muda o Bitmap do ImageView com base no humor atual + se está falando."""
         if not HAS_ANDROID or not self.image_view:
             return
         self._falando = falar
-        try:
-            js = f"SpicaLive2D.falarSimples({'true' if falar else 'false'});"
-            self.image_view.evaluateJavascript(js, None)
-        except Exception as e:
-            print(f"[Spica/Overlay] Falha ao acionar lip-sync do Live2D: {e}")
+
+        if self._bitmap_atual:
+            try:
+                self._bitmap_atual.recycle()
+                self._bitmap_atual = None
+            except Exception:
+                pass
+
+        caminho = self._resolver_caminho_expressao(self._humor_atual, falar)
+        if os.path.exists(caminho):
+            try:
+                self._bitmap_atual = BitmapFactory.decodeFile(caminho)
+                self.image_view.setImageBitmap(self._bitmap_atual)
+            except Exception as e:
+                print(f"[Spica/Overlay] Falha ao renderizar PNG ({caminho}): {e}")
+                self._bitmap_atual = None
+        else:
+            print(f"[Spica/Overlay] PNG de expressão não encontrado: {caminho}")
 
     @run_on_ui_thread
     def definir_expressao(self, nome_expressao):
-        """Dispara uma expressão do model3.json pelo nome (ex: 'びっくり目')."""
+        """Muda o humor atual da Spica (ex: 'triste', 'feliz') e já atualiza a
+        imagem exibida na hora, respeitando se ela está falando ou não."""
         if not HAS_ANDROID or not self.image_view:
             return
-        try:
-            nome_escapado = nome_expressao.replace('"', '\\"')
-            js = f'SpicaLive2D.setExpressao("{nome_escapado}");'
-            self.image_view.evaluateJavascript(js, None)
-        except Exception as e:
-            print(f"[Spica/Overlay] Falha ao setar expressão do Live2D: {e}")
+        self._humor_atual = nome_expressao
+        self.definir_avatar_png(falar=self._falando)
 
     @run_on_ui_thread
     def desligar_bolha(self):
@@ -481,16 +476,19 @@ class SpicaOverlay:
             try:
                 self._fechar_menu_bolha()
 
+                if self._bitmap_atual:
+                    try:
+                        self._bitmap_atual.recycle()
+                    except Exception:
+                        pass
+                    self._bitmap_atual = None
+
                 self.window_manager.removeView(self.image_view)
-                try:
-                    self.image_view.destroy()  # libera os recursos internos da WebView
-                except Exception:
-                    pass
                 self.image_view = None
                 self.iniciado = False
                 if SpicaOverlay._instancia_ativa is self:
                     SpicaOverlay._instancia_ativa = None
-                print("[Spica/Overlay] Overlay (WebView Live2D) removido e memória liberada corretamente")
+                print("[Spica/Overlay] Overlay removido e memória liberada corretamente")
             except Exception as e:
                 print(f"[Spica/Overlay] Erro ao remover overlay: {e}")
 

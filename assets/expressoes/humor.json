@@ -1,0 +1,20 @@
+{
+  "neutro": {
+    "descricao": "Estado padrao, conversa normal, sem reacao especial"
+  },
+  "feliz": {
+    "descricao": "Contente, animada, empolgada"
+  },
+  "surpresa": {
+    "descricao": "Espantada, algo inesperado ou impressionante"
+  },
+  "confusa": {
+    "descricao": "Confusa, nao entendeu direito ou achou bizarro"
+  },
+  "triste": {
+    "descricao": "Desanimada, desapontada, resignada"
+  },
+  "chocada": {
+    "descricao": "Chocada, sem graca, situacao ruim ou constrangedora"
+  }
+}

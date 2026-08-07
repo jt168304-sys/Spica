@@ -22,9 +22,15 @@ jobs:
       - name: Cache Buildozer
         uses: actions/cache@v3
         with:
-          path: ~/.buildozer
-          key: buildozer-v2-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-v2-
+          path: .buildozer
+          # CORRIGIDO: o buildozer cria .buildozer DENTRO do projeto (caminho
+          # relativo ao workspace), não em ~/.buildozer (home do usuário) —
+          # confirmado pelo próprio passo "Upload build log" abaixo, que já
+          # usava o caminho relativo certo. Com o caminho errado, o cache
+          # NUNCA funcionou de verdade: todo build baixava SDK/NDK/p4a do
+          # zero, mesmo com a chave "v2" e tudo mais que já tentamos.
+          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v3-
 
       - name: Install System Dependencies
         run: |

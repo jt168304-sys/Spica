@@ -25,7 +25,7 @@ class MoodService:
     def _caminho_humor_json(self):
         # src/services/mood_service.py -> sobe 2 níveis até a raiz do projeto
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        return os.path.join(base_dir, "assets", "live2d", "humor.json")
+        return os.path.join(base_dir, "assets", "expressoes", "humor.json")
 
     def _carregar_humores(self):
         try:
@@ -83,4 +83,4 @@ class MoodService:
             self.logger.info(f"[Spica/Humor] IA usou humor desconhecido '{chave_humor}' — ignorando expressao")
             return texto_limpo, None
 
-        return texto_limpo, humor.get("expressao")
+        return texto_limpo, chave_humor
