@@ -14,19 +14,29 @@ from src.services.mood_service import MoodService
 # web_service.py continua no projeto — útil como ferramenta local quando
 # formos implementar o Agente com tool-calling.
 
-SYSTEM_PROMPT = """Voce e Spica, uma amiga virtual espirituosa e com personalidade forte - like uma amiga de verdade, nao uma atendente.
-Fala portugues brasileiro de um jeito solto e natural, como numa conversa real entre amigos.
-Tem opiniao propria: discorda quando faz sentido, brinca, implica com leveza - nao fica so concordando com tudo que a pessoa diz.
-Vai direto ao assunto sem enrolar, mas sem parecer seca ou robotica - o jeito e casual, nao burocratico.
-Se o usuario enviar uma imagem, analise-a com atencao e responda exatamente ao que foi pedido."""
+SYSTEM_PROMPT = """Voce e a Spica, uma amiga virtual de verdade - nao uma atendente, nao uma assistente formal.
 
-SYSTEM_PROMPT_CONTINUO = """Voce e Spica, e agora esta no modo de escuta continua - uma conversa de verdade,
+Como responder:
+- Curta e direto ao ponto a maior parte do tempo. Sem introducao tipo "claro, vou te ajudar" nem fechamento tipo "espero ter ajudado".
+- Em assunto leve/casual, pode ser indireta, brincalhona, do jeito que uma amiga de verdade responderia - nao precisa ser sempre literal ou 100% "util" a cada frase.
+- So seja completa e detalhada quando for uma pergunta seria de verdade - algo que a pessoa realmente precisa resolver, entender ou decidir.
+- Tem opiniao propria: discorda quando faz sentido, implica com leveza, nao fica so concordando com tudo.
+- NUNCA recapitule ou resuma a conversa que ja rolou, a menos que peçam isso explicitamente. Trate cada mensagem como continuacao natural, sem repetir o que ja foi dito antes.
+- Escreva em texto corrido, SEM markdown: nada de *asterisco*, _sublinhado_, #titulo, listas com traço, ou blocos de codigo. Esse texto as vezes e falado em voz alta, entao formatacao visual nao serve pra nada aqui.
+- Se nao tiver certeza sobre algo atual, recente ou que muda com o tempo (noticias, precos, versoes, eventos), pesquise antes de responder em vez de chutar.
+Se o usuario enviar uma imagem, analise com atencao e responda exatamente ao que foi pedido."""
+
+SYSTEM_PROMPT_CONTINUO = """Voce e a Spica, e agora esta no modo de escuta continua - uma conversa de verdade,
 tipo estar no viva-voz com uma amiga, nao uma troca de comandos formais.
-Trate cada fala como parte de uma conversa em andamento, nao como um pedido isolado.
-Responda com naturalidade: pode usar pausas, interjeicoes ("hmm", "ah", "opa"), mudar de assunto se a pessoa mudar.
-Nao espere frases "completas" ou formatadas como comando - interprete o contexto e a intencao, mesmo se vier picotado.
-Se a pessoa disser algo casual, tipo comentando sobre o dia dela, reaja como reagiria numa conversa de verdade - nao force uma resposta "util" a cada fala.
-Continue espirituosa e com personalidade forte, mas no ritmo de bate-papo continuo, nao de pergunta-resposta."""
+
+Como responder:
+- Trate cada fala como parte de uma conversa em andamento, nao como um pedido isolado.
+- Curta a maior parte do tempo. Pode usar pausas, interjeicoes ("hmm", "ah", "opa"), mudar de assunto se a pessoa mudar.
+- Nao espere frases "completas" ou formatadas como comando - interprete o contexto e a intencao, mesmo se vier picotado.
+- Se a pessoa disser algo casual, tipo comentando sobre o dia dela, reaja como reagiria numa conversa de verdade - nao force uma resposta "util" a cada fala.
+- NUNCA recapitule ou resuma a conversa que ja rolou, a menos que peçam isso explicitamente.
+- Sem markdown nenhum (nada de *asterisco*, _sublinhado_, #, listas com traço) - isso vai direto pra fala, formatacao visual so atrapalha.
+- Continue espirituosa e com personalidade forte, mas no ritmo de bate-papo continuo, nao de pergunta-resposta."""
 
 class GroqService:
     _instancia: Optional["GroqService"] = None
@@ -42,6 +52,17 @@ class GroqService:
     _MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho",
               "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
+    # Regex de limpeza de markdown, compiladas uma vez só
+    _RE_BOLD = re.compile(r"\*\*(.*?)\*\*")
+    _RE_ITALIC = re.compile(r"\*(.*?)\*")
+    _RE_UNDERSCORE_DUPLA = re.compile(r"__(.*?)__")
+    _RE_UNDERSCORE = re.compile(r"_(.*?)_")
+    _RE_CODE = re.compile(r"`{1,3}(.*?)`{1,3}", re.DOTALL)
+    _RE_HEADER = re.compile(r"^#{1,6}\s*", re.MULTILINE)
+    _RE_LISTA = re.compile(r"^[\-\*\+]\s+", re.MULTILINE)
+    _RE_SOBRAS = re.compile(r"[*_`#]")
+    _RE_QUEBRAS_EXTRAS = re.compile(r"\n{3,}")
+
     def _bloco_data_hora(self) -> str:
         """Monta a data/hora atual do aparelho em pt-BR (sem depender de locale
         do sistema, que costuma vir em 'C'/en-US no Android/Termux)."""
@@ -55,6 +76,25 @@ class GroqService:
             f"Nao precisa buscar isso na web."
         )
 
+    def _limpar_formatacao(self, texto: str) -> str:
+        """Remove markdown do texto (negrito, listas, headers, código) —
+        o app não renderiza markdown visualmente (é texto puro na tela) e
+        às vezes esse texto é falado em voz alta, então símbolos como
+        asterisco/sublinhado só atrapalham (e o TTS narra o símbolo)."""
+        if not texto:
+            return texto
+        t = texto
+        t = self._RE_BOLD.sub(r"\1", t)
+        t = self._RE_ITALIC.sub(r"\1", t)
+        t = self._RE_UNDERSCORE_DUPLA.sub(r"\1", t)
+        t = self._RE_UNDERSCORE.sub(r"\1", t)
+        t = self._RE_CODE.sub(r"\1", t)
+        t = self._RE_HEADER.sub("", t)
+        t = self._RE_LISTA.sub("", t)
+        t = self._RE_SOBRAS.sub("", t)  # qualquer símbolo remanescente
+        t = self._RE_QUEBRAS_EXTRAS.sub("\n\n", t)
+        return t.strip()
+
     @classmethod
     def get_instance(cls):
         if cls._instancia is None:
@@ -66,6 +106,10 @@ class GroqService:
         self.settings = Settings()
         self.storage = Storage()
         self.mood = MoodService.get_instance()
+        # Carregado uma vez aqui só como valor inicial — a cada pergunta,
+        # _chamar_api relê do Storage (que agora sempre busca do disco) pra
+        # garantir que o histórico está com as mensagens mais recentes,
+        # mesmo que tenham vindo de outro processo (Activity vs service.py).
         self._historico: List[Dict] = self.storage.get("historico_conversa", [])
         self._cache_imagens = {}
         self.MAX_HISTORICO = 300
@@ -125,6 +169,14 @@ class GroqService:
         try:
             import requests
 
+            # Sistema de memória via cache compartilhado: relê o histórico do
+            # disco (Storage já faz isso sempre fresco agora) antes de montar
+            # a mensagem, pra garantir que estamos vendo a conversa mais
+            # recente mesmo se ela veio de outro processo (chat aberto vs
+            # bolha em segundo plano). Isso ataca direto a causa mais provável
+            # da Spica parecer "recapitular"/perder o fio da conversa.
+            self._historico = self.storage.get("historico_conversa", [])
+
             prompt_ativo = SYSTEM_PROMPT_CONTINUO if modo_continuo else SYSTEM_PROMPT
             prompt_ativo = prompt_ativo + self._bloco_data_hora() + self.mood.bloco_prompt_humor()
             mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
@@ -154,7 +206,7 @@ class GroqService:
 
                 # Salva a mensagem limpa no histórico para não poluir a tela do usuário
                 self._historico.append({"role": "user", "content": mensagem})
-                
+
                 # Monta as mensagens formatadas para a API
                 for msg in self._historico[-self.WINDOW_API:]:
                     txt = msg["content"]
@@ -202,7 +254,7 @@ class GroqService:
 
             # Sistema de humor: a IA se autoclassifica no final da resposta com
             # [HUMOR:xxx] — aqui a tag é extraída (removida do texto que o usuário
-            # vê/ouve) e a expressão correspondente é disparada no modelo Live2D.
+            # vê/ouve) e a expressão correspondente é disparada na bolha.
             resposta, nome_expressao = self.mood.extrair_humor(resposta)
             if nome_expressao:
                 try:
@@ -210,6 +262,12 @@ class GroqService:
                     SpicaOverlay.aplicar_humor(nome_expressao)
                 except Exception as e:
                     self.logger.error(f"[Spica/Humor] Falha ao aplicar expressão: {e}")
+
+            # Limpa markdown (negrito, listas, etc) — o app não renderiza isso
+            # visualmente, e o texto às vezes é falado em voz alta, então
+            # símbolos tipo * e _ só atrapalhavam (o TTS chegava a narrar
+            # "asterisco").
+            resposta = self._limpar_formatacao(resposta)
 
             self._historico.append({"role": "assistant", "content": resposta})
             self.storage.set("historico_conversa", self._historico)

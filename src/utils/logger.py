@@ -1,5 +1,6 @@
 # logger.py — Log em arquivo e terminal
-import logging, os
+import logging
+import os
 
 
 class WindLogger:
@@ -7,12 +8,14 @@ class WindLogger:
 
     def __init__(self, nome="WindIA"):
         if not WindLogger._ok:
-            os.makedirs("data", exist_ok=True)
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            pasta_dados = os.path.join(base_dir, "data")
+            os.makedirs(pasta_dados, exist_ok=True)
             logging.basicConfig(
                 level=logging.INFO,
                 format="[%(asctime)s] %(levelname)s: %(message)s",
                 datefmt="%H:%M:%S",
-                handlers=[logging.FileHandler("data/wind.log", encoding="utf-8"),
+                handlers=[logging.FileHandler(os.path.join(pasta_dados, "wind.log"), encoding="utf-8"),
                           logging.StreamHandler()]
             )
             WindLogger._ok = True
