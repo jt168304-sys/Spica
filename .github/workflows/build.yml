@@ -13,6 +13,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+        # ADICIONADO: python-for-android roda "python -m venv venv" internamente
+        # (sem especificar versão) pra alguns passos de instalação de dependência
+        # via pip — nesse runner, "python" sem sufixo estava resolvendo pra 3.14,
+        # o que quebrava com ImportError (pip interno incompatível com código
+        # antigo do p4a), mesmo já tendo fixado a versão do python-for-android
+        # em si. Esse passo garante que "python"/"python3" apontam pra uma
+        # versão estável durante o job inteiro.
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -43,6 +55,12 @@ jobs:
       - name: Install Buildozer
         run: |
           pip3 install --user buildozer==1.5.0 virtualenv Cython==0.29.33
+          # FIXADO: python-for-android sem versão pinada estava puxando a
+          # versão mais recente do PyPI, que já traz Python 3.14 embutido
+          # (quebra o build: pip interno incompatível, ImportError
+          # BuildDependencyInstallError). A 2024.1.21 foi a última versão
+          # estável antes dessa mudança — instalando ela EXPLICITAMENTE
+          # aqui, o buildozer não tenta puxar outra por cima depois.
           pip3 install --user python-for-android==2024.1.21
 
       - name: Build APK
