@@ -16,7 +16,6 @@ android.extra_manifest_xml = extra_manifest.xml
 requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius
 
 # 6. ADICIONADO: forca o python-for-android a usar a branch master (estavel, Python <=3.12)
-p4a.branch = master
 
 orientation = portrait
 fullscreen = 0

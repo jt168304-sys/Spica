@@ -42,6 +42,7 @@ jobs:
 
       - name: Install Buildozer
         run: pip3 install --user buildozer==1.5.0 virtualenv Cython==0.29.33
+          pip3 install --user python-for-android==2024.1.21
 
       - name: Build APK
         run: ~/.local/bin/buildozer android debug
