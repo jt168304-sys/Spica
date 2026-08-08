@@ -41,7 +41,8 @@ jobs:
             libffi-dev libssl-dev cython3
 
       - name: Install Buildozer
-        run: pip3 install --user buildozer==1.5.0 virtualenv Cython==0.29.33
+        run: |
+          pip3 install --user buildozer==1.5.0 virtualenv Cython==0.29.33
           pip3 install --user python-for-android==2024.1.21
 
       - name: Build APK
