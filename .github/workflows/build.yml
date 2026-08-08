@@ -41,8 +41,8 @@ jobs:
           # usava o caminho relativo certo. Com o caminho errado, o cache
           # NUNCA funcionou de verdade: todo build baixava SDK/NDK/p4a do
           # zero, mesmo com a chave "v2" e tudo mais que já tentamos.
-          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-v3-
+          key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v4-
 
       - name: Install System Dependencies
         run: |
