@@ -33,6 +33,10 @@ android.services = Spicaservice:service.py:foreground:foregroundServiceType=micr
 
 android.accept_sdk_license = True
 android.minapi = 24
+# 7. ADICIONADO: android.api eh a chave que de fato controla qual API o buildozer pede ao SDK Manager
+# (diferente de android.sdk, que sozinho nao faz isso) - sem ela, usava um default (API 31) nao
+# instalado no runner do GitHub Actions, causando "Requested API target 31 is not available".
+android.api = 33
 android.sdk = 33
 android.build_tools_version = 33.0.2
 android.ndk = 25b
