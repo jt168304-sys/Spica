@@ -15,7 +15,12 @@ android.extra_manifest_xml = extra_manifest.xml
 
 requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius
 
-# 6. ADICIONADO: forca o python-for-android a usar a branch master (estavel, Python <=3.12)
+# 6. HISTÓRICO: o crash nativo (Segmentation Fault no on_draw do Kivy) que já
+# tivemos veio da combinação instável Python 3.14 + Kivy. Tentamos resolver
+# com "p4a.branch = master" aqui, mas essa chave só funciona quando o p4a vem
+# de um clone git controlado (p4a.source_dir) — não é o nosso caso (pip).
+# A fixação de verdade agora é no workflow do GitHub Actions
+# (.github/workflows/build.yml, "pip3 install python-for-android==2024.1.21").
 
 orientation = portrait
 fullscreen = 0
@@ -32,11 +37,20 @@ android.services = Spicaservice:service.py:foreground:foregroundServiceType=micr
 
 android.accept_sdk_license = True
 android.minapi = 24
-# 7. ADICIONADO: android.api eh a chave que de fato controla qual API o buildozer pede ao SDK Manager
-# (diferente de android.sdk, que sozinho nao faz isso) - sem ela, usava um default (API 31) nao
-# instalado no runner do GitHub Actions, causando "Requested API target 31 is not available".
+# 7. ADICIONADO: android.api é a chave que de fato controla qual API o
+# buildozer pede ao SDK Manager (diferente de android.sdk, que não faz
+# isso sozinho) — sem ela, o buildozer usava um default (API 31) que não
+# está pré-instalado no runner do GitHub Actions, causando o erro
+# "Requested API target 31 is not available".
 android.api = 33
 android.sdk = 33
+# 8. ADICIONADO: aponta pro SDK Android JÁ PRÉ-INSTALADO no runner do GitHub
+# Actions, em vez de deixar o buildozer baixar um do zero — o SDK baixado do
+# zero vem completamente vazio (sem nenhuma plataforma instalada), e o p4a
+# 2024.1.21 não instala automaticamente a plataforma que falta (só dá erro
+# "Requested API target XX is not available"). O caminho abaixo é confirmado
+# pela variável ANDROID_SDK_ROOT que já vem definida nesse runner.
+android.sdk_path = /usr/local/lib/android/sdk
 android.build_tools_version = 33.0.2
 android.ndk = 25b
 android.ndk_api = 24

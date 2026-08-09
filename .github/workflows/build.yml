@@ -17,13 +17,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-        # ADICIONADO: python-for-android roda "python -m venv venv" internamente
-        # (sem especificar versão) pra alguns passos de instalação de dependência
-        # via pip — nesse runner, "python" sem sufixo estava resolvendo pra 3.14,
-        # o que quebrava com ImportError (pip interno incompatível com código
-        # antigo do p4a), mesmo já tendo fixado a versão do python-for-android
-        # em si. Esse passo garante que "python"/"python3" apontam pra uma
-        # versão estável durante o job inteiro.
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -35,12 +28,6 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .buildozer
-          # CORRIGIDO: o buildozer cria .buildozer DENTRO do projeto (caminho
-          # relativo ao workspace), não em ~/.buildozer (home do usuário) —
-          # confirmado pelo próprio passo "Upload build log" abaixo, que já
-          # usava o caminho relativo certo. Com o caminho errado, o cache
-          # NUNCA funcionou de verdade: todo build baixava SDK/NDK/p4a do
-          # zero, mesmo com a chave "v2" e tudo mais que já tentamos.
           key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
           restore-keys: buildozer-v4-
 
@@ -55,13 +42,12 @@ jobs:
       - name: Install Buildozer
         run: |
           pip3 install --user buildozer==1.5.0 virtualenv Cython==0.29.33
-          # FIXADO: python-for-android sem versão pinada estava puxando a
-          # versão mais recente do PyPI, que já traz Python 3.14 embutido
-          # (quebra o build: pip interno incompatível, ImportError
-          # BuildDependencyInstallError). A 2024.1.21 foi a última versão
-          # estável antes dessa mudança — instalando ela EXPLICITAMENTE
-          # aqui, o buildozer não tenta puxar outra por cima depois.
           pip3 install --user python-for-android==2024.1.21
+
+      - name: Ensure Android SDK platform 33 is installed
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-33" "build-tools;33.0.2" "platform-tools"
 
       - name: Build APK
         run: ~/.local/bin/buildozer android debug
