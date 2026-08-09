@@ -148,6 +148,12 @@ class SpicaOverlay:
         ctx = PythonActivity.mActivity
         self.window_manager = ctx.getSystemService(Context.WINDOW_SERVICE)
         self.image_view = ImageView(ctx)
+        # CORRIGIDO: sem isso, o ImageView podia herdar um fundo (branco,
+        # em geral) do tema do Android — o PixelFormat.TRANSLUCENT ali embaixo
+        # só deixa a JANELA suportar transparência, não torna o fundo da View
+        # em si transparente sozinho. Isso aparecia como um fundo branco atrás
+        # da cabeça/cantos onde o desenho não cobre o quadrado inteiro.
+        self.image_view.setBackgroundColor(0)
 
         self.definir_avatar_png(falar=False)
 
@@ -155,7 +161,7 @@ class SpicaOverlay:
         flags = LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
         self.params = LayoutParams(
-            220, 220,
+            280, 280,
             window_type, flags, PixelFormat.TRANSLUCENT
         )
         self.params.gravity = 51

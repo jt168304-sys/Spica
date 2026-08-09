@@ -33,7 +33,7 @@ from src.services.tts_service import TtsService
 
 # ── Bolha de mensagem — MDCard atualizado para MD3 ───────────────────────────
 class Bolha(MDBoxLayout):
-    def __init__(self, texto, autor, **kwargs):
+    def __init__(self, texto, autor, animar=False, ao_terminar_anim=None, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "horizontal"
         self.size_hint_y = None
@@ -50,7 +50,7 @@ class Bolha(MDBoxLayout):
             md_bg_color=[0.15, 0.38, 0.72, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
         )
         label = MDLabel(
-            text=texto, size_hint_y=None, font_style="Body", role="medium",
+            text=("" if animar else texto), size_hint_y=None, font_style="Body", role="medium",
             theme_text_color="Custom", text_color=[1, 1, 1, 1],
         )
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
@@ -77,6 +77,24 @@ class Bolha(MDBoxLayout):
             self.add_widget(card)
 
         self.bind(minimum_height=self.setter("height"))
+
+        if animar:
+            self._animar_texto(label, texto, ao_terminar_anim)
+
+    def _animar_texto(self, label, texto_completo, ao_terminar=None, chars_por_tick=2, intervalo=0.016):
+        """Revela o texto aos poucos (tipo máquina de escrever) em vez de
+        aparecer tudo de uma vez — só usado nas respostas da Spica."""
+        estado = {"i": 0}
+
+        def _passo(dt):
+            estado["i"] += chars_por_tick
+            label.text = texto_completo[:estado["i"]]
+            if estado["i"] >= len(texto_completo):
+                if ao_terminar:
+                    ao_terminar()
+                return False  # encerra o Clock.schedule_interval
+
+        Clock.schedule_interval(_passo, intervalo)
 
     def _copiar(self):
         try:
@@ -360,8 +378,12 @@ class ChatScreen(MDScreen):
         self._rolar()
 
     def _spica(self, t):
-        self._msgs.add_widget(Bolha(t, "spica"))
-        self._rolar()
+        bolha = Bolha(t, "spica", animar=True, ao_terminar_anim=self._rolar)
+        self._msgs.add_widget(bolha)
+        # Acompanha o scroll enquanto o texto vai aparecendo (a bolha cresce
+        # de tamanho aos poucos), não só no final
+        for i in range(1, 8):
+            Clock.schedule_once(lambda dt: self._rolar(), i * 0.15)
 
     def _show_typing(self):
         self._digitando = Bolha("• • •", "spica")

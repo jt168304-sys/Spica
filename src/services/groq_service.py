@@ -114,7 +114,11 @@ class GroqService:
         self._cache_imagens = {}
         self.MAX_HISTORICO = 300
         self.WINDOW_API = 10
-        self.TIMEOUT_API = 35
+        # ATUALIZADO: 35s era curto demais pro groq/compound, que pode fazer
+        # até 10 chamadas de ferramenta (busca web, visitar site) numa única
+        # requisição — isso passava de 35s com frequência, derrubando a
+        # busca web por timeout bem na hora que ela mais precisava pesquisar.
+        self.TIMEOUT_API = 60
 
     @property
     def api_key(self):
@@ -220,7 +224,10 @@ class GroqService:
             payload = {
                 "model": modelo_atual,
                 "messages": mensagens_formatadas,
-                "max_tokens": 1024,
+                # Reduzido de 1024 pra 700 como trava extra contra textão —
+                # o prompt já pede brevidade, isso é reforço, não a solução
+                # principal (uma resposta séria de verdade ainda cabe em 700).
+                "max_tokens": 700,
                 "temperature": 0.5 if caminho_resolvido else 0.7,
             }
             # A visão (qwen3.6-27b) tem "thinking mode" ligado por padrão, o que vazava
