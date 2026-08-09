@@ -18,12 +18,14 @@ requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zi
 # 6. HISTÓRICO: o crash nativo (Segmentation Fault no on_draw do Kivy) que já
 # tivemos veio da combinação instável Python 3.14 + Kivy. IMPORTANTE: o
 # buildozer 1.5.0 SEMPRE usa o p4a vindo de um clone git (não o instalado via
-# pip). Por padrão ele clona o branch "master", que hoje compila Python 3.14.
-# Fixamos abaixo um commit específico do master (2025-10-08) que ainda usa
-# Python 3.11.13 (estável com Kivy) e que corrige o include path do Python no
-# archs.py (a tag v2024.01.21 tem um bug: monta "include/python3.1" e quebra
-# o build de pacotes com extensão C++ como o materialyoucolor).
-p4a.commit = 6b66944a
+# pip). Usamos aqui a tag v2024.01.21 (Python 3.11.5, estável com Kivy 2.3.0)
+# via p4a.source_dir — um checkout dessa tag preparado pelo workflow com um
+# patch de 1 linha no archs.py (a tag v2024.01.21 monta "include/python3.1"
+# por causa do "version[0:3]" e quebra o build de pacotes com extensão C++
+# como o materialyoucolor; o patch aponta pro Include do cpython, como o
+# p4a master faz). O workflow (.github/workflows/build.yml) prepara esse
+# checkout em ~/p4a-src antes de rodar o buildozer.
+p4a.source_dir = ~/p4a-src
 
 orientation = portrait
 fullscreen = 0
