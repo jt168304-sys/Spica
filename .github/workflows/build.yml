@@ -62,20 +62,20 @@ jobs:
             git -C "$HOME/p4a-src" checkout v2024.01.21
           fi
           python3 - "$HOME/p4a-src" <<'EOF'
-import sys
-path = sys.argv[1] + "/pythonforandroid/archs.py"
-src = open(path, "r", encoding="utf-8").read()
-old = ("            python_includes=join(\n"
-"                self.ctx.get_python_install_dir(self.arch),\n"
-"                'include/python{}'.format(self.ctx.python_recipe.version[0:3]),\n"
-"            ),")
-new = ("            python_includes=join(\n"
-"                Recipe.get_recipe(\"python3\", self.ctx).include_root(self.arch)\n"
-"            ),")
-assert old in src, "archs.py pattern not found"
-open(path, "w", encoding="utf-8").write(src.replace(old, new))
-print("patched archs.py include path")
-EOF
+          import sys
+          path = sys.argv[1] + "/pythonforandroid/archs.py"
+          src = open(path, "r", encoding="utf-8").read()
+          old = ("            python_includes=join(\n"
+          "                self.ctx.get_python_install_dir(self.arch),\n"
+          "                'include/python{}'.format(self.ctx.python_recipe.version[0:3]),\n"
+          "            ),")
+          new = ("            python_includes=join(\n"
+          "                Recipe.get_recipe(\"python3\", self.ctx).include_root(self.arch)\n"
+          "            ),")
+          assert old in src, "archs.py pattern not found"
+          open(path, "w", encoding="utf-8").write(src.replace(old, new))
+          print("patched archs.py include path")
+          EOF
 
       - name: Build APK
         run: ~/.local/bin/buildozer android debug
