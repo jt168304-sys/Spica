@@ -3,6 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -28,8 +30,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .buildozer
-          key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-v4-
+          key: buildozer-v5-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v5-
 
       - name: Install System Dependencies
         run: |
@@ -42,7 +44,6 @@ jobs:
       - name: Install Buildozer
         run: |
           pip3 install --user "sh<2.0" buildozer==1.5.0 virtualenv Cython==0.29.33
-          pip3 install --user python-for-android==2024.1.21
 
       - name: Ensure Android SDK platform 33 is installed
         run: |
