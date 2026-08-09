@@ -16,11 +16,16 @@ android.extra_manifest_xml = extra_manifest.xml
 requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius
 
 # 6. HISTÓRICO: o crash nativo (Segmentation Fault no on_draw do Kivy) que já
-# tivemos veio da combinação instável Python 3.14 + Kivy. Tentamos resolver
-# com "p4a.branch = master" aqui, mas essa chave só funciona quando o p4a vem
-# de um clone git controlado (p4a.source_dir) — não é o nosso caso (pip).
-# A fixação de verdade agora é no workflow do GitHub Actions
-# (.github/workflows/build.yml, "pip3 install python-for-android==2024.1.21").
+# tivemos veio da combinação instável Python 3.14 + Kivy. IMPORTANTE: o
+# buildozer 1.5.0 SEMPRE usa o p4a vindo de um clone git (não o instalado via
+# pip). Usamos aqui a tag v2024.01.21 (Python 3.11.5, estável com Kivy 2.3.0)
+# via p4a.source_dir — um checkout dessa tag preparado pelo workflow com um
+# patch de 1 linha no archs.py (a tag v2024.01.21 monta "include/python3.1"
+# por causa do "version[0:3]" e quebra o build de pacotes com extensão C++
+# como o materialyoucolor; o patch aponta pro Include do cpython, como o
+# p4a master faz). O workflow (.github/workflows/build.yml) prepara esse
+# checkout em ~/p4a-src antes de rodar o buildozer.
+p4a.source_dir = ~/p4a-src
 
 orientation = portrait
 fullscreen = 0

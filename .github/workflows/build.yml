@@ -3,6 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -28,8 +30,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .buildozer
-          key: buildozer-v4-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-v4-
+          key: buildozer-v5-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v5-
 
       - name: Install System Dependencies
         run: |
@@ -42,7 +44,6 @@ jobs:
       - name: Install Buildozer
         run: |
           pip3 install --user "sh<2.0" buildozer==1.5.0 virtualenv Cython==0.29.33
-          pip3 install --user python-for-android==2024.1.21
 
       - name: Ensure Android SDK platform 33 is installed
         run: |
@@ -51,6 +52,30 @@ jobs:
           sdkmanager "platforms;android-33" "build-tools;33.0.2" "platform-tools"
           mkdir -p $ANDROID_SDK_ROOT/tools/bin
           ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
+
+      - name: Prepare pinned p4a v2024.01.21 with archs.py fix
+        run: |
+          if [ ! -d "$HOME/p4a-src/.git" ]; then
+            git clone --branch v2024.01.21 --single-branch --depth 1 https://github.com/kivy/python-for-android.git "$HOME/p4a-src"
+          else
+            git -C "$HOME/p4a-src" fetch origin v2024.01.21
+            git -C "$HOME/p4a-src" checkout v2024.01.21
+          fi
+          python3 - "$HOME/p4a-src" <<'EOF'
+          import sys
+          path = sys.argv[1] + "/pythonforandroid/archs.py"
+          src = open(path, "r", encoding="utf-8").read()
+          old = ("            python_includes=join(\n"
+          "                self.ctx.get_python_install_dir(self.arch),\n"
+          "                'include/python{}'.format(self.ctx.python_recipe.version[0:3]),\n"
+          "            ),")
+          new = ("            python_includes=join(\n"
+          "                Recipe.get_recipe(\"python3\", self.ctx).include_root(self.arch)\n"
+          "            ),")
+          assert old in src, "archs.py pattern not found"
+          open(path, "w", encoding="utf-8").write(src.replace(old, new))
+          print("patched archs.py include path")
+          EOF
 
       - name: Build APK
         run: ~/.local/bin/buildozer android debug
