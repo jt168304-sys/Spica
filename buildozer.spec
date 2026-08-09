@@ -19,9 +19,11 @@ requirements = python3, kivy, https://github.com/kivymd/KivyMD/archive/master.zi
 # tivemos veio da combinação instável Python 3.14 + Kivy. IMPORTANTE: o
 # buildozer 1.5.0 SEMPRE usa o p4a vindo de um clone git (não o instalado via
 # pip). Por padrão ele clona o branch "master", que hoje compila Python 3.14.
-# A forma correta de fixar o p4a é via "p4a.branch" abaixo. A tag v2024.01.21
-# (Python 3.11.5) é a versão estável que queremos.
-p4a.branch = v2024.01.21
+# Fixamos abaixo um commit específico do master (2025-10-08) que ainda usa
+# Python 3.11.13 (estável com Kivy) e que corrige o include path do Python no
+# archs.py (a tag v2024.01.21 tem um bug: monta "include/python3.1" e quebra
+# o build de pacotes com extensão C++ como o materialyoucolor).
+p4a.commit = 6b66944a
 
 orientation = portrait
 fullscreen = 0
