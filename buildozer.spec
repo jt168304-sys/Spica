@@ -63,3 +63,5 @@ android.allow_backup = True
 [buildozer]
 log_level = 2
 warn_on_root = 1
+
+# pip travado - versoes novas quebram import interno do p4a 2024.1.21

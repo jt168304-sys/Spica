@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      PIP_CONSTRAINT: /tmp/pipconstraint.txt
 
     steps:
       - name: Checkout repository
@@ -38,6 +40,9 @@ jobs:
             python3-setuptools autoconf libtool pkg-config zlib1g-dev \
             libncurses5-dev libncursesw5-dev libtinfo5 cmake \
             libffi-dev libssl-dev cython3
+
+      - name: Pin pip version
+        run: echo "pip<24" > /tmp/pipconstraint.txt
 
       - name: Install Buildozer
         run: |
