@@ -13,7 +13,7 @@ source.main = main.py
 # Sem isso, a escuta falha rapidamente em ciclos curtos no Android 11+ (funciona no 10 e antes).
 android.extra_manifest_xml = extra_manifest.xml
 
-requirements = python3==3.11.6, hostpython3==3.11.6, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius, materialshapes
+requirements = python3==3.11.6, hostpython3==3.11.6, kivy, https://github.com/kivymd/KivyMD/archive/master.zip, https://github.com/T-Dynamos/materialyoucolor-python/archive/main.zip, asynckivy, requests, certifi, urllib3, plyer, pyjnius, materialshapes==0.3
 
 # 6. HISTÓRICO: o crash nativo (Segmentation Fault no on_draw do Kivy) que já
 # tivemos veio da combinação instável Python 3.14 + Kivy. Tentamos resolver
