@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       PIP_CONSTRAINT: /tmp/pipconstraint.txt
+      PIP_NO_BUILD_ISOLATION: "1"
 
     steps:
       - name: Checkout repository
@@ -30,8 +31,8 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .buildozer
-          key: buildozer-v5-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-v5-
+          key: buildozer-v6-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-v6-
 
       - name: Install System Dependencies
         run: |
