@@ -23,7 +23,7 @@ class _CardMensagem(MDCard):
 from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.button import MDIconButton
-from kivymd.uix.appbar import MDTopAppBar, MDTopAppBarTrailingButtonContainer, MDTopAppBarTitle
+from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.app import MDApp
 
 # Import do seletor de imagens seguro e do novo serviço de voz global centralizado
@@ -128,17 +128,13 @@ class ChatScreen(MDScreen):
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
 
-        barra_superior = MDTopAppBar(type="small")
-        titulo_app = MDTopAppBarTitle(text="Spica")
-        barra_superior.add_widget(titulo_app)
-        
-        container_acoes = MDTopAppBarTrailingButtonContainer()
-        btn_cog = MDIconButton(icon="cog-outline", on_release=lambda x: MDApp.get_running_app().navigate_to("configuracoes"))
-        btn_del = MDIconButton(icon="delete-sweep-outline", on_release=lambda x: self._limpar())
-        
-        container_acoes.add_widget(btn_cog)
-        container_acoes.add_widget(btn_del)
-        barra_superior.add_widget(container_acoes)
+        barra_superior = MDTopAppBar(
+            title="Spica",
+            right_action_items=[
+                ["cog-outline", lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
+                ["delete-sweep-outline", lambda x: self._limpar()],
+            ],
+        )
         raiz.add_widget(barra_superior)
 
         self._scroll = ScrollView(
