@@ -7,7 +7,7 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDButton, MDButtonText, MDIconButton
+from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
 from kivymd.uix.list import (
     MDList, 
     MDListItem, 
@@ -81,9 +81,8 @@ class SettingsScreen(MDScreen):
             text="Groq API Key",
             font_style="Title", role="medium", halign="left",
         ))
-        btn = MDButton(
-            MDButtonText(text="Configurar Chave API"),
-            style="filled",
+        btn = MDRaisedButton(
+            text="Configurar Chave API",
             size_hint_y=None, height=dp(40),
             on_release=lambda x: self._dialogo_api_key()
         )
@@ -104,9 +103,8 @@ class SettingsScreen(MDScreen):
             font_style="Label", role="medium", theme_text_color="Secondary",
             size_hint_y=None, height=dp(48),
         ))
-        btn = MDButton(
-            MDButtonText(text='Testar Microfone'), 
-            style='filled',
+        btn = MDRaisedButton(
+            text='Testar Microfone',
             size_hint_y=None, height=dp(36),
             on_release=lambda x: self._testar_mic(),
         )
@@ -138,15 +136,13 @@ class SettingsScreen(MDScreen):
             size_hint_y=None, height=dp(40),
         ))
         
-        btn_ativar = MDButton(
-            MDButtonText(text='Ativar Bolha'), 
-            style='filled',
+        btn_ativar = MDRaisedButton(
+            text='Ativar Bolha',
             size_hint_y=None, height=dp(36),
             on_release=lambda x: self._ativar_bolha(),
         )
-        btn_permissao = MDButton(
-            MDButtonText(text="Permissão de Sobreposição"),
-            style='text',
+        btn_permissao = MDFlatButton(
+            text="Permissão de Sobreposição",
             size_hint_y=None, height=dp(30),
             on_release=lambda x: self._pedir_permissao_overlay(),
         )
@@ -246,10 +242,10 @@ class SettingsScreen(MDScreen):
             self.clear_widgets()
             Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
 
-        btn_cancelar = MDButton(MDButtonText(text="Cancelar"), style="text")
+        btn_cancelar = MDFlatButton(text="Cancelar")
         btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
         
-        btn_salvar = MDButton(MDButtonText(text="Salvar"), style="text")
+        btn_salvar = MDFlatButton(text="Salvar")
         btn_salvar.bind(on_release=salvar)
 
         dialogo = MDDialog(
