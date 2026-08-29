@@ -1,21 +1,15 @@
-# settings_screen.py — Spica v14 (Otimizado e Corrigido para KivyMD 2.0)
+# settings_screen.py — Spica v14 (Otimizado para KivyMD 1.2.0)
 from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.switch import Switch
-from kivy.clock import Clock  # Import unificado no topo do arquivo
+from kivy.clock import Clock
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
-from kivymd.uix.list import (
-    MDList, 
-    MDListItem, 
-    MDListItemLeadingIcon, 
-    MDListItemHeadlineText, 
-    MDListItemSupportingText
-)
-from kivymd.uix.appbar import MDTopAppBar, MDTopAppBarLeadingButtonContainer, MDTopAppBarTitle
+from kivymd.uix.list import MDList, TwoLineIconListItem, IconLeftWidget
+from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.app import MDApp
 
 
@@ -26,48 +20,35 @@ class SettingsScreen(MDScreen):
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
-        
-        # Barra de ferramentas adaptada e padronizada para KivyMD 2.0
-        barra_superior = MDTopAppBar(type="small")
-        titulo_config = MDTopAppBarTitle(text="Configurações")
-        barra_superior.add_widget(titulo_config)
-        
-        container_voltar = MDTopAppBarLeadingButtonContainer()
-        btn_voltar = MDIconButton(icon="arrow-left", on_release=lambda x: MDApp.get_running_app().navigate_to("chat"))
-        container_voltar.add_widget(btn_voltar)
-        barra_superior.add_widget(container_voltar)
+
+        # Barra de ferramentas KivyMD 1.2.0
+        barra_superior = MDTopAppBar(title="Configurações")
         raiz.add_widget(barra_superior)
 
-        scroll = ScrollView()
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         lista = MDList(padding=dp(8), spacing=dp(14))
 
-        # Adicionando os cards dinâmicos existentes
-        if hasattr(self, '_card_api_key'): 
-            lista.add_widget(self._card_api_key())
-        if hasattr(self, '_card_voz'): 
-            lista.add_widget(self._card_voz())
-        if hasattr(self, '_card_bolha'): 
-            lista.add_widget(self._card_bolha())
+        # Adicionando os cards
+        lista.add_widget(self._card_api_key())
+        lista.add_widget(self._card_voz())
+        lista.add_widget(self._card_bolha())
 
         # Configurações de Switch
         for cfg in [
             {"icone": "theme-light-dark", "titulo": "Modo Escuro",
              "sub": "Alternar tema claro/escuro", "chave": "theme_mode", "valor_on": "Dark"},
         ]:
-            if hasattr(self, '_item_switch'):
-                lista.add_widget(self._item_switch(cfg))
+            lista.add_widget(self._item_switch(cfg))
 
-        # Item "Sobre o Spica" reconstruído peça por peça no padrão MD3
-        item_sobre = MDListItem()
-        icone_sobre = MDListItemLeadingIcon(icon="information-outline")
-        texto_titulo = MDListItemHeadlineText(text="Sobre o Spica")
-        texto_sub = MDListItemSupportingText(text="VTuber-IA • Python + KivyMD + Groq")
-        
+        # Item "Sobre o Spica"
+        item_sobre = TwoLineIconListItem(
+            text="Sobre o Spica", 
+            secondary_text="VTuber-IA • Python + KivyMD + Groq"
+        )
+        icone_sobre = IconLeftWidget(icon="information-outline")
         item_sobre.add_widget(icone_sobre)
-        item_sobre.add_widget(texto_titulo)
-        item_sobre.add_widget(texto_sub)
         lista.add_widget(item_sobre)
-        
+
         scroll.add_widget(lista)
         raiz.add_widget(scroll)
         self.add_widget(raiz)
@@ -79,7 +60,7 @@ class SettingsScreen(MDScreen):
         )
         card.add_widget(MDLabel(
             text="Groq API Key",
-            font_style="Title", role="medium", halign="left",
+            font_style="H6", halign="left",
         ))
         btn = MDRaisedButton(
             text="Configurar Chave API",
@@ -96,11 +77,11 @@ class SettingsScreen(MDScreen):
         )
         card.add_widget(MDLabel(
             text="Sistema de Voz",
-            font_style="Title", role="medium", halign="left",
+            font_style="H6", halign="left",
         ))
         card.add_widget(MDLabel(
             text="Use o microfone no chat para falar com a Spica.\nEla ouve e responde automaticamente.",
-            font_style="Label", role="medium", theme_text_color="Secondary",
+            font_style="Body2", theme_text_color="Secondary",
             size_hint_y=None, height=dp(48),
         ))
         btn = MDRaisedButton(
@@ -116,7 +97,6 @@ class SettingsScreen(MDScreen):
             app = MDApp.get_running_app()
             chat = app.screen_manager.get_screen("chat")
             app.navigate_to("chat")
-            # Utiliza o Clock de forma limpa e direta
             Clock.schedule_once(lambda dt: chat._iniciar_mic(), 0.3)
         except Exception as e:
             print(f"[Spica] testar_mic: {e}")
@@ -128,14 +108,14 @@ class SettingsScreen(MDScreen):
         )
         card.add_widget(MDLabel(
             text="Bolha Flutuante",
-            font_style="Title", role="medium", halign="left",
+            font_style="H6", halign="left",
         ))
         card.add_widget(MDLabel(
             text="Aparece sobre outros apps.\nToque na bolha para abrir o menu de voz.",
-            font_style="Label", role="medium", theme_text_color="Secondary",
+            font_style="Body2", theme_text_color="Secondary",
             size_hint_y=None, height=dp(40),
         ))
-        
+
         btn_ativar = MDRaisedButton(
             text='Ativar Bolha',
             size_hint_y=None, height=dp(36),
@@ -185,16 +165,12 @@ class SettingsScreen(MDScreen):
         app = MDApp.get_running_app()
         atual  = app.settings.get(cfg["chave"], cfg["valor_on"])
         ligado = (atual == cfg["valor_on"]) if isinstance(cfg["valor_on"], str) else bool(atual)
-        
-        item = MDListItem()
-        icone = MDListItemLeadingIcon(icon=cfg["icone"])
-        titulo = MDListItemHeadlineText(text=cfg["titulo"])
-        sub = MDListItemSupportingText(text=cfg["sub"])
-        
+
+        item = TwoLineIconListItem(text=cfg["titulo"], secondary_text=cfg["sub"])
+        icone = IconLeftWidget(icon=cfg["icone"])
+
         item.add_widget(icone)
-        item.add_widget(titulo)
-        item.add_widget(sub)
-        
+
         sw = Switch(active=ligado, size_hint=(None, None), size=(dp(60), dp(30)),
                     pos_hint={"center_y": 0.5})
         sw.bind(active=lambda inst, val, c=cfg: self._salvar_switch(c, val))
@@ -212,29 +188,16 @@ class SettingsScreen(MDScreen):
             MDApp.get_running_app().toggle_theme()
 
     def _dialogo_api_key(self):
-        from kivymd.uix.dialog import (
-            MDDialog,
-            MDDialogIcon,
-            MDDialogHeadlineText,
-            MDDialogSupportingText,
-            MDDialogContentContainer,
-            MDDialogButtonContainer
-        )
+        from kivymd.uix.dialog import MDDialog
         from kivymd.uix.textfield import MDTextField
-        
+
         app = MDApp.get_running_app()
-        
+
         campo = MDTextField(
             hint_text="Cole sua Groq API key aqui",
             text=app.settings.get("api_key", ""),
-            mode="outlined",
+            mode="rectangle",
         )
-        
-        container_conteudo = MDDialogContentContainer(
-            orientation="vertical",
-            spacing=dp(12),
-        )
-        container_conteudo.add_widget(campo)
 
         def salvar(*a):
             app.settings.set("api_key", campo.text.strip())
@@ -243,20 +206,14 @@ class SettingsScreen(MDScreen):
             Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
 
         btn_cancelar = MDFlatButton(text="Cancelar")
-        btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
-        
         btn_salvar = MDFlatButton(text="Salvar")
-        btn_salvar.bind(on_release=salvar)
 
         dialogo = MDDialog(
-            MDDialogIcon(icon="key-variant"),
-            MDDialogHeadlineText(text="Groq API Key"),
-            MDDialogSupportingText(text="1. Acesse console.groq.com\n2. Crie sua conta e gere uma chave."),
-            container_conteudo,
-            MDDialogButtonContainer(
-                btn_cancelar,
-                btn_salvar,
-                spacing=dp(8),
-            ),
+            title="Groq API Key",
+            type="custom",
+            content_cls=campo,
+            buttons=[btn_cancelar, btn_salvar],
         )
+        btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
+        btn_salvar.bind(on_release=salvar)
         dialogo.open()
