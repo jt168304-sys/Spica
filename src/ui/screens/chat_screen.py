@@ -50,7 +50,7 @@ class Bolha(MDBoxLayout):
             md_bg_color=[0.15, 0.38, 0.72, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
         )
         label = MDLabel(
-            text=("" if animar else texto), size_hint_y=None, font_style="Body", role="medium",
+            text=("" if animar else texto), size_hint_y=None, font_style="Body1",
             theme_text_color="Custom", text_color=[1, 1, 1, 1],
         )
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
