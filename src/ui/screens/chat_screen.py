@@ -159,7 +159,7 @@ class ChatScreen(MDScreen):
 
         self._indicador = MDLabel(
             text="", size_hint_y=None, height=0,
-            halign="center", font_style="Label", role="small",
+            halign="center", font_style="Caption",
             theme_text_color="Primary",
         )
         raiz.add_widget(self._indicador)
@@ -356,7 +356,7 @@ class ChatScreen(MDScreen):
                            size_hint=(None, None), size=(dp(34), dp(34)),
                            on_release=lambda x: self._del_img())
         lbl = MDLabel(text="Pronta — escreva ou envie",
-                      font_style="Label", role="small", theme_text_color="Secondary")
+                      font_style="Caption", theme_text_color="Secondary")
         self._prev.add_widget(img)
         self._prev.add_widget(btn)
         self._prev.add_widget(lbl)
