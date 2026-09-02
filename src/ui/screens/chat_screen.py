@@ -175,7 +175,7 @@ class ChatScreen(MDScreen):
         ))
 
         self._campo = MDTextField(
-            hint_text="Mensagem...", mode="outlined",
+            hint_text="Mensagem...", mode="rectangle",
             multiline=False, size_hint_x=1,
             keyboard_suggestions=False,
             radius=[dp(20)],
