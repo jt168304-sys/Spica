@@ -47,7 +47,7 @@ class Bolha(MDBoxLayout):
             radius=[dp(16), dp(16),
                     dp(4 if e_usuario else 16),
                     dp(16 if e_usuario else 4)],
-            md_bg_color=[0.15, 0.38, 0.72, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
+            md_bg_color=[0.29, 0.11, 0.45, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
         )
         label = MDLabel(
             text=("" if animar else texto), size_hint_y=None, font_style="Body1",

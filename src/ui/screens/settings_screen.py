@@ -22,7 +22,7 @@ class SettingsScreen(MDScreen):
         raiz = MDBoxLayout(orientation="vertical")
 
         # Barra de ferramentas KivyMD 1.2.0
-        barra_superior = MDTopAppBar(title="Configurações")
+        barra_superior = MDTopAppBar(title="Configurações", left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("chat")]])
         raiz.add_widget(barra_superior)
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
@@ -32,13 +32,6 @@ class SettingsScreen(MDScreen):
         lista.add_widget(self._card_api_key())
         lista.add_widget(self._card_voz())
         lista.add_widget(self._card_bolha())
-
-        # Configurações de Switch
-        for cfg in [
-            {"icone": "theme-light-dark", "titulo": "Modo Escuro",
-             "sub": "Alternar tema claro/escuro", "chave": "theme_mode", "valor_on": "Dark"},
-        ]:
-            lista.add_widget(self._item_switch(cfg))
 
         # Item "Sobre o Spica"
         item_sobre = TwoLineIconListItem(

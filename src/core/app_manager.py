@@ -39,14 +39,14 @@ class WindApp(MDApp):
 
     def _apply_theme(self):
         # Correção KivyMD 2.0 / Material 3: Paletas de cores e temas agora usam strings específicas
-        self.theme_cls.primary_palette = "Purple"
+        self.theme_cls.primary_palette = "DeepPurple"
         
         # Obtém o modo salvo. KivyMD exige "Light" ou "Dark" (capitalizado), não minúsculo.
         modo_salvo = self.settings.get("theme_mode", "Dark").strip().capitalize()
         if modo_salvo not in ["Dark", "Light"]:
             modo_salvo = "Dark"
 
-        self.theme_cls.theme_style = modo_salvo
+        self.theme_cls.theme_style = "Dark"
 
     def _register_screens(self):
         from src.ui.screens.chat_screen import ChatScreen
