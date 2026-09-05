@@ -113,7 +113,7 @@ class GroqService:
         self._historico: List[Dict] = self.storage.get("historico_conversa", [])
         self._cache_imagens = {}
         self.MAX_HISTORICO = 300
-        self.WINDOW_API = 10
+        self.WINDOW_API = 6
         # ATUALIZADO: 35s era curto demais pro groq/compound, que pode fazer
         # até 10 chamadas de ferramenta (busca web, visitar site) numa única
         # requisição — isso passava de 35s com frequência, derrubando a
@@ -216,7 +216,7 @@ class GroqService:
                     txt = msg["content"]
                     if isinstance(txt, list):
                         txt = txt[0]["text"] if txt else ""
-                    mensagens_formatadas.append({"role": msg["role"], "content": str(txt)})
+                    mensagens_formatadas.append({"role": msg["role"], "content": str(txt)[:800]})
 
             if len(self._historico) > self.MAX_HISTORICO:
                 self._historico = self._historico[-self.MAX_HISTORICO:]
