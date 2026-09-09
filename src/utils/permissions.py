@@ -17,7 +17,8 @@ class PermissionManager:
             for nome in [
                 "INTERNET", "CAMERA", "RECORD_AUDIO", "VIBRATE",
                 "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE",
-                "READ_MEDIA_IMAGES",   # Android 13+
+                "READ_MEDIA_IMAGES",
+                "POST_NOTIFICATIONS",
             ]:
                 try:
                     perms.append(getattr(Permission, nome))

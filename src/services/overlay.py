@@ -339,7 +339,19 @@ class SpicaOverlay:
         estado = "ativada" if self.escuta_continua else "desativada"
         print(f"[Spica/Overlay] Escuta continua {estado}.")
         if self.escuta_continua:
+            try:
+                from src.services.fg_service import iniciar_servico
+                iniciar_servico("escuta")
+            except Exception as e:
+                print(f"[Spica/Overlay] Falha ao subir FGS: {e}")
+            self._toast("Escuta continua ativada")
             self._ciclo_escuta_continua()
+        else:
+            try:
+                from src.services.voice_service import VoiceService
+                VoiceService.get_instance().destruir()
+            except Exception:
+                pass
 
     def _ciclo_escuta_continua(self):
         """Escuta uma fala. Ao terminar de processar e responder, chama a si mesmo de novo."""
@@ -359,7 +371,11 @@ class SpicaOverlay:
                 slog("TTS parado antes de reiniciar escuta")
             except Exception as e:
                 slog(f"Falha ao parar TTS antes de escutar: {e}")
-            VoiceService.get_instance().ouvir(self._processar_escuta_continua, usar_clock=False)
+            VoiceService.get_instance().ouvir(
+                self._processar_escuta_continua,
+                usar_clock=False,
+                captura_local=True,
+            )
         except Exception as e:
             print(f"[Spica/Overlay] Erro no ciclo de escuta continua: {e}")
 
@@ -492,8 +508,19 @@ class SpicaOverlay:
                 self.window_manager.removeView(self.image_view)
                 self.image_view = None
                 self.iniciado = False
+                self.escuta_continua = False
                 if SpicaOverlay._instancia_ativa is self:
                     SpicaOverlay._instancia_ativa = None
+                try:
+                    from src.services.voice_service import VoiceService
+                    VoiceService.get_instance().destruir()
+                except Exception:
+                    pass
+                try:
+                    from src.services.fg_service import parar_servico
+                    parar_servico()
+                except Exception:
+                    pass
                 print("[Spica/Overlay] Overlay removido e memória liberada corretamente")
             except Exception as e:
                 print(f"[Spica/Overlay] Erro ao remover overlay: {e}")

@@ -2,7 +2,7 @@
 title = Spica
 package.name = spica
 package.domain = com.spica
-version = 1.0
+version = 1.1
 source.dir = .
 # 1. ADICIONADO: Garantindo que a extensão .kv (se houver) e os atlas entrem no APK
 source.include_exts = py,png,jpg,json,kv,atlas,moc3,html,js
@@ -28,7 +28,7 @@ fullscreen = 0
 icon.filename = %(source.dir)s/Spica.png
 
 # 2. ATUALIZADO: FOREGROUND_SERVICE_MICROPHONE (obrigatório Android 14 p/ mic em foreground service) e WAKE_LOCK (faltava — sem ela, service.py crasha ao adquirir o wake_lock)
-android.permissions = INTERNET,RECORD_AUDIO,VIBRATE,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,WAKE_LOCK,CAMERA,READ_MEDIA_IMAGES,SYSTEM_ALERT_WINDOW
+android.permissions = INTERNET,RECORD_AUDIO,VIBRATE,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,WAKE_LOCK,CAMERA,READ_MEDIA_IMAGES,SYSTEM_ALERT_WINDOW,POST_NOTIFICATIONS
 
 # 3. CORRIGIDO: faltava ":foreground" — sem isso o Android NUNCA chamava startForeground() de verdade,
 # então o serviço rodava como service comum e era morto em minutos pelo limite de segundo plano.

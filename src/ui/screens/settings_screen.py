@@ -130,6 +130,23 @@ class SettingsScreen(MDScreen):
                 print("[Spica] Permissão de sobreposição não concedida. Abrindo tela de permissão...")
                 pedir_permissao_overlay()
                 return
+            try:
+                from android.permissions import check_permission, request_permissions, Permission
+                faltando = []
+                for nome in ("RECORD_AUDIO", "POST_NOTIFICATIONS"):
+                    perm = getattr(Permission, nome, None)
+                    if perm is not None and not check_permission(perm):
+                        faltando.append(perm)
+                if faltando:
+                    def _apos(perms, grants):
+                        if grants and all(grants):
+                            Clock.schedule_once(lambda dt: self._ativar_bolha(), 0.3)
+                    request_permissions(faltando, _apos)
+                    return
+            except Exception as e:
+                print(f"[Spica] perms bolha: {e}")
+            from src.services.fg_service import iniciar_servico
+            iniciar_servico("escuta")
             app = MDApp.get_running_app()
             if not (hasattr(app, "bubble") and app.bubble):
                 app.bubble = SpicaOverlay()
