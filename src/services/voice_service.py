@@ -1,15 +1,10 @@
 # voice_service.py — Reconhecimento de voz
 #
-# Dois caminhos:
-# 1) SpeechRecognizer (Google) — funciona com o app EM FOCO. No Android 12+
-#    (e de forma dura no 14 / Motorola), o Google grava em OUTRO processo e
-#    o sistema entrega SILENCIO quando a Spica nao esta visivel. O LED do
-#    microfone acende, mas nao chega voz.
-# 2) AudioRecord no nosso UID + Whisper (Groq) — o PCM e capturado no
-#    processo da Spica, que herda o foregroundServiceType=microphone.
-#    Esse e o unico caminho confiavel pra escuta continua fora do app.
+# Chat (app em foco): SpeechRecognizer do Google.
+# Escuta continua / bolha: AudioRecord no UID da Spica + Whisper.
+# Nao espera IPC do FGS para abrir o microfone — o LED tem que acender
+# no clique. O FGS so segura o tipo microphone no Android 14.
 import threading
-import time
 from kivy.clock import Clock
 from src.utils.logger import WindLogger
 
@@ -73,9 +68,9 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
     @java_method('(I)V')
     def onError(self, error):
         from src.utils.service_log import slog
-        slog(f"onError chamado, codigo={error}")
-        self.logger.error(f"[Spica/Voice] Erro no Reconhecedor Android cod: {error}")
-        msg = "Nao ouvi" if error == 7 else f"Erro ao ouvir ({error})"
+        slog("onError chamado, codigo=%s" % error)
+        self.logger.error("[Spica/Voice] Erro no Reconhecedor Android cod: %s" % error)
+        msg = "Nao ouvi" if error == 7 else "Erro ao ouvir (%s)" % error
         self._entregar(msg)
 
     @java_method('(Landroid/os/Bundle;)V')
@@ -84,7 +79,7 @@ class RecognitionListenerImpl(PythonJavaClass if HAS_ANDROID else object):
         matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if matches and matches.size() > 0:
             texto = matches.get(0)
-            slog(f"onResults capturou: {texto!r}")
+            slog("onResults capturou: %r" % texto)
             self._entregar(texto)
         else:
             slog("onResults sem matches, entregando 'Nao ouvi'")
@@ -118,7 +113,7 @@ class VoiceService:
         if not HAS_ANDROID:
             callback("Microfone indisponivel neste sistema.")
             return
-        if captura_local or self._precisa_captura_local():
+        if captura_local:
             threading.Thread(
                 target=self._ouvir_local,
                 args=(callback, usar_clock),
@@ -126,13 +121,6 @@ class VoiceService:
             ).start()
             return
         self._ouvir_android(callback, usar_clock)
-
-    def _precisa_captura_local(self):
-        try:
-            from src.services.fg_service import estamos_no_servico
-            return estamos_no_servico()
-        except Exception:
-            return False
 
     def _ouvir_local(self, callback, usar_clock=True):
         from src.utils.service_log import slog
@@ -145,18 +133,11 @@ class VoiceService:
                 callback(texto)
 
         try:
-            from src.services.fg_service import estamos_no_servico, iniciar_servico
-            if not estamos_no_servico():
+            try:
+                from src.services.fg_service import iniciar_servico
                 iniciar_servico("escuta")
-                time.sleep(0.4)
-                from src.services.listen_ipc import pedir_escuta
-                slog("pedindo captura ao FGS")
-                texto_fgs = pedir_escuta()
-                if texto_fgs is not None:
-                    slog("FGS devolveu: %r" % texto_fgs[:80])
-                    entregar(texto_fgs)
-                    return
-                slog("FGS nao respondeu, caindo no AudioRecord da Activity")
+            except Exception as e:
+                slog("FGS no ouvir_local: %s" % e)
 
             with self._lock:
                 if self._mic is not None:
@@ -166,7 +147,7 @@ class VoiceService:
                         pass
                 self._mic = MicRecorder()
                 mic = self._mic
-            slog("captura local AudioRecord iniciada")
+            slog("AudioRecord.start agora (sem esperar FGS/IPC)")
             wav = mic.capturar_utterance()
             if not wav:
                 slog("captura local sem fala/audio")
@@ -174,13 +155,13 @@ class VoiceService:
                 return
             texto = self._transcrever_whisper(wav)
             if texto:
-                slog(f"whisper: {texto!r}")
+                slog("whisper: %r" % texto)
                 entregar(texto)
             else:
                 slog("whisper vazio")
                 entregar("Nao ouvi")
         except Exception as e:
-            slog(f"EXCECAO captura local: {type(e).__name__}: {e}")
+            slog("EXCECAO captura local: %s: %s" % (type(e).__name__, e))
             entregar("Erro ao ouvir")
 
     def _transcrever_whisper(self, wav_path):
@@ -195,7 +176,7 @@ class VoiceService:
             with open(wav_path, "rb") as f:
                 resp = requests.post(
                     "https://api.groq.com/openai/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {chave}"},
+                    headers={"Authorization": "Bearer %s" % chave},
                     files={"file": ("audio.wav", f, "audio/wav")},
                     data={
                         "model": "whisper-large-v3-turbo",
@@ -205,11 +186,11 @@ class VoiceService:
                     timeout=30,
                 )
             if resp.status_code != 200:
-                slog(f"whisper turbo HTTP {resp.status_code}, tentando whisper-large-v3")
+                slog("whisper turbo HTTP %s, tentando whisper-large-v3" % resp.status_code)
                 with open(wav_path, "rb") as f2:
                     resp = requests.post(
                         "https://api.groq.com/openai/v1/audio/transcriptions",
-                        headers={"Authorization": f"Bearer {chave}"},
+                        headers={"Authorization": "Bearer %s" % chave},
                         files={"file": ("audio.wav", f2, "audio/wav")},
                         data={
                             "model": "whisper-large-v3",
@@ -219,14 +200,14 @@ class VoiceService:
                         timeout=30,
                     )
             if resp.status_code != 200:
-                slog(f"whisper HTTP {resp.status_code}: {resp.text[:180]}")
+                slog("whisper HTTP %s: %s" % (resp.status_code, resp.text[:180]))
                 return None
             texto = (resp.json().get("text") or "").strip()
             if not texto or texto in (".", "...", "Musica", "Música"):
                 return None
             return texto
         except Exception as e:
-            slog(f"whisper falhou: {type(e).__name__}: {e}")
+            slog("whisper falhou: %s: %s" % (type(e).__name__, e))
             return None
 
     @run_on_ui_thread
@@ -268,14 +249,14 @@ class VoiceService:
                     AudioManager.STREAM_MUSIC,
                     AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
                 )
-                slog(f"requestAudioFocus() retornou: {resultado_foco} (1=concedido, 0=falhou, 2=adiado)")
+                slog("requestAudioFocus() retornou: %s" % resultado_foco)
             except Exception as e:
-                slog(f"Falha ao solicitar foco de audio (seguindo sem isso): {type(e).__name__}: {e}")
+                slog("Falha ao solicitar foco de audio: %s: %s" % (type(e).__name__, e))
 
             self.recognizer.startListening(intent)
             self.logger.info("[Spica/Voice] Hardware de audio ativado com sucesso na UI Thread.")
         except Exception as e:
-            self.logger.error(f"[Spica/Voice] Falha critica ao instanciar microfone: {e}")
+            self.logger.error("[Spica/Voice] Falha critica ao instanciar microfone: %s" % e)
             if usar_clock:
                 Clock.schedule_once(lambda dt: callback("Erro ao inicializar hardware de voz."), 0)
             else:
@@ -299,11 +280,10 @@ class VoiceService:
                 except Exception:
                     pass
                 self.recognizer = None
-
             self._listener_persistente = None
             self.logger.info("[Spica/Voice] Reconhecedor de voz destruido")
         except Exception as e:
-            self.logger.error(f"[Spica/Voice] Erro ao destruir: {e}")
+            self.logger.error("[Spica/Voice] Erro ao destruir: %s" % e)
 
     def __del__(self):
         try:

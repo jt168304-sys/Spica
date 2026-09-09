@@ -38,10 +38,6 @@ def _classe_servico():
             return autoclass(nome)
         except Exception as e:
             last = e
-    try:
-        return autoclass("org.kivy.android.PythonService")
-    except Exception as e:
-        last = e
     raise RuntimeError("Classe do servico Spica nao encontrada: %s" % last)
 
 
@@ -49,8 +45,16 @@ def iniciar_servico(argumento=""):
     if platform != "android":
         return False
     try:
-        from jnius import autoclass
         from src.utils.service_log import slog
+        try:
+            from android import AndroidService
+            AndroidService("Spica escuta", argumento or "escuta").start(argumento or "escuta")
+            slog("Foreground service iniciado via AndroidService")
+            return True
+        except Exception as e1:
+            slog("AndroidService falhou (%s), tentando classe gerada" % e1)
+
+        from jnius import autoclass
         ctx = _contexto()
         cls = _classe_servico()
         slog("classe FGS: %s" % cls)
@@ -97,12 +101,6 @@ def parar_servico():
 
 
 def promover_foreground_microfone(service):
-    """Garante startForeground() COM o tipo MICROPHONE.
-
-    O python-for-android pode chamar startForeground(id, notification) sem o
-    tipo. No Android 14 o microfone em segundo plano so e liberado se o FGS
-    estiver com FOREGROUND_SERVICE_TYPE_MICROPHONE (128).
-    """
     from jnius import autoclass
     from src.utils.service_log import slog
 

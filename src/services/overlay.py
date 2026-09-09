@@ -339,13 +339,13 @@ class SpicaOverlay:
         estado = "ativada" if self.escuta_continua else "desativada"
         print(f"[Spica/Overlay] Escuta continua {estado}.")
         if self.escuta_continua:
+            self._toast("Ouvindo...")
+            self._ciclo_escuta_continua()
             try:
                 from src.services.fg_service import iniciar_servico
                 iniciar_servico("escuta")
             except Exception as e:
                 print(f"[Spica/Overlay] Falha ao subir FGS: {e}")
-            self._toast("Escuta continua ativada")
-            self._ciclo_escuta_continua()
         else:
             try:
                 from src.services.voice_service import VoiceService
