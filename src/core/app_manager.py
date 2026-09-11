@@ -73,6 +73,12 @@ class WindApp(MDApp):
         self.settings.save()
 
     def on_pause(self):
+        try:
+            if self.bubble and getattr(self.bubble, "iniciado", False):
+                from src.services.fg_service import iniciar_servico
+                iniciar_servico("escuta")
+        except Exception as e:
+            self.logger.error(f"FGS no on_pause: {e}")
         return True
 
     def on_resume(self):

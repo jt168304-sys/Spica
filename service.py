@@ -1,26 +1,25 @@
 # service.py — O coração da Spica em segundo plano (v16 Estável com WakeLock)
 import os
 import time
-import threading
 from kivy.utils import platform
 
-print("[Spica/Service] ✶ Processo de segundo plano iniciado!")
+print("[Spica/Service] Processo de segundo plano iniciado!")
 
 if platform == "android":
     from jnius import autoclass
     
-    # Classes Java para gerenciar o WakeLock e contexto
     Context = autoclass('android.content.Context')
     PowerManager = autoclass('android.os.PowerManager')
     PythonService = autoclass("org.kivy.android.PythonService")
     
-    # Captura o contexto nativo do Serviço Android que está rodando este script
     service_context = PythonService.mService
+
+    try:
+        from src.services.fg_service import promover_foreground_microfone
+        promover_foreground_microfone(service_context)
+    except Exception as e:
+        print(f"[Spica/Service] Falha ao promover FGS microphone: {e}")
     
-    # Adquire o WakeLock para evitar que a CPU durma em segundo plano no Android 14.
-    # Envolvido em try/except: se a permissão WAKE_LOCK não estiver no manifest (como
-    # estava faltando antes), isso lançava SecurityException e derrubava o service.py
-    # INTEIRO antes mesmo da bolha/escuta serem religadas — silenciosamente, sem log.
     try:
         power_manager = service_context.getSystemService(Context.POWER_SERVICE)
         wake_lock = power_manager.newWakeLock(
@@ -28,30 +27,38 @@ if platform == "android":
             "Spica::BackgroundServiceWakeLock"
         )
         wake_lock.acquire()
-        print("[Spica/Service] 🔒 WakeLock adquirido com sucesso!")
+        print("[Spica/Service] WakeLock adquirido com sucesso!")
     except Exception as e:
-        print(f"[Spica/Service] ⚠️ Falha ao adquirir WakeLock (verifique permissão WAKE_LOCK no buildozer.spec): {e}")
+        print(f"[Spica/Service] Falha ao adquirir WakeLock (verifique permissao WAKE_LOCK no buildozer.spec): {e}")
 
-    # Redireciona o ponto de atividade do Pyjnius para o contexto do Serviço
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     PythonActivity.mActivity = service_context
+    print("[Spica/Service] FGS microphone ativo. Overlay na Activity, AudioRecord neste processo.")
 
-    # Importação do nosso serviço de overlay (a bolha em si)
-    from src.services.overlay import SpicaOverlay
+    from src.services.listen_ipc import ha_pedido, consumir_pedido, responder
+    from src.services.mic_recorder import MicRecorder
+    from src.services.voice_service import VoiceService
 
-    # Instancia e ativa a janela flutuante da Bolha
-    overlay = SpicaOverlay()
-    overlay.ligar_bolha()
-    # NOTA: ligar_bolha() já configura seu próprio listener de toque/arraste
-    # (_configurar_toque_na_bolha, dentro de overlay.py) com o menu de escuta
-    # contínua — o mesmo sistema que já funciona dentro do app. Antes havia
-    # aqui um segundo listener (BolhaTouchListener) que SOBRESCREVIA esse,
-    # usando um fluxo próprio (executar_fluxo_ia_background) com
-    # usar_clock=True — que nunca entrega a resposta porque o service.py não
-    # roda nenhum App() do Kivy, então o Clock nunca dispara nesse processo.
-    # Removido para usar só o caminho único e já testado do overlay.py.
-    print("[Spica/Service] Bolha religada usando o sistema de escuta do overlay.py (unificado).")
+    voice = VoiceService.get_instance()
 
-# Loop infinito estável para impedir que o Android encerre o processo do script
-while True:
-    time.sleep(1)
+    while True:
+        try:
+            if ha_pedido() and consumir_pedido():
+                print("[Spica/Service] Pedido de escuta recebido, gravando no FGS...")
+                mic = MicRecorder()
+                wav = mic.capturar_utterance()
+                if not wav:
+                    responder("Nao ouvi")
+                else:
+                    texto = voice._transcrever_whisper(wav)
+                    responder(texto or "Nao ouvi")
+        except Exception as e:
+            print("[Spica/Service] Erro no ciclo de escuta: %s" % e)
+            try:
+                responder("Erro ao ouvir")
+            except Exception:
+                pass
+        time.sleep(0.15)
+else:
+    while True:
+        time.sleep(1)
