@@ -60,8 +60,12 @@ def iniciar_servico(argumento=""):
             return True
         Intent = autoclass("android.content.Intent")
         Build = autoclass("android.os.Build")
+    BuildVersion = autoclass("android.os.Build$VERSION")
+        BuildVersion = autoclass("android.os.Build$VERSION")
+    BuildVersion = autoclass("android.os.Build$VERSION")
+        BuildVersion = autoclass("android.os.Build$VERSION")
         intent = Intent(ctx, cls)
-        if Build.VERSION.SDK_INT >= 26:
+        if BuildVersion.SDK_INT >= 26:
             ctx.startForegroundService(intent)
         else:
             ctx.startService(intent)
@@ -107,12 +111,14 @@ def promover_foreground_microfone(service):
     from src.utils.service_log import slog
 
     Build = autoclass("android.os.Build")
+    BuildVersion = autoclass("android.os.Build$VERSION")
+    BuildVersion = autoclass("android.os.Build$VERSION")
     Context = autoclass("android.content.Context")
     NotificationBuilder = autoclass("android.app.Notification$Builder")
     FGS_MICROPHONE = 128
 
     channel_id = "spica_mic"
-    if Build.VERSION.SDK_INT >= 26:
+    if BuildVersion.SDK_INT >= 26:
         NotificationChannel = autoclass("android.app.NotificationChannel")
         NotificationManager = autoclass("android.app.NotificationManager")
         nm = service.getSystemService(Context.NOTIFICATION_SERVICE)
@@ -137,7 +143,7 @@ def promover_foreground_microfone(service):
     notificacao = builder.build()
 
     try:
-        if Build.VERSION.SDK_INT >= 29:
+        if BuildVersion.SDK_INT >= 29:
             service.startForeground(9001, notificacao, FGS_MICROPHONE)
         else:
             service.startForeground(9001, notificacao)
