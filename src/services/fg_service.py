@@ -60,9 +60,6 @@ def iniciar_servico(argumento=""):
             return True
         Intent = autoclass("android.content.Intent")
         Build = autoclass("android.os.Build")
-    BuildVersion = autoclass("android.os.Build$VERSION")
-        BuildVersion = autoclass("android.os.Build$VERSION")
-    BuildVersion = autoclass("android.os.Build$VERSION")
         BuildVersion = autoclass("android.os.Build$VERSION")
         intent = Intent(ctx, cls)
         if BuildVersion.SDK_INT >= 26:
@@ -111,7 +108,6 @@ def promover_foreground_microfone(service):
     from src.utils.service_log import slog
 
     Build = autoclass("android.os.Build")
-    BuildVersion = autoclass("android.os.Build$VERSION")
     BuildVersion = autoclass("android.os.Build$VERSION")
     Context = autoclass("android.content.Context")
     NotificationBuilder = autoclass("android.app.Notification$Builder")
