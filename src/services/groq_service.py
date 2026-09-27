@@ -44,8 +44,8 @@ class GroqService:
     # ATUALIZADO: llama-3.1-8b-instant foi descontinuado pela Groq.
     # groq/compound faz busca web NATIVA e server-side quando julga necessário
     # (substitui o scraper manual do DuckDuckGo, que estava quebrado) e cita as fontes.
-    MODEL_TEXTO = "llama-3.1-8b-instant"
-    MODEL_VISAO = "llama-3.1-8b-instant"
+    MODEL_TEXTO = "openai/gpt-oss-120b"
+    MODEL_VISAO = "qwen/qwen3.8-27b"
 
     _DIAS_SEMANA = ["segunda-feira", "terca-feira", "quarta-feira", "quinta-feira",
                     "sexta-feira", "sabado", "domingo"]
