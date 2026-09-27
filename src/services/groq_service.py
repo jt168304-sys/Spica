@@ -242,14 +242,12 @@ class GroqService:
                 timeout=self.TIMEOUT_API,
             )
 
-            if resp.status_code == 401:
-                retornar("API key invalida.")
-                return
-            if resp.status_code == 429:
-                retornar("Limite atingido. Aguarde.")
-                return
             if resp.status_code != 200:
-                retornar(f"Erro na API ({resp.status_code}).")
+                try:
+                    err_detail = resp.json().get("error", {}).get("message", resp.text)
+                except Exception:
+                    err_detail = resp.text
+                retornar(f"Erro Groq {resp.status_code}: {err_detail}")
                 return
 
             resposta = resp.json()["choices"][0]["message"]["content"].strip()
