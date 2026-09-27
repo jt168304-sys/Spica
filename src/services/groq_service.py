@@ -233,8 +233,7 @@ class GroqService:
             # A visão (qwen3.6-27b) tem "thinking mode" ligado por padrão, o que vazava
             # o raciocínio interno do modelo antes da análise final. reasoning_effort="none"
             # desliga o thinking mode na raiz (mais confiável que só filtrar <think> depois).
-            if caminho_resolvido:
-                payload["reasoning_effort"] = "none"
+            # Parametro reasoning_effort removido para compatibilidade Groq
 
             resp = requests.post(
                 self.URL,
