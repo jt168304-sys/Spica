@@ -68,9 +68,9 @@ class MicRecorder:
         buf = max(min_buf * 2, int(SAMPLE_RATE * 2 * FRAME_MS / 1000) * 4)
 
         fontes = [
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            MediaRecorder.AudioSource.MIC,
-            MediaRecorder.AudioSource.CAMCORDER,
+            autoclass(r"android.media.MediaRecorder$AudioSource").VOICE_RECOGNITION,
+            autoclass(r"android.media.MediaRecorder$AudioSource").MIC,
+            autoclass(r"android.media.MediaRecorder$AudioSource").CAMCORDER,
         ]
         for fonte in fontes:
             rec = AudioRecord(fonte, SAMPLE_RATE, canal, encoding, buf)
