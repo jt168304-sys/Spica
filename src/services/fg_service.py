@@ -1,11 +1,5 @@
-# fg_service.py — Sobe o foreground service com tipo microphone (Android 14+)
+# fg_service.py — Inicializa o Foreground Service especifico (ServiceSpicaservice)
 from kivy.utils import platform
-
-_NOMES_SERVICO = (
-    "ServiceSpicaservice",
-    "ServiceSpicaService",
-)
-
 
 def estamos_no_servico():
     if platform != "android":
@@ -17,7 +11,6 @@ def estamos_no_servico():
     except Exception:
         return False
 
-
 def _contexto():
     from jnius import autoclass
     if estamos_no_servico():
@@ -26,24 +19,30 @@ def _contexto():
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
     return PythonActivity.mActivity
 
-
 def _classe_servico():
     from jnius import autoclass
+    from src.utils.service_log import slog
     ctx = _contexto()
     pkg = ctx.getPackageName()
-    last = None
-    for simples in _NOMES_SERVICO:
-        nome = pkg + "." + simples
-        try:
-            return autoclass(nome)
-        except Exception as e:
-            last = e
-    try:
-        return autoclass("org.kivy.android.PythonService")
-    except Exception as e:
-        last = e
-    raise RuntimeError("Classe do servico Spica nao encontrada: %s" % last)
 
+    candidatos = [
+        f"{pkg}.ServiceSpicaservice",
+        f"{pkg}.ServiceSpicaService",
+        f"{pkg}.ServiceSpica",
+        "org.kivy.android.PythonService"
+    ]
+
+    erros = []
+    for nome in candidatos:
+        try:
+            cls = autoclass(nome)
+            slog(f"[FGS] Classe do serviço resolvida com sucesso: {nome}")
+            return cls
+        except Exception as e:
+            erros.append(f"{nome}: {e}")
+
+    slog(f"[FGS] Falha ao carregar classes do serviço: {'; '.join(erros)}")
+    raise RuntimeError("Classe do serviço Spica não encontrada")
 
 def iniciar_servico(argumento=""):
     if platform != "android":
@@ -51,31 +50,36 @@ def iniciar_servico(argumento=""):
     try:
         from jnius import autoclass
         from src.utils.service_log import slog
+
         ctx = _contexto()
         cls = _classe_servico()
-        slog("classe FGS: %s" % cls)
+
         if hasattr(cls, "start"):
-            cls.start(ctx, argumento or "")
-            slog("Foreground service iniciado via start()")
-            return True
+            try:
+                cls.start(ctx, argumento or "")
+                slog("Foreground service iniciado via cls.start()")
+                return True
+            except Exception as e_start:
+                slog(f"Falha ao chamar cls.start(): {e_start}")
+
         Intent = autoclass("android.content.Intent")
-        Build = autoclass("android.os.Build")
         BuildVersion = autoclass("android.os.Build$VERSION")
         intent = Intent(ctx, cls)
+
         if BuildVersion.SDK_INT >= 26:
             ctx.startForegroundService(intent)
         else:
             ctx.startService(intent)
-        slog("Foreground service iniciado via Intent")
+
+        slog("Foreground service iniciado via Intent manual")
         return True
     except Exception as e:
         try:
             from src.utils.service_log import slog
-            slog("Falha ao iniciar FGS: %s: %s" % (type(e).__name__, e))
+            slog(f"Falha ao iniciar FGS: {type(e).__name__}: {e}")
         except Exception:
-            print("[Spica/FGS] Falha ao iniciar: %s" % e)
+            print(f"[Spica/FGS] Falha ao iniciar: {e}")
         return False
-
 
 def parar_servico():
     if platform != "android":
@@ -94,20 +98,12 @@ def parar_servico():
         Intent = autoclass("android.content.Intent")
         ctx.stopService(Intent(ctx, cls))
     except Exception as e:
-        print("[Spica/FGS] Falha ao parar servico: %s" % e)
-
+        print(f"[Spica/FGS] Falha ao parar servico: {e}")
 
 def promover_foreground_microfone(service):
-    """Garante startForeground() COM o tipo MICROPHONE.
-
-    O python-for-android pode chamar startForeground(id, notification) sem o
-    tipo. No Android 14 o microfone em segundo plano so e liberado se o FGS
-    estiver com FOREGROUND_SERVICE_TYPE_MICROPHONE (128).
-    """
     from jnius import autoclass
     from src.utils.service_log import slog
 
-    Build = autoclass("android.os.Build")
     BuildVersion = autoclass("android.os.Build$VERSION")
     Context = autoclass("android.content.Context")
     NotificationBuilder = autoclass("android.app.Notification$Builder")
@@ -145,9 +141,4 @@ def promover_foreground_microfone(service):
             service.startForeground(9001, notificacao)
         slog("startForeground(microphone) OK")
     except Exception as e:
-        slog("startForeground com tipo microphone falhou, tentando sem tipo: %s" % e)
-        try:
-            service.startForeground(9001, notificacao)
-            slog("startForeground() sem tipo OK")
-        except Exception as e2:
-            slog("startForeground falhou de vez: %s" % e2)
+        slog(f"startForeground com tipo microphone falhou: {e}")
