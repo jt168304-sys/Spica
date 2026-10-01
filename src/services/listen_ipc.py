@@ -12,10 +12,15 @@ TIMEOUT_S = 45.0
 
 
 def _pasta():
-    from jnius import autoclass
-    PythonActivity = autoclass("org.kivy.android.PythonActivity")
-    ctx = PythonActivity.mActivity
-    return ctx.getCacheDir().getAbsolutePath()
+    try:
+        from src.services.fg_service import _contexto
+        ctx = _contexto()
+        if ctx is not None:
+            return ctx.getCacheDir().getAbsolutePath()
+    except Exception:
+        pass
+    import tempfile
+    return tempfile.gettempdir()
 
 
 def caminhos():
