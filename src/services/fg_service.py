@@ -1,4 +1,4 @@
-# fg_service.py — Inicializa o Foreground Service especifico (ServiceSpicaservice)
+# fg_service.py — Resolucao precisa da classe do serviço no p4a / Android
 from kivy.utils import platform
 
 def estamos_no_servico():
@@ -25,24 +25,29 @@ def _classe_servico():
     ctx = _contexto()
     pkg = ctx.getPackageName()
 
+    # Variantes de nome baseadas nas convencoes do python-for-android
     candidatos = [
         f"{pkg}.ServiceSpicaservice",
-        f"{pkg}.ServiceSpicaService",
+        f"{pkg}.Servicespicaservice",
         f"{pkg}.ServiceSpica",
-        "org.kivy.android.PythonService"
+        f"{pkg}.Servicespica",
+        f"{pkg}.ServiceService",
+        f"{pkg}.Serviceservice",
     ]
 
     erros = []
     for nome in candidatos:
         try:
             cls = autoclass(nome)
-            slog(f"[FGS] Classe do serviço resolvida com sucesso: {nome}")
-            return cls
+            slog(f"[FGS] Classe especifica do serviço carregada: {nome}")
+            return cls, False
         except Exception as e:
-            erros.append(f"{nome}: {e}")
+            erros.append(f"{nome} -> {type(e).__name__}: {e}")
 
-    slog(f"[FGS] Falha ao carregar classes do serviço: {'; '.join(erros)}")
-    raise RuntimeError("Classe do serviço Spica não encontrada")
+    slog(f"[FGS] Nenhuma subclasse encontrada. Erros: {' | '.join(erros)}")
+    # Fallback para a classe base
+    cls_base = autoclass("org.kivy.android.PythonService")
+    return cls_base, True
 
 def iniciar_servico(argumento=""):
     if platform != "android":
@@ -52,9 +57,10 @@ def iniciar_servico(argumento=""):
         from src.utils.service_log import slog
 
         ctx = _contexto()
-        cls = _classe_servico()
+        cls, eh_fallback = _classe_servico()
 
-        if hasattr(cls, "start"):
+        # Se for a subclasse gerada pelo p4a e tiver o metodo static start()
+        if not eh_fallback and hasattr(cls, "start"):
             try:
                 cls.start(ctx, argumento or "")
                 slog("Foreground service iniciado via cls.start()")
@@ -65,6 +71,13 @@ def iniciar_servico(argumento=""):
         Intent = autoclass("android.content.Intent")
         BuildVersion = autoclass("android.os.Build$VERSION")
         intent = Intent(ctx, cls)
+
+        # Se caiu no fallback, injeta os extras padrao do p4a para executar o service.py
+        if eh_fallback:
+            slog("[FGS] Injetando extras do p4a na classe base PythonService")
+            intent.putExtra("pythonName", "spicaservice")
+            intent.putExtra("serviceEntrypoint", "service.py")
+            intent.putExtra("pythonServiceArgument", argumento or "")
 
         if BuildVersion.SDK_INT >= 26:
             ctx.startForegroundService(intent)
@@ -91,10 +104,7 @@ def parar_servico():
             PythonService.mService.stopSelf()
             return
         ctx = _contexto()
-        cls = _classe_servico()
-        if hasattr(cls, "stop"):
-            cls.stop(ctx)
-            return
+        cls, _ = _classe_servico()
         Intent = autoclass("android.content.Intent")
         ctx.stopService(Intent(ctx, cls))
     except Exception as e:
