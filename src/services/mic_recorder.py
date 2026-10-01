@@ -1,64 +1,56 @@
-# mic_recorder.py — Captura PCM no PROCESSO do app (AudioRecord).
-#
-# Por que isso existe: no Android 12+ (e de forma dura no 14 / Motorola), o
-# SpeechRecognizer do Google grava em OUTRO processo. Esse processo nao herda
-# o foregroundServiceType=microphone da Spica, entao o sistema entrega audio
-# silenciado — o LED do mic acende, mas nao chega voz. AudioRecord roda no
-# nosso UID e herda o FGS de microfone.
+# mic_recorder.py — Captura de áudio PCM via AudioRecord com ByteBuffer (Android 14)
 import os
 import time
 import wave
-import threading
-
-try:
-    from jnius import autoclass
-    HAS_ANDROID = True
-except Exception:
-    HAS_ANDROID = False
+from kivy.utils import platform
 
 SAMPLE_RATE = 16000
-LIMIAR_RMS = 280
-MIN_FALA_S = 0.35
-SILENCIO_FIM_S = 1.15
-MAX_UTTERANCE_S = 8.0
-TIMEOUT_ESPERA_S = 10.0
-FRAME_MS = 100
+FRAME_MS = 30
+LIMIAR_RMS = 450.0
+SILENCIO_FIM_S = 1.2
+MIN_FALA_S = 0.5
+MAX_UTTERANCE_S = 15.0
+TIMEOUT_ESPERA_S = 8.0
+
+HAS_ANDROID = platform == "android"
 
 
 class MicRecorder:
+
     def __init__(self):
-        self._parar = threading.Event()
         self._recorder = None
+        self._parar = __import__("threading").Event()
 
     def cancelar(self):
         self._parar.set()
-        self._soltar()
 
     def _soltar(self):
-        rec = self._recorder
-        self._recorder = None
-        if rec is None:
-            return
-        try:
-            rec.stop()
-        except Exception:
-            pass
-        try:
-            rec.release()
-        except Exception:
-            pass
+        if self._recorder is not None:
+            try:
+                self._recorder.stop()
+            except Exception:
+                pass
+            try:
+                self._recorder.release()
+            except Exception:
+                pass
+            self._recorder = None
 
     def _cache_dir(self):
-        from jnius import autoclass
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        ctx = PythonActivity.mActivity
-        return ctx.getCacheDir().getAbsolutePath()
+        try:
+            from src.services.fg_service import _contexto
+            ctx = _contexto()
+            if ctx is not None:
+                return ctx.getCacheDir().getAbsolutePath()
+        except Exception:
+            pass
+        import tempfile
+        return tempfile.gettempdir()
 
     def _criar_recorder(self):
         from jnius import autoclass
         AudioRecord = autoclass("android.media.AudioRecord")
         AudioFormat = autoclass("android.media.AudioFormat")
-        MediaRecorder = autoclass("android.media.MediaRecorder")
 
         canal = AudioFormat.CHANNEL_IN_MONO
         encoding = AudioFormat.ENCODING_PCM_16BIT
@@ -82,37 +74,31 @@ class MicRecorder:
                 pass
         return None
 
-    def _rms(self, Array, jbuf, nbytes):
-        nshorts = nbytes // 2
+    def _rms_bytes(self, data):
+        nshorts = len(data) // 2
         if nshorts <= 0:
             return 0.0
         passo = max(1, nshorts // 40)
         total = 0
         count = 0
-        i = 0
-        while i < nshorts:
-            b0 = Array.getByte(jbuf, i * 2) & 0xFF
-            b1 = Array.getByte(jbuf, i * 2 + 1)
-            s = b0 | ((b1 & 0xFF) << 8)
+        for i in range(0, nshorts, passo):
+            idx = i * 2
+            s = data[idx] | (data[idx + 1] << 8)
             if s >= 32768:
                 s -= 65536
             total += s * s
             count += 1
-            i += passo
         return (total / max(count, 1)) ** 0.5
 
     def capturar_utterance(self):
-        """Bloqueia ate gravar uma fala (ou timeout). Devolve caminho WAV ou None."""
         if not HAS_ANDROID:
             return None
         from jnius import autoclass
         from src.utils.service_log import slog
 
         self._parar.clear()
-        Array = autoclass("java.lang.reflect.Array")
-        Byte = autoclass("java.lang.Byte")
-        FileOutputStream = autoclass("java.io.FileOutputStream")
         AudioRecord = autoclass("android.media.AudioRecord")
+        ByteBuffer = autoclass("java.nio.ByteBuffer")
 
         rec = self._criar_recorder()
         if rec is None:
@@ -121,18 +107,18 @@ class MicRecorder:
         self._recorder = rec
 
         frame = int(SAMPLE_RATE * 2 * FRAME_MS / 1000)
-        jbuf = Array.newInstance(Byte.TYPE, frame)
+        jbuf = ByteBuffer.allocateDirect(frame)
         pasta = self._cache_dir()
         pcm_path = os.path.join(pasta, "spica_utt.pcm")
         wav_path = os.path.join(pasta, "spica_utt.wav")
-        fos = FileOutputStream(pcm_path)
+        f_pcm = open(pcm_path, "wb")
 
         rec.startRecording()
         estado = rec.getRecordingState()
         slog("AudioRecord.startRecording state=%s (3=RECORDING)" % estado)
         if estado != AudioRecord.RECORDSTATE_RECORDING:
             try:
-                fos.close()
+                f_pcm.close()
             except Exception:
                 pass
             self._soltar()
@@ -149,14 +135,20 @@ class MicRecorder:
 
         try:
             while not self._parar.is_set():
-                n = rec.read(jbuf, 0, frame)
+                jbuf.clear()
+                n = rec.read(jbuf, frame)
                 if n == AudioRecord.ERROR_INVALID_OPERATION or n == AudioRecord.ERROR_BAD_VALUE:
                     slog("AudioRecord.read erro=%s" % n)
                     break
                 if n <= 0:
                     time.sleep(0.02)
                     continue
-                rms = self._rms(Array, jbuf, n)
+
+                jbuf.rewind()
+                raw_bytes = bytearray(n)
+                jbuf.get(raw_bytes)
+
+                rms = self._rms_bytes(raw_bytes)
                 if rms > max_rms:
                     max_rms = rms
                 if rms >= LIMIAR_RMS:
@@ -168,13 +160,13 @@ class MicRecorder:
                         falando = True
                         inicio_fala = time.time()
                         silencio_s = 0.0
-                        fos.write(jbuf, 0, n)
+                        f_pcm.write(raw_bytes)
                         pcm_bytes += n
                     elif espera_s >= TIMEOUT_ESPERA_S:
                         slog("timeout sem fala (max_rms=%.0f)" % max_rms)
                         break
                 else:
-                    fos.write(jbuf, 0, n)
+                    f_pcm.write(raw_bytes)
                     pcm_bytes += n
                     if rms < LIMIAR_RMS:
                         silencio_s += FRAME_MS / 1000.0
@@ -189,7 +181,7 @@ class MicRecorder:
                         break
         finally:
             try:
-                fos.close()
+                f_pcm.close()
             except Exception:
                 pass
             self._soltar()
