@@ -1,3 +1,8 @@
+from kivy.utils import platform
+if platform == "android":
+    from android.permissions import request_permissions, Permission
+    request_permissions([Permission.RECORD_AUDIO, Permission.POST_NOTIFICATIONS])
+
 # main.py — Porta de Entrada e Redirecionador de Logs (Spica v16)
 import os, sys, traceback, socket
 
