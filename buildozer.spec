@@ -29,11 +29,11 @@ icon.filename = %(source.dir)s/Spica.png
 
 # 2. ATUALIZADO: FOREGROUND_SERVICE_MICROPHONE (obrigatório Android 14 p/ mic em foreground service) e WAKE_LOCK (faltava — sem ela, service.py crasha ao adquirir o wake_lock)
 android.permissions = INTERNET,RECORD_AUDIO,VIBRATE,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,WAKE_LOCK,CAMERA,READ_MEDIA_IMAGES,SYSTEM_ALERT_WINDOW,POST_NOTIFICATIONS
+services = Spicaservice:service.py:foreground
 
 # 3. CORRIGIDO: faltava ":foreground" — sem isso o Android NUNCA chamava startForeground() de verdade,
 # então o serviço rodava como service comum e era morto em minutos pelo limite de segundo plano.
 # ":foregroundServiceType=microphone" declara o tipo exigido pelo Android 14 para uso de microfone em foreground.
-android.services = Spicaservice:service.py:foreground:foregroundServiceType=microphone
 
 android.accept_sdk_license = True
 android.minapi = 24
@@ -65,4 +65,3 @@ log_level = 2
 warn_on_root = 1
 
 # pip travado - versoes novas quebram import interno do p4a 2024.1.21
-services = SpicaService:service.py:foreground
