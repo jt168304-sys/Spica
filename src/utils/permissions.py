@@ -30,7 +30,6 @@ class PermissionManager:
             self.logger.warning(f"Erro permissoes: {e}")
 
     def pedir_overlay(self):
-        """Abre configuracoes do Android para SYSTEM_ALERT_WINDOW."""
         if platform != "android":
             return True
         try:
@@ -42,7 +41,6 @@ class PermissionManager:
             ctx = PythonActivity.mActivity
             if not Settings.canDrawOverlays(ctx):
                 intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse(f"package:{ctx.getPackageName()}")
                 )
                 ctx.startActivity(intent)

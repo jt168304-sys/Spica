@@ -28,7 +28,7 @@ fullscreen = 0
 icon.filename = %(source.dir)s/Spica.png
 
 # 2. ATUALIZADO: FOREGROUND_SERVICE_MICROPHONE (obrigatório Android 14 p/ mic em foreground service) e WAKE_LOCK (faltava — sem ela, service.py crasha ao adquirir o wake_lock)
-android.permissions = SYSTEM_ALERT_WINDOW, RECORD_AUDIO, FOREGROUND_SERVICE, WAKE_LOCK
+android.permissions = RECORD_AUDIO, INTERNET, WAKE_LOCK
 services = Spicaservice:service.py:foreground
 
 # 3. CORRIGIDO: faltava ":foreground" — sem isso o Android NUNCA chamava startForeground() de verdade,
