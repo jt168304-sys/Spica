@@ -1,9 +1,6 @@
-from kivy.core.window import Window
 from kivy.utils import platform
 
 def aplicar_flags_overlay():
-    Window.clearcolor = (0, 0, 0, 0)
-
     if platform == 'android':
         try:
             from jnius import autoclass, PythonJavaClass, java_method
@@ -20,10 +17,8 @@ def aplicar_flags_overlay():
             Uri = autoclass('android.net.Uri')
 
             activity = PythonActivity.mActivity
-            window = activity.getWindow()
-            window.setBackgroundDrawableResource(17170445)
 
-            # Valida permissão de sobreposição no Android (evita BadTokenException)
+            # Se não tem permissão de sobreposição, abre as configurações e minimiza a tela preta
             if not Settings.canDrawOverlays(activity):
                 intent = Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -31,15 +26,8 @@ def aplicar_flags_overlay():
                 )
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
-                print("Solicitada permissão de sobreposição ao usuário.")
+                activity.moveTaskToBack(True)
                 return
-
-            flags = (
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL |
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            )
-            window.addFlags(flags)
 
             window_manager = activity.getSystemService(Context.WINDOW_SERVICE)
             layout_flag = LayoutParams.TYPE_APPLICATION_OVERLAY if VERSION.SDK_INT >= 26 else LayoutParams.TYPE_PHONE
@@ -75,16 +63,11 @@ def aplicar_flags_overlay():
                         btn.setBackgroundColor(Color.parseColor("#FF6200EE"))
                         btn.setTextColor(Color.WHITE)
                         self.wm.addView(btn, self.p)
-
-                        # Minimização para a tela Home do Android
-                        home_intent = Intent(Intent.ACTION_MAIN)
-                        home_intent.addCategory(Intent.CATEGORY_HOME)
-                        home_intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        self.act.startActivity(home_intent)
-
-                        print("Bolha criada e app minimizado para a Home com sucesso!")
                     except Exception as ex:
-                        print(f"Erro na thread da interface: {ex}")
+                        print(f"Erro ao adicionar overlay: {ex}")
+                    finally:
+                        # Força a minimização da Activity do Kivy de qualquer forma
+                        self.act.moveTaskToBack(True)
 
             activity.runOnUiThread(BubbleRunnable(activity, window_manager, params))
 
