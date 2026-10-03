@@ -13,7 +13,7 @@ source.main = main.py
 # Sem isso, a escuta falha rapidamente em ciclos curtos no Android 11+ (funciona no 10 e antes).
 android.extra_manifest_xml = extra_manifest.xml
 
-requirements = python3==3.11.6, hostpython3==3.11.6, kivy, kivymd==1.2.0, asynckivy, requests, certifi, urllib3, plyer, pyjnius
+requirements = python3, kivy, kivymd==1.2.0, requests, certifi, openssl, pyjnius, plyer
 
 # 6. HISTÓRICO: o crash nativo (Segmentation Fault no on_draw do Kivy) que já
 # tivemos veio da combinação instável Python 3.14 + Kivy. Tentamos resolver
@@ -43,14 +43,14 @@ android.minapi = 24
 # está pré-instalado no runner do GitHub Actions, causando o erro
 # "Requested API target 31 is not available".
 android.api = 33
-android.sdk = 33
+# android.sdk = 33
 # 8. ADICIONADO: aponta pro SDK Android JÁ PRÉ-INSTALADO no runner do GitHub
 # Actions, em vez de deixar o buildozer baixar um do zero — o SDK baixado do
 # zero vem completamente vazio (sem nenhuma plataforma instalada), e o p4a
 # 2024.1.21 não instala automaticamente a plataforma que falta (só dá erro
 # "Requested API target XX is not available"). O caminho abaixo é confirmado
 # pela variável ANDROID_SDK_ROOT que já vem definida nesse runner.
-android.sdk_path = /usr/local/lib/android/sdk
+# android.sdk_path = /usr/local/lib/android/sdk
 android.build_tools_version = 33.0.2
 android.ndk = 25b
 android.ndk_api = 24
