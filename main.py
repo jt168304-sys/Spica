@@ -1,3 +1,8 @@
+
+from kivy.utils import platform
+if platform == 'android':
+    from src.services.overlay import aplicar_flags_overlay
+    aplicar_flags_overlay()
 from kivy.utils import platform
 if platform == "android":
     from android.permissions import request_permissions, Permission
