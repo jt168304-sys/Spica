@@ -145,12 +145,23 @@ class SettingsScreen(MDScreen):
                     return
             except Exception as e:
                 print(f"[Spica] perms bolha: {e}")
+            from src.utils.keepalive import (
+                ignorando_otimizacao_bateria,
+                pedir_ignorar_otimizacao_bateria,
+                minimizar_app,
+            )
+            if not ignorando_otimizacao_bateria():
+                print("[Spica] Pedindo isenção de otimização de bateria...")
+                pedir_ignorar_otimizacao_bateria()
+                return
             from src.services.fg_service import iniciar_servico
             iniciar_servico("escuta")
             app = MDApp.get_running_app()
             if not (hasattr(app, "bubble") and app.bubble):
                 app.bubble = SpicaOverlay()
             app.bubble.ligar_bolha()
+            # Dá tempo da bolha entrar no WindowManager e minimiza o app
+            Clock.schedule_once(lambda dt: minimizar_app(), 0.8)
         except Exception as e:
             print(f"[Spica] ativar_bolha: {e}")
 
