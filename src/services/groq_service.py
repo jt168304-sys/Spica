@@ -327,11 +327,14 @@ class GroqService:
         base = list(mensagens)      # conversa limpa, sem nada de ferramenta
         coletados = []              # [(nome, resultado_json)]
         ferramentas_ativas = usar_ferramentas
+        repetiu = False
+        pesquisa_falhou = False
         rodada = 0
         while True:
             usar = ferramentas_ativas and rodada < max_rodadas and (time.monotonic() - inicio) < 40
             if not usar:
-                return self._resposta_final_limpa(requests, base, coletados, temperatura)
+                return self._resposta_final_limpa(requests, base, coletados, temperatura,
+                                                  pesquisa_falhou and not coletados)
 
             payload = {
                 "model": modelo,
@@ -347,7 +350,11 @@ class GroqService:
                 if status == 400 and (codigo == "tool_use_failed" or "tool" in detalhe.lower()):
                     slog(f"Groq recusou a chamada de ferramenta (rodada {rodada}): "
                          f"{getattr(self, '_ultimo_erro_bruto', detalhe)[:300]}")
+                    if not repetiu:          # o modelo pode acertar na 2ª tentativa
+                        repetiu = True
+                        continue
                     ferramentas_ativas = False
+                    pesquisa_falhou = True
                     continue
                 return None, f"Erro Groq {status}: {detalhe}"
 
@@ -375,7 +382,7 @@ class GroqService:
                                   "name": nome, "content": resultado[:6000]})
             rodada += 1
 
-    def _resposta_final_limpa(self, requests, base, coletados, temperatura):
+    def _resposta_final_limpa(self, requests, base, coletados, temperatura, aviso_falha=False):
         """Pede a resposta final SEM ferramentas e SEM histórico de tool_calls."""
         from src.utils.service_log import slog
         msgs = [dict(m) for m in base]
@@ -389,6 +396,12 @@ class GroqService:
                 f"{dados}\n[FIM DOS DADOS]\n"
                 "Responda a pergunta acima usando esses dados. Fale natural, cite a fonte "
                 "pelo nome, sem URLs, sem markdown. Se os dados forem fracos, diga isso."
+            )
+        if aviso_falha and isinstance(msgs[-1].get("content"), str):
+            msgs[-1]["content"] += (
+                "\n\n[AVISO DO SISTEMA: a pesquisa na web falhou agora. Se a pergunta exigir "
+                "informacao atual ou que voce nao sabe, diga que nao conseguiu pesquisar neste "
+                "momento e que a pessoa pode tentar de novo. Nao invente.]"
             )
         payload = {"model": self._modelo_da_base(base), "messages": msgs,
                    "max_tokens": 800, "temperature": temperatura}

@@ -204,8 +204,7 @@ FERRAMENTAS = [
         "description": ("Pesquisa na internet (DuckDuckGo). Use para notícias, preços, cotações, "
                         "placares, lançamentos, versões e qualquer fato que possa ter mudado."),
         "parameters": {"type": "object", "properties": {
-            "query": {"type": "string", "description": "Termos curtos e objetivos."},
-            "max_resultados": {"type": "integer", "minimum": 1, "maximum": 8}},
+            "query": {"type": "string", "description": "Termos curtos e objetivos."}},
             "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "ler_pagina",
