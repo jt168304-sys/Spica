@@ -152,3 +152,8 @@ def promover_foreground_microfone(service):
         slog("startForeground(microphone) OK")
     except Exception as e:
         slog(f"startForeground com tipo microphone falhou: {e}")
+        try:
+            service.startForeground(9001, notificacao)
+            slog("startForeground SEM tipo (fallback) OK")
+        except Exception as e2:
+            slog(f"fallback startForeground falhou: {e2}")
