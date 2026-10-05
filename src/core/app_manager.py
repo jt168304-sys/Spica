@@ -39,7 +39,18 @@ class WindApp(MDApp):
 
     def _apply_theme(self):
         # Correção KivyMD 2.0 / Material 3: Paletas de cores e temas agora usam strings específicas
-        self.theme_cls.primary_palette = "DeepPurple"
+        # Paleta nomeada mais próxima do menta, para o que não tiver cor própria
+        # (as cores da Spica de verdade ficam em src/ui/tema.py)
+        self.theme_cls.primary_palette = "Teal"
+        try:
+            self.theme_cls.primary_hue = "200"
+        except Exception as e:
+            self.logger.error(f"primary_hue: {e}")
+        try:
+            from src.ui import tema as T
+            Window.clearcolor = T.FUNDO
+        except Exception as e:
+            self.logger.error(f"clearcolor: {e}")
         
         # Obtém o modo salvo. KivyMD exige "Light" ou "Dark" (capitalizado), não minúsculo.
         modo_salvo = self.settings.get("theme_mode", "Dark").strip().capitalize()

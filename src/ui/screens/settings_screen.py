@@ -11,6 +11,7 @@ from kivymd.uix.button import MDRaisedButton, MDFlatButton, MDIconButton
 from kivymd.uix.list import MDList, TwoLineIconListItem, IconLeftWidget
 from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.app import MDApp
+from src.ui import tema as T
 
 
 class SettingsScreen(MDScreen):
@@ -20,94 +21,72 @@ class SettingsScreen(MDScreen):
 
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
+        T.estilizar(raiz, md_bg_color=T.FUNDO)
 
         # Barra de ferramentas KivyMD 1.2.0
         barra_superior = MDTopAppBar(title="Configurações", left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("chat")]])
+        T.estilizar(barra_superior, md_bg_color=T.SUPERFICIE,
+                    specific_text_color=T.CREME, elevation=0)
         raiz.add_widget(barra_superior)
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
-        lista = MDList(padding=dp(8), spacing=dp(14))
+        lista = MDList(padding=dp(12), spacing=dp(14))
 
         # Adicionando os cards
         lista.add_widget(self._card_api_key())
-        lista.add_widget(self._card_voz())
         lista.add_widget(self._card_bolha())
 
-        # Item "Sobre o Spica"
-        item_sobre = TwoLineIconListItem(
-            text="Sobre o Spica", 
-            secondary_text="VTuber-IA • Python + KivyMD + Groq"
-        )
-        icone_sobre = IconLeftWidget(icon="information-outline")
-        item_sobre.add_widget(icone_sobre)
-        lista.add_widget(item_sobre)
+        lista.add_widget(self._card_sobre())
 
         scroll.add_widget(lista)
         raiz.add_widget(scroll)
         self.add_widget(raiz)
 
+    def _titulo(self, texto):
+        lbl = MDLabel(text=texto, font_style="H6", halign="left")
+        return T.estilizar(lbl, theme_text_color="Custom", text_color=T.CREME)
+
+    def _descricao(self, texto, altura):
+        lbl = MDLabel(text=texto, font_style="Body2", size_hint_y=None, height=altura)
+        return T.estilizar(lbl, theme_text_color="Custom", text_color=T.TEXTO_2)
+
+    def _botao_principal(self, btn):
+        return T.estilizar(btn, md_bg_color=T.MENTA, theme_text_color="Custom",
+                           text_color=T.FUNDO, radius=[dp(20)])
+
+    def _card_sobre(self):
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(88),
+            padding=dp(20), spacing=dp(4), radius=[dp(16)], elevation=0,
+            md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Sobre o Spica"))
+        card.add_widget(self._descricao("VTuber-IA • Python + KivyMD + Groq", dp(22)))
+        return card
+
     def _card_api_key(self):
         card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(110),
-            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
+            orientation="vertical", size_hint_y=None, height=dp(124),
+            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
         )
-        card.add_widget(MDLabel(
-            text="Groq API Key",
-            font_style="H6", halign="left",
-        ))
+        card.add_widget(self._titulo("Groq API Key"))
         btn = MDRaisedButton(
             text="Configurar Chave API",
             size_hint_y=None, height=dp(40),
             on_release=lambda x: self._dialogo_api_key()
         )
+        self._botao_principal(btn)
         card.add_widget(btn)
         return card
-
-    def _card_voz(self):
-        card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(160),
-            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
-        )
-        card.add_widget(MDLabel(
-            text="Sistema de Voz",
-            font_style="H6", halign="left",
-        ))
-        card.add_widget(MDLabel(
-            text="Use o microfone no chat para falar com a Spica.\nEla ouve e responde automaticamente.",
-            font_style="Body2", theme_text_color="Secondary",
-            size_hint_y=None, height=dp(48),
-        ))
-        btn = MDRaisedButton(
-            text='Testar Microfone',
-            size_hint_y=None, height=dp(36),
-            on_release=lambda x: self._testar_mic(),
-        )
-        card.add_widget(btn)
-        return card
-
-    def _testar_mic(self):
-        try:
-            app = MDApp.get_running_app()
-            chat = app.screen_manager.get_screen("chat")
-            app.navigate_to("chat")
-            Clock.schedule_once(lambda dt: chat._iniciar_mic(), 0.3)
-        except Exception as e:
-            print(f"[Spica] testar_mic: {e}")
 
     def _card_bolha(self):
         card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(180),
-            padding=dp(20), spacing=dp(10), radius=[dp(12)], elevation=4,
+            orientation="vertical", size_hint_y=None, height=dp(218),
+            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
         )
-        card.add_widget(MDLabel(
-            text="Bolha Flutuante",
-            font_style="H6", halign="left",
-        ))
-        card.add_widget(MDLabel(
-            text="Aparece sobre outros apps.\nToque na bolha para abrir o menu de voz.",
-            font_style="Body2", theme_text_color="Secondary",
-            size_hint_y=None, height=dp(40),
-        ))
+        card.add_widget(self._titulo("Bolha Flutuante"))
+        card.add_widget(self._descricao(
+            "Aparece sobre outros apps.\nToque na bolha para abrir o menu de voz.", dp(44)))
 
         btn_ativar = MDRaisedButton(
             text='Ativar Bolha',
@@ -119,6 +98,8 @@ class SettingsScreen(MDScreen):
             size_hint_y=None, height=dp(30),
             on_release=lambda x: self._pedir_permissao_overlay(),
         )
+        self._botao_principal(btn_ativar)
+        T.estilizar(btn_permissao, theme_text_color="Custom", text_color=T.MENTA)
         card.add_widget(btn_ativar)
         card.add_widget(btn_permissao)
         return card
@@ -218,7 +199,11 @@ class SettingsScreen(MDScreen):
             hint_text="Cole sua Groq API key aqui",
             text=app.settings.get("api_key", ""),
             mode="rectangle",
+            password=True,
         )
+        T.estilizar(campo, line_color_normal=T.BORDA, line_color_focus=T.MENTA,
+                    text_color_normal=T.CREME, text_color_focus=T.CREME,
+                    hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
 
         def salvar(*a):
             app.settings.set("api_key", campo.text.strip())
@@ -228,6 +213,8 @@ class SettingsScreen(MDScreen):
 
         btn_cancelar = MDFlatButton(text="Cancelar")
         btn_salvar = MDFlatButton(text="Salvar")
+        T.estilizar(btn_cancelar, theme_text_color="Custom", text_color=T.TEXTO_2)
+        T.estilizar(btn_salvar, theme_text_color="Custom", text_color=T.MENTA)
 
         dialogo = MDDialog(
             title="Groq API Key",
@@ -235,6 +222,7 @@ class SettingsScreen(MDScreen):
             content_cls=campo,
             buttons=[btn_cancelar, btn_salvar],
         )
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)])
         btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
         btn_salvar.bind(on_release=salvar)
         dialogo.open()

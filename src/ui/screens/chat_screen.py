@@ -28,12 +28,13 @@ from kivymd.app import MDApp
 
 # Import do seletor de imagens seguro e do novo serviço de voz global centralizado
 from src.ui.image_handler import abrir_seletor_seguro
+from src.ui import tema as T
 from src.services.tts_service import TtsService
 
 
 # ── Bolha de mensagem — MDCard atualizado para MD3 ───────────────────────────
 class Bolha(MDBoxLayout):
-    def __init__(self, texto, autor, animar=False, ao_terminar_anim=None, **kwargs):
+    def __init__(self, texto, autor, animar=False, ao_terminar_anim=None, imagem=None, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "horizontal"
         self.size_hint_y = None
@@ -47,15 +48,22 @@ class Bolha(MDBoxLayout):
             radius=[dp(16), dp(16),
                     dp(4 if e_usuario else 16),
                     dp(16 if e_usuario else 4)],
-            md_bg_color=[0.29, 0.11, 0.45, 1] if e_usuario else [0.18, 0.18, 0.24, 1],
+            md_bg_color=T.MENTA if e_usuario else T.BALAO_IA,
         )
         label = MDLabel(
             text=("" if animar else texto), size_hint_y=None, font_style="Body1",
-            theme_text_color="Custom", text_color=[1, 1, 1, 1],
+            theme_text_color="Custom", text_color=T.FUNDO if e_usuario else T.CREME,
         )
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
         label.bind(width=lambda i, w: setattr(i, "text_size", (w, None)))
         card.bind(minimum_height=card.setter("height"))
+        if imagem and e_usuario:
+            try:
+                from kivy.uix.image import Image as KImg
+                card.add_widget(KImg(source=imagem, size_hint_y=None, height=dp(150),
+                                     allow_stretch=True, keep_ratio=True))
+            except Exception as e:
+                print(f"[Spica] miniatura: {e}")
         card.add_widget(label)
 
         if not e_usuario:
@@ -64,6 +72,7 @@ class Bolha(MDBoxLayout):
                 size_hint=(None, None), size=(dp(32), dp(32)),
                 on_release=lambda x: self._copiar(),
             )
+            T.icone(btn)
             col = MDBoxLayout(
                 orientation="vertical", size_hint_x=0.18,
                 padding=[0, dp(4), 0, 0]
@@ -132,15 +141,18 @@ class ChatScreen(MDScreen):
             title="Spica",
             right_action_items=[
                 ["cog-outline", lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
-                ["delete-sweep-outline", lambda x: self._limpar()],
+                ["trash-can-outline", lambda x: self._limpar()],
             ],
         )
+        T.estilizar(raiz, md_bg_color=T.FUNDO)
+        T.estilizar(barra_superior, md_bg_color=T.SUPERFICIE,
+                    specific_text_color=T.CREME, elevation=0)
         raiz.add_widget(barra_superior)
 
         self._scroll = ScrollView(
             do_scroll_x=False, do_scroll_y=True, size_hint=(1, 1),
             bar_width=dp(3), scroll_type=["bars", "content"],
-            bar_color=[0.4, 0.6, 1, 0.7],
+            bar_color=T.PESSEGO[:3] + [0.7],
             always_overscroll=False,
         )
         self._msgs = GridLayout(
@@ -162,17 +174,21 @@ class ChatScreen(MDScreen):
             halign="center", font_style="Caption",
             theme_text_color="Primary",
         )
+        T.estilizar(self._indicador, theme_text_color="Custom", text_color=T.PESSEGO)
         raiz.add_widget(self._indicador)
 
         barra = MDBoxLayout(
             size_hint_y=None, height=dp(60),
             padding=[dp(4), dp(6)], spacing=dp(2),
         )
+        T.estilizar(barra, md_bg_color=T.SUPERFICIE)
 
-        barra.add_widget(MDIconButton(
+        btn_img = MDIconButton(
             icon="image-outline", 
             on_release=lambda x: self._galeria(),
-        ))
+        )
+        T.icone(btn_img)
+        barra.add_widget(btn_img)
 
         self._campo = MDTextField(
             hint_text="Mensagem...", mode="rectangle",
@@ -180,6 +196,10 @@ class ChatScreen(MDScreen):
             keyboard_suggestions=False,
             radius=[dp(20)],
         )
+        T.estilizar(self._campo,
+                    line_color_normal=T.BORDA, line_color_focus=T.MENTA,
+                    text_color_normal=T.CREME, text_color_focus=T.CREME,
+                    hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
         self._campo.bind(on_text_validate=lambda x: self._enviar())
         barra.add_widget(self._campo)
 
@@ -188,6 +208,7 @@ class ChatScreen(MDScreen):
             theme_icon_color="Primary",
             on_release=lambda x: self._toggle_mic(),
         )
+        T.icone(self._btn_mic)
         barra.add_widget(self._btn_mic)
 
         self._btn_som = MDIconButton(
@@ -195,13 +216,16 @@ class ChatScreen(MDScreen):
             theme_icon_color="Primary",
             on_release=lambda x: self._toggle_som(),
         )
+        T.icone(self._btn_som)
         barra.add_widget(self._btn_som)
 
-        barra.add_widget(MDIconButton(
+        btn_enviar = MDIconButton(
             icon="send", 
             theme_icon_color="Primary",
             on_release=lambda x: self._enviar(),
-        ))
+        )
+        T.icone(btn_enviar, T.PESSEGO)
+        barra.add_widget(btn_enviar)
 
         raiz.add_widget(barra)
         self.add_widget(raiz)
@@ -233,7 +257,7 @@ class ChatScreen(MDScreen):
         self._ouvindo = True
         self._tts.parar()
         self._btn_mic.icon = "microphone"
-        self._btn_mic.icon_color = [1, 0.3, 0.3, 1]
+        T.icone(self._btn_mic, T.PESSEGO)
         self._indicador.text = "● Ouvindo..."
         self._indicador.height = dp(24)
         
@@ -251,7 +275,7 @@ class ChatScreen(MDScreen):
     def _parar_mic(self):
         self._ouvindo = False
         self._btn_mic.icon = "microphone-outline"
-        self._btn_mic.theme_icon_color = "Primary"
+        T.icone(self._btn_mic)
         self._indicador.text = ""
         self._indicador.height = 0
 
@@ -259,11 +283,11 @@ class ChatScreen(MDScreen):
         self._som_ativo = not self._som_ativo
         if not self._som_ativo:
             self._btn_som.icon = "volume-off"
-            self._btn_som.icon_color = [0.5, 0.5, 0.5, 1]
+            T.icone(self._btn_som, T.TEXTO_2[:3] + [0.5])
             self._tts.parar()
         else:
             self._btn_som.icon = "volume-high"
-            self._btn_som.theme_icon_color = "Primary"
+            T.icone(self._btn_som)
 
     def _voz_recebida(self, texto):
         self._parar_mic()
@@ -314,8 +338,8 @@ class ChatScreen(MDScreen):
         exibir = texto or "Imagem"
         if self._imagem_pendente and texto:
             exibir = f"{texto}"
-        self._usuario(exibir)
         img = self._imagem_pendente
+        self._usuario(exibir, imagem=img)
         self._imagem_pendente = None
         self._limpar_prev()
         self._campo.text = ""
@@ -369,8 +393,8 @@ class ChatScreen(MDScreen):
         self._imagem_pendente = None
         self._limpar_prev()
 
-    def _usuario(self, t):
-        self._msgs.add_widget(Bolha(t, "usuario"))
+    def _usuario(self, t, imagem=None):
+        self._msgs.add_widget(Bolha(t, "usuario", imagem=imagem))
         self._rolar()
 
     def _spica(self, t):
