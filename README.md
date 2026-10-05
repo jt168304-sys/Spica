@@ -1,96 +1,103 @@
 # Spica
 
-Assistente virtual para Android, feita em Python com Kivy/KivyMD. Roda como app normal e também como uma bolha flutuante com expressões próprias, que continua funcionando mesmo com o app fechado.
+Assistente virtual para Android, feita em Python com Kivy/KivyMD. Funciona como app normal e também como uma bolha flutuante com expressões, que fica por cima de outros apps e escuta e responde mesmo com o app minimizado.
+
+**Versão atual: 1.1**
 
 ## O que ela faz
 
-- Conversa por texto, usando `groq/compound` como motor de IA — já vem com busca web nativa embutida (a própria IA decide quando pesquisar, e cita a fonte).
-- Entende imagens: você manda uma foto e ela analisa e responde sobre o conteúdo, usando `qwen/qwen3.6-27b` (visão).
-- Ouve e responde em voz alta, usando o reconhecimento de voz e o motor de texto-para-voz nativos do Android.
-- Sabe a data e hora reais do aparelho a cada resposta, sem precisar buscar isso na web.
-- **Bolha flutuante com expressões**: fica na tela por cima de outros apps, muda de "cara" de acordo com o tom da própria resposta (a IA se autoclassifica em um de 6 humores — neutro, feliz, surpresa, confusa, triste, chocada — e a expressão muda sozinha). Dá pra arrastar ela pra qualquer lugar, e um toque rápido abre um menuzinho com as opções de falar, mutar ou fechar.
-- Tema claro/escuro, alternável nas configurações.
+- **Conversa por texto ou voz**, usando `openai/gpt-oss-120b` (Groq) como motor de IA.
+- **Pesquisa na web**: a própria IA decide quando pesquisar, usando a pesquisa embutida do Groq (`browser_search`), e cita a fonte pelo nome. Se a pesquisa nativa falhar, usa ferramentas locais como reserva.
+- **Ferramentas**: clima atual e previsão de 3 dias (Open-Meteo) e calculadora exata.
+- **Entende imagens**: você manda uma foto e ela analisa e responde (modelo de visão da Qwen via Groq).
+- **Escuta contínua fora do app**: com a bolha ativa, o app é minimizado e a Spica continua ouvindo (testado no Android 14).
+- **Fala em voz alta**, com o motor de texto para voz nativo do Android.
+- **Bolha flutuante com expressões**: a IA se classifica em um de 6 humores (neutro, feliz, surpresa, confusa, triste, chocada) e a expressão muda sozinha. Dá para arrastar a bolha, e um toque abre o menu de falar, mutar ou fechar.
+- Sabe a data e a hora reais do aparelho a cada resposta.
+- Tema claro/escuro nas configurações.
 
 ## Como funciona por baixo dos panos
 
-O app inteiro é Python puro, sem nenhuma linha de Java/Kotlin escrita à mão. O acesso às APIs nativas do Android (TextToSpeech, SpeechRecognizer, janela de overlay, WakeLock, seletor de imagens) é feito via [pyjnius](https://github.com/kivy/pyjnius), que permite chamar classes Java diretamente do Python.
+O app inteiro é Python, sem Java/Kotlin escrito à mão. O acesso às APIs nativas do Android (overlay, TTS, WakeLock, AudioRecord, seletor de imagens) é feito via [pyjnius](https://github.com/kivy/pyjnius).
 
-Estrutura principal:
+### Escuta em segundo plano (Android 14)
+
+No Android 12+, o reconhecimento de voz do Google entrega silêncio quando o app não está visível. A solução tem 4 partes:
+
+1. **Foreground service com tipo `microphone`**: o serviço (`service.py`) é declarado no manifesto com `foregroundServiceType="microphone"`. O p4a 2024.01.21 não gera esse atributo, então o workflow clona o p4a e aplica o `patch_p4a_manifest.py` antes do build (`p4a.source_dir = ./p4a-local`).
+2. **AudioRecord + Whisper**: o áudio é capturado no processo do serviço e transcrito pelo Whisper do Groq (`mic_recorder.py`, `voice_service.py`, `listen_ipc.py`).
+3. **Bolha de sobreposição** (`SYSTEM_ALERT_WINDOW`), que mantém o processo com prioridade alta.
+4. **Isenção de otimização de bateria** e `moveTaskToBack` para minimizar o app sem fechá-lo (`src/utils/keepalive.py`).
+
+O diagnóstico completo está em `docs/android14-escuta-continua.md`.
+
+### Pesquisa e ferramentas
+
+- **Modo principal**: `browser_search` do Groq (roda nos servidores deles) + `clima` e `calcular` locais.
+- **Modo reserva**: `buscar_web` (DuckDuckGo) e `ler_pagina`, executadas no aparelho. O DuckDuckGo costuma bloquear o app, por isso não é o modo principal.
+- Se tudo falhar, a Spica avisa que não conseguiu pesquisar, em vez de inventar.
+
+### Estrutura
 
 ```
-main.py                        Ponto de entrada da Activity (UI), inicializacao e captura de erros
-service.py                     Servico de segundo plano (foreground service, mantem a bolha viva
-                                mesmo com o app fechado)
-buildozer.spec                 Configuracao de build para gerar o APK
-extra_manifest.xml             Bloco <queries> exigido desde o Android 11 p/ SpeechRecognizer/TTS
+main.py                        Activity (UI), inicialização e captura de erros
+service.py                     Foreground service (escuta e bolha em segundo plano)
+buildozer.spec                 Configuração de build
+patch_p4a_manifest.py          Insere foregroundServiceType=microphone no manifesto do p4a
+extra_manifest.xml             Bloco <queries> exigido desde o Android 11
 
 src/
-├── core/
-│   └── app_manager.py         App principal: tema, telas, permissoes
+├── core/app_manager.py        App principal: tema, telas, permissões
 ├── ui/
-│   ├── image_handler.py       Seletor de imagem (camera/galeria)
-│   └── screens/
-│       ├── chat_screen.py     Tela de conversa
-│       └── settings_screen.py Configuracoes (API key, tema, voz, bolha)
+│   ├── image_handler.py       Seletor de imagem (câmera/galeria)
+│   └── screens/               chat_screen.py, settings_screen.py
 ├── services/
-│   ├── groq_service.py        Chamadas a API da Groq (texto e visao) + sistema de humor
-│   ├── mood_service.py        Le assets/expressoes/humor.json e extrai a tag [HUMOR:xxx]
-│   │                          que a IA anexa em cada resposta
-│   ├── tts_service.py         Texto-para-voz nativo do Android
-│   ├── voice_service.py       Reconhecimento de voz nativo do Android
-│   ├── overlay.py             Bolha flutuante (janela, arrastar, menu, expressoes)
-│   └── web_service.py         Scraper de busca web (nao usado atualmente - o
-│                              groq/compound ja resolve isso nativamente; guardado
-│                              pra um futuro sistema de tool-calling local)
-├── utils/
-│   ├── logger.py
-│   ├── service_log.py         Log em arquivo (pasta Download publica) que funciona
-│   │                          tanto na Activity quanto no service.py
-│   ├── permissions.py
-│   └── thread_safe.py
-└── config/
-    └── settings.py            Configuracoes persistentes (JSON local)
+│   ├── groq_service.py        API do Groq (texto, visão), tool calling e humor
+│   ├── ferramentas.py         buscar_web, ler_pagina, clima, calcular
+│   ├── web_search.py          Busca DuckDuckGo (modo reserva)
+│   ├── mood_service.py        Lê assets/expressoes/humor.json e extrai [HUMOR:xxx]
+│   ├── voice_service.py       Reconhecimento de voz (SpeechRecognizer / Whisper)
+│   ├── mic_recorder.py        Captura de áudio PCM (AudioRecord)
+│   ├── listen_ipc.py          Pedido de escuta entre a Activity e o serviço
+│   ├── fg_service.py          Foreground service (tipo microphone)
+│   ├── tts_service.py         Texto para voz nativo
+│   ├── overlay.py             Bolha flutuante
+│   └── web_service.py         Scraper antigo, sem uso (pode ser removido)
+├── utils/                     logger, service_log, permissions, thread_safe, keepalive
+└── config/settings.py         Configurações persistentes (JSON local)
 
 assets/
-├── expressoes/                 12 PNGs (6 humores x boca aberta/fechada) + humor.json
-│                                (humor.json e livremente editavel, sem precisar mexer
-│                                em codigo Python)
-└── live2d/                     Modelo Live2D (WebView + pixi-live2d-display) - EM PAUSA,
-                                 nao esta em uso ativo no momento (ver secao abaixo)
+├── expressoes/                PNGs por humor (boca aberta/fechada) + humor.json
+└── live2d/                    Modelo Live2D (em pausa, previsto para a 1.2)
 ```
-
-## Sobre o modelo Live2D (`assets/live2d/`)
-
-Existe uma implementação alternativa da bolha usando um modelo Live2D de verdade (animação 3D-like, física de cabelo, etc), renderizado numa WebView via PixiJS + pixi-live2d-display. Ela está **pausada, não em uso** — bateu num bug ainda não resolvido na hora de carregar o modelo (erro `Cannot read properties of undefined`, que persistiu em duas bibliotecas diferentes testadas). O código continua no repositório, intacto, para retomar quando tivermos acesso a um debug mais profundo (via `chrome://inspect`, que já está habilitado no app). Enquanto isso, a bolha usa o sistema de PNGs por humor (`assets/expressoes/`), que é mais simples e comprovadamente estável.
 
 ## Build
 
-O APK é gerado via GitHub Actions, usando Buildozer com python-for-android. O workflow está em `.github/workflows/`. Basta dar push na branch `main` ou disparar manualmente pela aba Actions do repositório.
-
-Build local também funciona (só em Linux/WSL):
-
-```bash
-pip install buildozer
-buildozer android debug
-```
-
-O APK final fica em `bin/`.
+O APK é gerado pelo GitHub Actions (`.github/workflows/build.yml`), com Buildozer e python-for-android. Basta dar push na `main` ou disparar manualmente pela aba Actions. O build **depende do passo que prepara o p4a** (veja acima), então não rode o `buildozer` local sem ele.
 
 ## Configuração
 
-A Spica precisa de uma chave de API da Groq pra funcionar (gratuita):
+A Spica precisa de uma chave de API do Groq (gratuita):
 
-1. Crie uma conta em [console.groq.com](https://console.groq.com)
-2. Gere uma API Key
-3. No app: Configurações → cole a chave
+1. Crie uma conta em [console.groq.com](https://console.groq.com).
+2. Gere uma API Key.
+3. No app: Configurações → cole a chave.
 
-Pra usar a bolha flutuante, é preciso liberar manualmente a permissão "Exibir sobre outros apps" — o próprio app leva você até a tela certa nas Configurações.
+Para a bolha, libere a permissão "Exibir sobre outros apps" (o app leva você à tela certa). Na primeira ativação, ele também pede a isenção de otimização de bateria.
 
 ## Requisitos
 
-- Android 11 (API 30) ou superior é o alvo testado atualmente. Versões mais antigas (Android 10 e anteriores) podem ter instabilidade — em investigação, não é uma limitação definitiva.
-- Conexão com internet (a IA roda na nuvem, não no aparelho).
+- Testada no Android 10 e no Android 14 (Moto G24). `minapi = 24`.
+- Internet (a IA roda na nuvem).
 
-## Estado atual
+## Limitações conhecidas
 
-Em desenvolvimento ativo. Chat, visão, voz e bolha flutuante com expressões já funcionam de ponta a ponta, inclusive com o app em segundo plano (com ressalvas: escuta contínua fora do app funciona de forma intermitente, é uma limitação conhecida do `SpeechRecognizer` padrão do Android fora de foco de tela). Não há por enquanto notas, calculadora, tradutor ou outras ferramentas — o foco é só a assistente conversacional. Próximo passo planejado: leitura do sistema de arquivos do Android como contexto adicional para a IA.
+- **Sem corretor de texto no chat**: o campo do Kivy não lida bem com teclado preditivo. Previsto para a 1.3, com campo nativo do Android.
+- A pesquisa na web pode não achar canais ou pessoas muito pequenos.
+
+## Roadmap
+
+- **1.0**: versão bruta (chat, visão, voz e bolha).
+- **1.1**: ajustes finos, suporte ao Android 14 e pesquisa na web.
+- **1.2**: design novo (paleta baseada no modelo) e modelo V-tuber Live2D.
+- **1.3**: ajustes finos.
