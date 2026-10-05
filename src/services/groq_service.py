@@ -376,6 +376,7 @@ class GroqService:
                     slog(f"[Tool] {nome}({str(args)[:120]})")
                     resultado = executar_ferramenta(nome, args)
                     coletados.append((nome, resultado))
+                    slog(f"[Tool] resultado de {nome}: {resultado[:220]}")
                 else:  # todo tool_call precisa de resposta, mesmo ignorado
                     resultado = json.dumps({"erro": "limite de chamadas por rodada"})
                 mensagens.append({"role": "tool", "tool_call_id": c["id"],

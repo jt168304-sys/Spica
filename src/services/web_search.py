@@ -46,39 +46,84 @@ def _busca_ddgs(query, max_resultados):
     return saida
 
 
-def _busca_lite(query, max_resultados):
-    """Fallback sem dependências nativas: página HTML 'lite' do DuckDuckGo."""
-    import requests
-    headers = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
-                             "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"}
-    with requests.Session() as sessao:   # fecha a conexão ao sair
-        resp = sessao.post("https://lite.duckduckgo.com/lite/",
-                           data={"q": query, "kl": REGIAO},
-                           headers=headers, timeout=TIMEOUT)
-    resp.raise_for_status()
-    return _parse_lite(resp.text, max_resultados)
+def _atributo(attrs, nome):
+    m = re.search(r"(?<![\w-])" + nome + r"=['\"]([^'\"]*)['\"]", attrs)
+    return m.group(1) if m else ""
+
+
+def _desembrulhar(href):
+    """Os links do DDG vêm como //duckduckgo.com/l/?uddg=<url real>."""
+    if href.startswith("//"):
+        href = "https:" + href
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
+    return q["uddg"][0] if "uddg" in q else href
+
+
+def _links_com_classe(pagina, classe):
+    """[(href, texto)] dos <a> cuja classe contém `classe` (ordem dos atributos tanto faz)."""
+    achados = []
+    for m in re.finditer(r"<a\b([^>]*)>(.*?)</a>", pagina, re.S | re.I):
+        attrs, interno = m.group(1), m.group(2)
+        if classe in _atributo(attrs, "class"):
+            achados.append((_atributo(attrs, "href"), _limpar(interno)))
+    return achados
+
+
+def _snippets_com_classe(pagina, classe):
+    padrao = (r"<(?:a|td|div)\b[^>]*class=['\"][^'\"]*" + classe +
+              r"[^'\"]*['\"][^>]*>(.*?)</(?:a|td|div)>")
+    return [_limpar(x) for x in re.findall(padrao, pagina, re.S | re.I)]
+
+
+def _montar(links, snippets, max_resultados):
+    saida = []
+    for i, (href, titulo) in enumerate(links[:max_resultados]):
+        if not href:
+            continue
+        saida.append({
+            "titulo": titulo,
+            "link": _desembrulhar(href),
+            "resumo": (snippets[i] if i < len(snippets) else "")[:MAX_CORPO],
+        })
+    return saida
 
 
 def _parse_lite(pagina, max_resultados):
-    links = re.findall(
-        r"<a[^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>", pagina, re.S)
-    hrefs = re.findall(
-        r"<a[^>]*href=['\"]([^'\"]+)['\"][^>]*class=['\"]result-link['\"]", pagina)
-    snippets = re.findall(
-        r"<td[^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</td>", pagina, re.S)
-    saida = []
-    for i, href in enumerate(hrefs[:max_resultados]):
-        if href.startswith("//"):
-            href = "https:" + href
-        q = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
-        if "uddg" in q:                       # desembrulha o redirecionamento do DDG
-            href = q["uddg"][0]
-        saida.append({
-            "titulo": _limpar(links[i]) if i < len(links) else "",
-            "link": href,
-            "resumo": (_limpar(snippets[i]) if i < len(snippets) else "")[:MAX_CORPO],
-        })
-    return saida
+    return _montar(_links_com_classe(pagina, "result-link"),
+                   _snippets_com_classe(pagina, "result-snippet"), max_resultados)
+
+
+def _parse_html(pagina, max_resultados):
+    return _montar(_links_com_classe(pagina, "result__a"),
+                   _snippets_com_classe(pagina, "result__snippet"), max_resultados)
+
+
+def _busca_http(query, max_resultados):
+    """Fallback sem dependências nativas. Tenta a página 'lite' e depois a 'html'.
+    Devolve (resultados, motor, motivo_se_vazio)."""
+    import requests
+    headers = {"User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
+                             "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"}
+    motivo = "nenhum resultado encontrado"
+    with requests.Session() as sessao:   # fecha a conexão ao sair
+        for motor, url, parser in (("lite", "https://lite.duckduckgo.com/lite/", _parse_lite),
+                                   ("html", "https://html.duckduckgo.com/html/", _parse_html)):
+            try:
+                resp = sessao.post(url, data={"q": query, "kl": REGIAO},
+                                   headers=headers, timeout=TIMEOUT)
+                resp.raise_for_status()
+            except Exception as e:
+                motivo = f"{motor}: {type(e).__name__}"
+                continue
+            resultados = parser(resp.text, max_resultados)
+            if resultados:
+                return resultados, motor, ""
+            baixo = resp.text.lower()
+            if "anomaly" in baixo or "captcha" in baixo or "challenge" in baixo:
+                motivo = f"{motor}: bloqueio anti-robô do DuckDuckGo"
+            else:
+                motivo = f"{motor}: página sem resultados"
+    return [], "http", motivo
 
 
 def buscar_web(query, max_resultados=5):
@@ -92,19 +137,18 @@ def buscar_web(query, max_resultados=5):
         except (TypeError, ValueError):
             max_resultados = 5
 
-        resultados, motor = [], "ddgs"
+        resultados, motor, motivo = [], "ddgs", "nenhum resultado encontrado"
         if DDGS is not None:
             try:
                 resultados = _busca_ddgs(query, max_resultados)
             except Exception as e:
                 print(f"[Spica/Web] ddgs falhou ({type(e).__name__}: {e}) — tentando fallback")
         if not resultados:
-            motor = "lite"
-            resultados = _busca_lite(query, max_resultados)
+            resultados, motor, motivo = _busca_http(query, max_resultados)
 
         if not resultados:
-            return json.dumps({"consulta": query, "resultados": [],
-                               "aviso": "nenhum resultado encontrado"}, ensure_ascii=False)
+            return json.dumps({"consulta": query, "resultados": [], "aviso": motivo},
+                              ensure_ascii=False)
         return json.dumps({"consulta": query, "motor": motor, "resultados": resultados},
                           ensure_ascii=False)
     except Exception as e:  # rede, timeout, rate limit, parsing... nada derruba o assistente
