@@ -12,6 +12,7 @@ from kivymd.uix.list import MDList, TwoLineIconListItem, IconLeftWidget
 from kivymd.uix.toolbar import MDTopAppBar
 from kivymd.app import MDApp
 from src.ui import tema as T
+from src.ui.barra import criar_barra
 
 
 class SettingsScreen(MDScreen):
@@ -23,11 +24,10 @@ class SettingsScreen(MDScreen):
         raiz = MDBoxLayout(orientation="vertical")
         T.estilizar(raiz, md_bg_color=T.FUNDO)
 
-        # Barra de ferramentas KivyMD 1.2.0
-        barra_superior = MDTopAppBar(title="Configurações", left_action_items=[["arrow-left", lambda x: MDApp.get_running_app().navigate_to("chat")]])
-        T.estilizar(barra_superior, md_bg_color=T.SUPERFICIE,
-                    specific_text_color=T.CREME, elevation=0)
-        raiz.add_widget(barra_superior)
+        raiz.add_widget(criar_barra(
+            "Configurações",
+            esquerda=("arrow-left", lambda: MDApp.get_running_app().navigate_to("chat")),
+        ))
 
         scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         lista = MDList(padding=dp(12), spacing=dp(14))
@@ -52,7 +52,7 @@ class SettingsScreen(MDScreen):
 
     def _botao_principal(self, btn):
         return T.estilizar(btn, md_bg_color=T.MENTA, theme_text_color="Custom",
-                           text_color=T.FUNDO, radius=[dp(20)])
+                           text_color=T.FUNDO, radius=[dp(20)] * 4)
 
     def _card_sobre(self):
         card = MDCard(
@@ -222,7 +222,7 @@ class SettingsScreen(MDScreen):
             content_cls=campo,
             buttons=[btn_cancelar, btn_salvar],
         )
-        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)  # MDDialog exige 4 valores
         btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
         btn_salvar.bind(on_release=salvar)
         dialogo.open()

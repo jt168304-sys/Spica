@@ -25,7 +25,9 @@ requirements = python3, kivy, kivymd==1.2.0, requests, certifi, openssl, pyjnius
 orientation = portrait
 fullscreen = 0
 
-icon.filename = %(source.dir)s/Spica.png
+icon.filename = %(source.dir)s/assets/icone.png
+presplash.filename = %(source.dir)s/assets/presplash.png
+android.presplash_color = #1f2328
 
 # 2. ATUALIZADO: FOREGROUND_SERVICE_MICROPHONE (obrigatório Android 14 p/ mic em foreground service) e WAKE_LOCK (faltava — sem ela, service.py crasha ao adquirir o wake_lock)
 android.permissions = INTERNET,RECORD_AUDIO,VIBRATE,FOREGROUND_SERVICE,FOREGROUND_SERVICE_MICROPHONE,WAKE_LOCK,CAMERA,READ_MEDIA_IMAGES,SYSTEM_ALERT_WINDOW,POST_NOTIFICATIONS,REQUEST_IGNORE_BATTERY_OPTIMIZATIONS

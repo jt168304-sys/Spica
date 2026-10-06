@@ -29,6 +29,7 @@ from kivymd.app import MDApp
 # Import do seletor de imagens seguro e do novo serviço de voz global centralizado
 from src.ui.image_handler import abrir_seletor_seguro
 from src.ui import tema as T
+from src.ui.barra import criar_barra
 from src.services.tts_service import TtsService
 
 
@@ -137,17 +138,14 @@ class ChatScreen(MDScreen):
     def _construir_layout(self):
         raiz = MDBoxLayout(orientation="vertical")
 
-        barra_superior = MDTopAppBar(
-            title="Spica",
-            right_action_items=[
-                ["cog-outline", lambda x: MDApp.get_running_app().navigate_to("configuracoes")],
-                ["trash-can-outline", lambda x: self._limpar()],
-            ],
-        )
         T.estilizar(raiz, md_bg_color=T.FUNDO)
-        T.estilizar(barra_superior, md_bg_color=T.SUPERFICIE,
-                    specific_text_color=T.CREME, elevation=0)
-        raiz.add_widget(barra_superior)
+        raiz.add_widget(criar_barra(
+            "Spica", logo=True,
+            direita=[
+                ("cog-outline", lambda: MDApp.get_running_app().navigate_to("configuracoes")),
+                ("trash-can-outline", lambda: self._limpar()),
+            ],
+        ))
 
         self._scroll = ScrollView(
             do_scroll_x=False, do_scroll_y=True, size_hint=(1, 1),
