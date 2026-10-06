@@ -11,15 +11,29 @@ from kivymd.uix.card import MDCard
 
 
 class _CardMensagem(MDCard):
-    """MDCard sem o comportamento de botao/ripple do KivyMD 2.0, que
-    consome o toque e atrapalha o ScrollView de rolar por cima das
-    bolhas de mensagem. Mantem a aparencia igual, so nao reage a toque."""
+    """MDCard sem o comportamento de botão/ripple (que consumia o toque e atrapalhava
+    o scroll). Toque longo (0,6 s sem mover o dedo) chama `ao_toque_longo`."""
+    ao_toque_longo = None
+
     def on_touch_down(self, touch):
+        if self.ao_toque_longo and self.collide_point(*touch.pos):
+            inicio = tuple(touch.pos)
+
+            def _disparar(dt, touch=touch, inicio=inicio):
+                parado = (abs(touch.pos[0] - inicio[0]) < dp(12)
+                          and abs(touch.pos[1] - inicio[1]) < dp(12))
+                if touch.time_end == -1 and parado:   # dedo ainda na tela e parado
+                    self.ao_toque_longo()
+            Clock.schedule_once(_disparar, 0.6)
         return False
+
     def on_touch_move(self, touch):
         return False
+
     def on_touch_up(self, touch):
         return False
+
+
 from kivymd.uix.label import MDLabel
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.button import MDIconButton
@@ -35,16 +49,18 @@ from src.services.tts_service import TtsService
 
 # ── Bolha de mensagem — MDCard atualizado para MD3 ───────────────────────────
 class Bolha(MDBoxLayout):
-    def __init__(self, texto, autor, animar=False, ao_terminar_anim=None, imagem=None, **kwargs):
+    def __init__(self, texto, autor, animar=False, ao_terminar_anim=None, imagem=None,
+                 ao_passo_anim=None, **kwargs):
         super().__init__(**kwargs)
         self.orientation = "horizontal"
         self.size_hint_y = None
         self.padding = [dp(4), dp(2)]
         self._texto = texto
+        self._finalizar_anim = None
         e_usuario = (autor == "usuario")
 
         card = _CardMensagem(
-            style="filled",
+            style="filled", orientation="vertical", spacing=dp(8),
             size_hint=(0.82, None), padding=dp(12),
             radius=[dp(16), dp(16),
                     dp(4 if e_usuario else 16),
@@ -58,14 +74,26 @@ class Bolha(MDBoxLayout):
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
         label.bind(width=lambda i, w: setattr(i, "text_size", (w, None)))
         card.bind(minimum_height=card.setter("height"))
+        card.ao_toque_longo = lambda: self._copiar_com_aviso(card)
         if imagem and e_usuario:
             try:
                 from kivy.uix.image import Image as KImg
-                card.add_widget(KImg(source=imagem, size_hint_y=None, height=dp(150),
-                                     allow_stretch=True, keep_ratio=True))
+                altura = dp(170)
+                img = KImg(source=imagem, size_hint=(None, None), height=altura,
+                           allow_stretch=True, keep_ratio=True)
+
+                def _ajustar(*a):
+                    tw, th = img.texture_size
+                    if th:
+                        img.width = min(altura * tw / th, max(card.width - dp(24), dp(80)))
+                img.bind(texture_size=_ajustar)
+                card.bind(width=_ajustar)
+                _ajustar()
+                card.add_widget(img)
             except Exception as e:
                 print(f"[Spica] miniatura: {e}")
-        card.add_widget(label)
+        if texto:                       # imagem sem texto: só a foto, sem legenda
+            card.add_widget(label)
 
         if not e_usuario:
             btn = MDIconButton(
@@ -89,22 +117,66 @@ class Bolha(MDBoxLayout):
         self.bind(minimum_height=self.setter("height"))
 
         if animar:
-            self._animar_texto(label, texto, ao_terminar_anim)
+            self._animar_texto(label, texto, ao_terminar_anim, ao_passo_anim)
 
-    def _animar_texto(self, label, texto_completo, ao_terminar=None, chars_por_tick=2, intervalo=0.016):
-        """Revela o texto aos poucos (tipo máquina de escrever) em vez de
-        aparecer tudo de uma vez — só usado nas respostas da Spica."""
-        estado = {"i": 0}
+    def _animar_texto(self, label, texto_completo, ao_terminar=None, ao_passo=None):
+        """Revela o texto aos poucos, mas SEM travar: ~14 atualizações por segundo,
+        em palavras inteiras, e no máximo ~2 s mesmo para respostas longas."""
+        n = len(texto_completo)
+        tps = 14
+        passo = max(3, -(-n // int(2.2 * tps)))
+        estado = {"i": 0, "fim": False, "evento": None}
+
+        def _finalizar():
+            if estado["fim"]:
+                return
+            estado["fim"] = True
+            if estado["evento"] is not None:
+                estado["evento"].cancel()
+            label.text = texto_completo
+            if ao_terminar:
+                ao_terminar()
 
         def _passo(dt):
-            estado["i"] += chars_por_tick
-            label.text = texto_completo[:estado["i"]]
-            if estado["i"] >= len(texto_completo):
-                if ao_terminar:
-                    ao_terminar()
-                return False  # encerra o Clock.schedule_interval
+            if estado["fim"]:
+                return False
+            prox = estado["i"] + passo
+            if prox >= n:
+                _finalizar()
+                return False
+            corte = texto_completo.find(" ", prox)       # termina a palavra
+            i = n if corte == -1 else corte
+            estado["i"] = i
+            label.text = texto_completo[:i]
+            if ao_passo:
+                ao_passo()
+            if i >= n:
+                _finalizar()
+                return False
 
-        Clock.schedule_interval(_passo, intervalo)
+        self._finalizar_anim = _finalizar
+        estado["evento"] = Clock.schedule_interval(_passo, 1.0 / tps)
+
+    def finalizar_animacao(self):
+        """Mostra o texto inteiro agora e para a animação (usado ao interromper)."""
+        if self._finalizar_anim:
+            self._finalizar_anim()
+
+    def _copiar_com_aviso(self, card):
+        if not self._texto:
+            return
+        self._copiar()
+        try:
+            from kivymd.toast import toast
+            toast("Mensagem copiada")
+        except Exception as e:
+            print(f"[Spica] toast: {e}")
+        try:                                               # piscadinha de confirmação
+            original = list(card.md_bg_color)
+            card.md_bg_color = T.PESSEGO[:3] + [0.35]
+            Clock.schedule_once(lambda dt: setattr(card, "md_bg_color", original), 0.18)
+        except Exception:
+            pass
 
     def _copiar(self):
         try:
@@ -120,6 +192,8 @@ class ChatScreen(MDScreen):
         super().__init__(**kwargs)
         self._imagem_pendente = None
         self._aguardando      = False
+        self._anim_atual      = None
+        self._geracao         = 0
         self._digitando       = None
         self._ouvindo         = False
         self._som_ativo       = True # Gerencia se o chat deve reproduzir áudio localmente
@@ -132,7 +206,14 @@ class ChatScreen(MDScreen):
 
     def on_leave(self):
         """Apenas interrompe a fala atual ao sair da tela, preservando o motor para a bolha."""
-        if hasattr(self, '_tts') and self._tts:
+        self._interromper_resposta()
+
+    def _interromper_resposta(self):
+        """Para a fala e termina na hora o texto que ainda está aparecendo."""
+        if self._anim_atual is not None:
+            self._anim_atual.finalizar_animacao()
+            self._anim_atual = None
+        if hasattr(self, "_tts") and self._tts:
             self._tts.parar()
 
     def _construir_layout(self):
@@ -296,16 +377,20 @@ class ChatScreen(MDScreen):
         if not GroqService.get_instance().disponivel:
             self._spica("Configure sua chave Groq.")
             return
+        self._interromper_resposta()
         self._usuario(f"{texto}")
         self._aguardando = True
         self._show_typing()
+        g = self._geracao
         GroqService.get_instance().perguntar(
             mensagem=texto,
             callback=lambda r: Clock.schedule_once(
-                lambda dt: self._resposta_voz(r), 0),
+                lambda dt: self._resposta_voz(r, g), 0),
         )
 
-    def _resposta_voz(self, texto):
+    def _resposta_voz(self, texto, geracao=None):
+        if geracao is not None and geracao != self._geracao:
+            return                      # chat foi limpo enquanto respondia
         self._hide_typing()
         self._aguardando = False
         self._spica(texto)
@@ -333,23 +418,24 @@ class ChatScreen(MDScreen):
         if not GroqService.get_instance().disponivel:
             self._spica("Sem API Key.")
             return
-        exibir = texto or "Imagem"
-        if self._imagem_pendente and texto:
-            exibir = f"{texto}"
+        self._interromper_resposta()
         img = self._imagem_pendente
-        self._usuario(exibir, imagem=img)
+        self._usuario(texto, imagem=img)
         self._imagem_pendente = None
         self._limpar_prev()
         self._campo.text = ""
         self._aguardando = True
         self._show_typing()
+        g = self._geracao
         GroqService.get_instance().perguntar(
             mensagem=texto or "Descreva esta imagem.",
-            callback=self._resposta,
+            callback=lambda r: self._resposta(r, g),
             caminho_imagem=img,
         )
 
-    def _resposta(self, texto):
+    def _resposta(self, texto, geracao=None):
+        if geracao is not None and geracao != self._geracao:
+            return                      # chat foi limpo enquanto respondia
         self._hide_typing()
         self._aguardando = False
         self._spica(texto)
@@ -396,12 +482,13 @@ class ChatScreen(MDScreen):
         self._rolar()
 
     def _spica(self, t):
-        bolha = Bolha(t, "spica", animar=True, ao_terminar_anim=self._rolar)
+        if self._anim_atual is not None:        # termina a anterior antes de começar outra
+            self._anim_atual.finalizar_animacao()
+        bolha = Bolha(t, "spica", animar=True, ao_terminar_anim=self._rolar,
+                      ao_passo_anim=self._rolar_agora)
+        self._anim_atual = bolha
         self._msgs.add_widget(bolha)
-        # Acompanha o scroll enquanto o texto vai aparecendo (a bolha cresce
-        # de tamanho aos poucos), não só no final
-        for i in range(1, 8):
-            Clock.schedule_once(lambda dt: self._rolar(), i * 0.15)
+        self._rolar()
 
     def _show_typing(self):
         self._digitando = Bolha("• • •", "spica")
@@ -416,7 +503,12 @@ class ChatScreen(MDScreen):
     def _rolar(self):
         Clock.schedule_once(lambda dt: setattr(self._scroll, "scroll_y", 0), 0.15)
 
+    def _rolar_agora(self):
+        Clock.schedule_once(lambda dt: setattr(self._scroll, "scroll_y", 0), 0)
+
     def _limpar(self):
+        self._geracao += 1
+        self._interromper_resposta()
         self._msgs.clear_widgets()
         self._imagem_pendente = None
         self._aguardando = False
