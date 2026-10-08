@@ -14,6 +14,12 @@
     background: transparent !important;
     display: block;
   }
+  #diag {
+    position: absolute; left: 4px; bottom: 4px; right: 4px;
+    color: #a8c9bd; font-family: monospace; font-size: 10px;
+    line-height: 1.3; pointer-events: none; z-index: 9998;
+    text-shadow: 0 0 3px #000;
+  }
   #erro-visivel {
     display: none;
     position: absolute;
@@ -30,6 +36,7 @@
 </head>
 <body>
 <div id="erro-visivel"></div>
+<div id="diag"></div>
 <canvas id="canvas"></canvas>
 
 <script>
@@ -38,6 +45,16 @@
     div.style.display = "block";
     div.textContent = (div.textContent ? div.textContent + " | " : "") + msg;
   }
+  var DEBUG = true;   // false = esconde o diagnóstico (versão final)
+  function diag(msg) {
+    if (!DEBUG) return;
+    var d = document.getElementById("diag");
+    d.textContent += (d.textContent ? "\n" : "") + msg;
+    d.style.whiteSpace = "pre-wrap";
+  }
+  window.addEventListener("unhandledrejection", function (e) {
+    mostrarErro("Promise: " + (e.reason && (e.reason.stack || e.reason.message) || e.reason));
+  });
   window.addEventListener("error", function (e) {
     if (e.target && (e.target.tagName === "SCRIPT" || e.target.tagName === "LINK")) {
       mostrarErro("Falha ao carregar: " + (e.target.src || e.target.href));
@@ -61,115 +78,109 @@
 
 <script>
 (function () {
-  if (typeof Live2DCubismCore === "undefined") {
-    mostrarErro("Cubism Core NAO encontrado (live2dcubismcore.min.js ausente ou nao carregou)");
-  }
-  if (typeof PIXI === "undefined" || typeof PIXI.Application !== "function") {
-    mostrarErro("PIXI nao carregou corretamente (arquivo vendor/pixi.min.js ausente ou corrompido?)");
-  }
+  // ---------- diagnóstico inicial ----------
+  var gl = null;
+  try { var c = document.createElement("canvas"); gl = c.getContext("webgl") || c.getContext("experimental-webgl"); } catch (e) {}
+  diag("WebGL: " + (gl ? "OK" : "NAO DISPONIVEL"));
+  diag("Core: " + (typeof Live2DCubismCore !== "undefined" ? "OK" : "NAO"));
+  diag("PIXI: " + (typeof PIXI !== "undefined" && PIXI.VERSION ? PIXI.VERSION : "NAO"));
+  diag("live2d: " + (typeof PIXI !== "undefined" && PIXI.live2d ? "OK" : "NAO"));
 
+  if (typeof Live2DCubismCore === "undefined") mostrarErro("Cubism Core NAO encontrado");
+  if (typeof PIXI === "undefined" || typeof PIXI.Application !== "function") {
+    mostrarErro("PIXI nao carregou corretamente"); return;
+  }
   window.PIXI = window.PIXI || {};
 
   var app = new PIXI.Application({
     view: document.getElementById("canvas"),
-    autoStart: true,
-    backgroundAlpha: 0,       // fundo transparente
-    resizeTo: window,
-    antialias: true,
+    autoStart: true, backgroundAlpha: 0, resizeTo: window, antialias: true,
   });
 
   var model = null;
-  var mouthTimer = null;
 
-  // ------- API exposta para o Python (via webview.evaluateJavascript) -------
+  // ---------- humores: parâmetros do rosto (suavizados) ----------
+  // Param17..20 são as "expressões" do modelo (olhos >< / girando / sem brilho / pálida).
+  var HUMORES = {
+    neutro:   {},
+    feliz:    { ParamEyeLSmile: 1, ParamEyeRSmile: 1, ParamMouthForm: 0.9, ParamCheek: 0.5, ParamBrowLY: 0.2, ParamBrowRY: 0.2 },
+    surpresa: { Param17: 1, ParamBrowLY: 0.8, ParamBrowRY: 0.8 },
+    confusa:  { Param18: 1, ParamAngleZ: 8 },
+    triste:   { Param19: 1, ParamMouthForm: -0.7, ParamBrowLY: -0.4, ParamBrowRY: -0.4 },
+    chocada:  { Param20: 1, ParamMouthForm: -0.4 }
+  };
+  var TODOS = ["ParamEyeLSmile","ParamEyeRSmile","ParamMouthForm","ParamCheek","ParamBrowLY","ParamBrowRY",
+               "Param17","Param18","Param19","Param20","ParamAngleZ"];
+  var alvo = {}, atual = {};
+  TODOS.forEach(function (k) { alvo[k] = 0; atual[k] = 0; });
+
+  var falando = false, boca = 0, t0 = performance.now();
+
+  function aplicarFrame() {
+    if (!model) return;
+    var core = model.internalModel.coreModel;
+    var t = (performance.now() - t0) / 1000;
+    TODOS.forEach(function (k) {
+      atual[k] += (alvo[k] - atual[k]) * 0.12;          // transição suave
+      core.setParameterValueById(k, atual[k]);
+    });
+    // movimento sutil de cabeça/olhar (vida)
+    core.addParameterValueById("ParamAngleX", 4 * Math.sin(t * 0.6));
+    core.addParameterValueById("ParamAngleY", 2 * Math.sin(t * 0.4 + 1));
+    core.addParameterValueById("ParamAngleZ", 1.5 * Math.sin(t * 0.5 + 2));
+    // boca: oscila enquanto fala, fecha suave quando para
+    var meta = falando ? 0.15 + 0.75 * Math.abs(Math.sin(t * 9)) * (0.6 + 0.4 * Math.sin(t * 2.3)) : 0;
+    boca += (meta - boca) * 0.35;
+    core.setParameterValueById("ParamMouthOpenY", boca);
+  }
+
+  // ---------- API usada pelo Python (evaluateJavascript) ----------
   window.SpicaLive2D = {
-
     carregar: function (modelUrl, tentativa) {
       tentativa = tentativa || 1;
-      if (!PIXI.live2d) {
-        mostrarErro("pixi-live2d-display nao carregou (arquivo local ausente? veja vendor/)");
-        return;
-      }
+      diag("modelo: carregando (tentativa " + tentativa + ")...");
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
         app.stage.addChild(model);
         SpicaLive2D._ajustarTamanho();
-        // idle animation / respiração e física já rodam automaticamente
-        // via pixi-live2d-display assim que o modelo é adicionado ao stage.
+        model.internalModel.on("beforeModelUpdate", aplicarFrame);
+        diag("modelo: OK");
       }).catch(function (err) {
-        // Retry automático: a issue conhecida da biblioteca (falha ao ler
-        // propriedades durante o parse do modelo) às vezes é intermitente —
-        // tenta de novo até 2 vezes antes de desistir e mostrar o erro.
+        diag("modelo: ERRO " + (err && err.message || err));
         if (tentativa < 3) {
-          setTimeout(function () {
-            SpicaLive2D.carregar(modelUrl, tentativa + 1);
-          }, 500);
+          setTimeout(function () { SpicaLive2D.carregar(modelUrl, tentativa + 1); }, 500);
         } else {
-          mostrarErro("Falha ao carregar modelo (tentativa " + tentativa + "): " + err);
+          mostrarErro("Falha ao carregar modelo: " + (err && (err.stack || err.message) || err));
         }
       });
     },
-
     _ajustarTamanho: function () {
       if (!model) return;
-      var escala = Math.min(
-        app.renderer.width / model.internalModel.originalWidth,
-        app.renderer.height / model.internalModel.originalHeight
-      ) * 0.95;
+      var escala = Math.min(app.renderer.width / model.internalModel.originalWidth,
+                            app.renderer.height / model.internalModel.originalHeight) * 0.95;
       model.scale.set(escala);
       model.anchor.set(0.5, 0.5);
       model.position.set(app.renderer.width / 2, app.renderer.height / 2);
     },
-
-    setBoca: function (valor) {
-      if (!model) return;
-      model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", valor);
-    },
-
-    falarSimples: function (falando) {
-      if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null; }
-      if (!falando) { SpicaLive2D.setBoca(0); return; }
-      var aberto = false;
-      mouthTimer = setInterval(function () {
-        aberto = !aberto;
-        SpicaLive2D.setBoca(aberto ? 0.85 : 0.1);
-      }, 120);
-    },
-
-    setExpressao: function (nome) {
-      if (!model) return;
-      model.expression(nome);
-    },
-
-    piscar: function () {
-      // pixi-live2d-display já faz o EyeBlink automático via o grupo "EyeBlink"
-      // do model3.json; método aqui reservado caso queira forçar manualmente.
+    falarSimples: function (v) { falando = !!v; },
+    setHumor: function (nome) {
+      var def = HUMORES[nome] || HUMORES.neutro;
+      TODOS.forEach(function (k) { alvo[k] = def[k] || 0; });
     }
   };
 
-  window.addEventListener("resize", function () {
-    SpicaLive2D._ajustarTamanho();
-  });
+  window.addEventListener("resize", function () { SpicaLive2D._ajustarTamanho(); });
 
-  function esperarPronto(tentativas) {
-    tentativas = tentativas || 0;
-    var pronto = (typeof PIXI !== "undefined") &&
-                 (typeof PIXI.live2d !== "undefined") &&
-                 (typeof Live2DCubismCore !== "undefined");
-    if (pronto) {
+  function esperarPronto(n) {
+    n = n || 0;
+    if (typeof PIXI.live2d !== "undefined" && typeof Live2DCubismCore !== "undefined") {
       SpicaLive2D.carregar("osagegirl/osagegirl.model3.json");
       return;
     }
-    if (tentativas >= 40) {
-      mostrarErro("Timeout esperando bibliotecas ficarem prontas (PIXI/live2d/CubismCore)");
-      return;
-    }
-    setTimeout(function () { esperarPronto(tentativas + 1); }, 250);
+    if (n >= 40) { mostrarErro("Timeout esperando bibliotecas (PIXI/live2d/CubismCore)"); return; }
+    setTimeout(function () { esperarPronto(n + 1); }, 250);
   }
-
-  window.addEventListener("load", function () {
-    esperarPronto(0);
-  });
+  window.addEventListener("load", function () { esperarPronto(0); });
 })();
 </script>
 </body>

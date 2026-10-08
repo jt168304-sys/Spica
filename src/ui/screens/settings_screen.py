@@ -35,6 +35,7 @@ class SettingsScreen(MDScreen):
         # Adicionando os cards
         lista.add_widget(self._card_api_key())
         lista.add_widget(self._card_bolha())
+        lista.add_widget(self._card_live2d())
 
         lista.add_widget(self._card_sobre())
 
@@ -53,6 +54,20 @@ class SettingsScreen(MDScreen):
     def _botao_principal(self, btn):
         return T.estilizar(btn, md_bg_color=T.MENTA, theme_text_color="Custom",
                            text_color=T.FUNDO, radius=[dp(20)] * 4)
+
+    def _card_live2d(self):
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(150),
+            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0,
+            md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Modelo Live2D (beta)"))
+        card.add_widget(self._descricao("Teste do modelo real da Spica.", dp(22)))
+        btn = MDRaisedButton(text="Abrir teste",
+                             on_release=lambda x: MDApp.get_running_app().navigate_to("live2d_teste"))
+        self._botao_principal(btn)
+        card.add_widget(btn)
+        return card
 
     def _card_sobre(self):
         card = MDCard(

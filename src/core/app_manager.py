@@ -62,11 +62,13 @@ class WindApp(MDApp):
     def _register_screens(self):
         from src.ui.screens.chat_screen import ChatScreen
         from src.ui.screens.settings_screen import SettingsScreen
+        from src.ui.screens.live2d_teste_screen import Live2DTesteScreen
         
         # Instancia e adiciona as telas controladamente
         for tela in [
             ChatScreen(name="chat"),
             SettingsScreen(name="configuracoes"),
+            Live2DTesteScreen(name="live2d_teste"),
         ]:
             self.screen_manager.add_widget(tela)
         self.screen_manager.current = "chat"
