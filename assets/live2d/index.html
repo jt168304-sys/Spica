@@ -45,6 +45,7 @@
     div.style.display = "block";
     div.textContent = (div.textContent ? div.textContent + " | " : "") + msg;
   }
+  function resumo(e) { return String((e && (e.stack || e.message)) || e).split("\n").slice(0, 4).join(" | ").slice(0, 330); }
   var DEBUG = true;   // false = esconde o diagnóstico (versão final)
   function diag(msg) {
     if (!DEBUG) return;
@@ -53,7 +54,7 @@
     d.style.whiteSpace = "pre-wrap";
   }
   window.addEventListener("unhandledrejection", function (e) {
-    mostrarErro("Promise: " + (e.reason && (e.reason.stack || e.reason.message) || e.reason));
+    mostrarErro("Promise: " + resumo(e.reason));
   });
   window.addEventListener("error", function (e) {
     if (e.target && (e.target.tagName === "SCRIPT" || e.target.tagName === "LINK")) {
@@ -99,6 +100,19 @@
 
   var model = null;
 
+  // versão do arquivo .moc3 (byte 4) x versão máxima que o Core suporta
+  try {
+    var x = new XMLHttpRequest();
+    x.open("GET", "osagegirl/osagegirl.moc3"); x.responseType = "arraybuffer";
+    x.onload = function () {
+      var b = new Uint8Array(x.response);
+      var v = (typeof Live2DCubismCore !== "undefined" && Live2DCubismCore.Version) ? Live2DCubismCore.Version.csmGetLatestMocVersion() : "?";
+      diag("moc3 v" + b[4] + " | core suporta ate v" + v + " | " + b.length + " bytes");
+    };
+    x.onerror = function () { diag("moc3: nao consegui ler (XHR)"); };
+    x.send();
+  } catch (e) { diag("moc3: " + resumo(e)); }
+
   // ---------- humores: parâmetros do rosto (suavizados) ----------
   // Param17..20 são as "expressões" do modelo (olhos >< / girando / sem brilho / pálida).
   var HUMORES = {
@@ -141,10 +155,22 @@
       diag("modelo: carregando (tentativa " + tentativa + ")...");
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
+        diag("modelo: carregado");
+        app.ticker.stop();                       // diagnóstico por fases, sem laço de erros
+        try {
+          var dr = model.internalModel.coreModel._model.drawables;
+          var masc = 0; for (var i = 0; i < dr.maskCounts.length; i++) masc += dr.maskCounts[i];
+          diag("mascaras: " + masc + " | texturas validas: " + model.textures.map(function (t) { return t.valid ? 1 : 0; }).join(","));
+        } catch (e) { diag("info modelo: " + resumo(e)); }
         app.stage.addChild(model);
         SpicaLive2D._ajustarTamanho();
+        try { model.internalModel.update(16); diag("fase update: OK"); }
+        catch (e) { diag("fase update: ERRO " + resumo(e)); return; }
+        try { app.renderer.render(app.stage); diag("fase render: OK"); }
+        catch (e) { diag("fase render: ERRO " + resumo(e)); return; }
         model.internalModel.on("beforeModelUpdate", aplicarFrame);
-        diag("modelo: OK");
+        app.ticker.start();
+        diag("rodando");
       }).catch(function (err) {
         diag("modelo: ERRO " + (err && err.message || err));
         if (tentativa < 3) {
