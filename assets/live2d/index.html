@@ -166,8 +166,16 @@
         SpicaLive2D._ajustarTamanho();
         try { model.internalModel.update(16); diag("fase update: OK"); }
         catch (e) { diag("fase update: ERRO " + resumo(e)); return; }
+        // --- sondas: o que está undefined dentro do desenho? ---
+        try {
+          var v = Live2DCubismCore.Version.csmGetVersion();
+          diag("core " + (v >>> 24) + "." + ((v >>> 16) & 255) + "." + (v & 65535));
+          var cm = model.internalModel.coreModel, rr = model.internalModel.renderer;
+          diag("renderOrders: " + typeof cm.getDrawableRenderOrders() + " | dr.keys: " + Object.keys(cm._model.drawables).join(",").slice(0, 150));
+          diag("clipMgr: " + typeof rr._clippingManager + " | viewport: " + (app.renderer.gl.getParameter(app.renderer.gl.VIEWPORT) ? "ok" : "NULL"));
+        } catch (e) { diag("sondas: " + resumo(e)); }
         try { app.renderer.render(app.stage); diag("fase render: OK"); }
-        catch (e) { diag("fase render: ERRO " + resumo(e)); return; }
+        catch (e) { diag("fase render: ERRO " + resumo(e).slice(0, 120)); return; }
         model.internalModel.on("beforeModelUpdate", aplicarFrame);
         app.ticker.start();
         diag("rodando");
