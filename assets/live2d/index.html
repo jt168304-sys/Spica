@@ -113,6 +113,25 @@
     x.send();
   } catch (e) { diag("moc3: " + resumo(e)); }
 
+  // ---------- Core 6.x (Cubism 5.3) removeu drawables.renderOrders, que a biblioteca antiga usa ----------
+  // Recria a ordem de desenho (posição de cada drawable) a partir de drawOrders.
+  function consertarRenderOrders(cm) {
+    var M = cm._model, dr = M.drawables;
+    if (dr.renderOrders) return "nativo";
+    var n = dr.count;
+    cm.getDrawableRenderOrders = function () {
+      var ro = (typeof M.getRenderOrders === "function") ? M.getRenderOrders() : null;
+      if (ro && ro.length === n) return ro;
+      var d = dr.drawOrders, idx = [], i;
+      for (i = 0; i < n; i++) idx.push(i);
+      idx.sort(function (a, b) { return ((d ? d[a] : a) - (d ? d[b] : b)) || (a - b); });
+      var out = new Int32Array(n);
+      for (i = 0; i < n; i++) out[idx[i]] = i;
+      return out;
+    };
+    return "recriado a partir de " + (dr.drawOrders ? "drawOrders" : "indice");
+  }
+
   // ---------- humores: parâmetros do rosto (suavizados) ----------
   // Param17..20 são as "expressões" do modelo (olhos >< / girando / sem brilho / pálida).
   var HUMORES = {
@@ -166,12 +185,16 @@
         SpicaLive2D._ajustarTamanho();
         try { model.internalModel.update(16); diag("fase update: OK"); }
         catch (e) { diag("fase update: ERRO " + resumo(e)); return; }
+        try {
+          diag("renderOrders: " + consertarRenderOrders(model.internalModel.coreModel));
+          diag("metodos: " + Object.getOwnPropertyNames(Object.getPrototypeOf(model.internalModel.coreModel._model)).join(",").slice(0, 160));
+        } catch (e) { diag("conserto: " + resumo(e)); }
         // --- sondas: o que está undefined dentro do desenho? ---
         try {
           var v = Live2DCubismCore.Version.csmGetVersion();
           diag("core " + (v >>> 24) + "." + ((v >>> 16) & 255) + "." + (v & 65535));
           var cm = model.internalModel.coreModel, rr = model.internalModel.renderer;
-          diag("renderOrders: " + typeof cm.getDrawableRenderOrders() + " | dr.keys: " + Object.keys(cm._model.drawables).join(",").slice(0, 150));
+          diag("orders tipo: " + typeof cm.getDrawableRenderOrders() + " | dr: " + Object.keys(cm._model.drawables).join(",").slice(40, 190));
           diag("clipMgr: " + typeof rr._clippingManager + " | viewport: " + (app.renderer.gl.getParameter(app.renderer.gl.VIEWPORT) ? "ok" : "NULL"));
         } catch (e) { diag("sondas: " + resumo(e)); }
         try { app.renderer.render(app.stage); diag("fase render: OK"); }
