@@ -35,7 +35,7 @@ except Exception:
 
 # ---- Modelo Live2D na bolha (1.2) ----
 USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
-LIVE2D_LARGURA, LIVE2D_ALTURA = 256, 608   # tamanho da bolha em pixels (estreita: o corpo ocupa ~60% da largura do canvas)
+LIVE2D_LARGURA, LIVE2D_ALTURA = 176, 380   # tamanho da bolha em pixels (corpo inteiro com ~360 px de altura)
 LIVE2D_ZOOM, LIVE2D_Y = 1.07, 0.0          # enquadramento pela ALTURA (corpo inteiro com folga): zoom e deslocamento vertical
 LIVE2D_ORIGEM_Y = 1500                     # origem vertical do modelo (lida do arquivo .moc3; usada se o Core não informar)
 LIVE2D_DEBUG = False                       # True = mostra moldura vermelha (janela) e verde (canvas) para ajustar
@@ -589,7 +589,7 @@ class SpicaOverlay:
 
     def olhar_para_toque(self, x_tela, y_tela, larg_tela, alt_tela):
         """Toque em outra parte do app: ela olha na direção do toque (pixels, origem no topo esquerdo)."""
-        if not (HAS_ANDROID and self._modo_live2d and self.iniciado and self.params):
+        if not (HAS_ANDROID and self._modo_live2d and self.iniciado) or self.params is None:
             return
         agora = time.time()
         if agora - self._ultimo_olhar < 0.08:
@@ -599,6 +599,9 @@ class SpicaOverlay:
         cy = self.params.y + self.altura_bolha / 2.0
         dx = max(-1.0, min(1.0, (x_tela - cx) / (larg_tela / 2.0)))
         dy = max(-1.0, min(1.0, -((y_tela - cy) / (alt_tela / 2.0))))
+        self._n_olhar = getattr(self, "_n_olhar", 0) + 1
+        if self._n_olhar <= 3:        # log só dos 3 primeiros, para conferir que o toque chega
+            print(f"[Spica/Olhar] toque ({x_tela:.0f},{y_tela:.0f}) -> direção ({dx:.2f},{dy:.2f})")
         self._js(f"SpicaLive2D.olhar({dx:.2f},{dy:.2f})")
 
     @run_on_ui_thread

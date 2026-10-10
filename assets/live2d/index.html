@@ -98,7 +98,7 @@
   var app = new PIXI.Application({
     view: document.getElementById("canvas"),
     autoStart: true, backgroundAlpha: 0, resizeTo: window, antialias: true,
-    resolution: Math.min((window.devicePixelRatio || 1) * (OVERLAY ? 1.5 : 1), 4), autoDensity: true,   // na bolha desenha maior e reduz (bordas mais suaves)
+    resolution: Math.min((window.devicePixelRatio || 1) * (OVERLAY ? 2.5 : 1), 6), autoDensity: true,   // na bolha desenha maior e reduz (bordas mais suaves)
       // nitidez em telas de alta densidade
   });
 
