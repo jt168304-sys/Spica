@@ -36,7 +36,8 @@ except Exception:
 # ---- Modelo Live2D na bolha (1.2) ----
 USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
 LIVE2D_LARGURA, LIVE2D_ALTURA = 324, 608   # tamanho da bolha em pixels (proporção do modelo: 4000x7500)
-LIVE2D_ZOOM, LIVE2D_Y = 1.0, 0.0           # enquadramento: corpo inteiro (zoom e deslocamento vertical)
+LIVE2D_ZOOM, LIVE2D_Y = 0.96, 0.0          # enquadramento: corpo inteiro com folga (zoom e deslocamento vertical)
+LIVE2D_ORIGEM_Y = 1500                     # origem vertical do modelo (lida do arquivo .moc3; usada se o Core não informar)
 LIVE2D_DEBUG = True                        # True = mostra moldura vermelha (janela) e verde (área do modelo) para ajustar; depois vira False
 
 
@@ -95,6 +96,7 @@ class SpicaOverlay:
         self._falando = False
         self._modo_live2d = False
         self.altura_bolha = 280
+        self._ultimo_olhar = 0.0
         self._humor_atual = "neutro"  # humor exibido agora; muda via definir_expressao()
 
         self._menu_view = None
@@ -174,7 +176,7 @@ class SpicaOverlay:
             print(f"[Spica/Overlay] acesso a arquivos: {e}")
         wv.setBackgroundColor(0)   # fundo transparente (sem setLayerType SOFTWARE: WebGL precisa de hardware)
         wv.setWebViewClient(WebViewClient())
-        wv.loadUrl(f"file://{self.path_live2d}?overlay=1&zoom={LIVE2D_ZOOM}&y={LIVE2D_Y}&humor={self._humor_atual}&debug={1 if LIVE2D_DEBUG else 0}")
+        wv.loadUrl(f"file://{self.path_live2d}?overlay=1&zoom={LIVE2D_ZOOM}&y={LIVE2D_Y}&oy={LIVE2D_ORIGEM_Y}&humor={self._humor_atual}&debug={1 if LIVE2D_DEBUG else 0}")
         return wv
 
     def _montar_bolha(self):
@@ -253,12 +255,14 @@ class SpicaOverlay:
                     self.initial_touch_y = event.getRawY()
                     self.start_time = time.time()
                     self.moveu = False
+                    overlay_ref._olhar_no_toque(event, view)
                     return True
                 elif action == MotionEvent.ACTION_MOVE:
                     dx = event.getRawX() - self.initial_touch_x
                     dy = event.getRawY() - self.initial_touch_y
                     if abs(dx) > 40 or abs(dy) > 40:
                         self.moveu = True
+                    overlay_ref._olhar_no_toque(event, view)
                     overlay_ref.params.x = int(self.initial_x + dx)
                     overlay_ref.params.y = int(self.initial_y + dy)
                     try:
@@ -538,6 +542,37 @@ class SpicaOverlay:
             self._js(f"SpicaLive2D.setHumor('{nome_expressao}')")
             return
         self.definir_avatar_png(falar=self._falando)
+
+    def _olhar_no_toque(self, event, view):
+        """Toque/arrasto na própria bolha: ela olha na direção do dedo."""
+        if not self._modo_live2d:
+            return
+        agora = time.time()
+        if agora - self._ultimo_olhar < 0.08:       # limita a ~12 envios por segundo
+            return
+        self._ultimo_olhar = agora
+        try:
+            w = max(view.getWidth(), 1)
+            h = max(view.getHeight(), 1)
+            dx = (event.getX() - w / 2.0) / (w / 2.0)
+            dy = -((event.getY() - h / 2.0) / (h / 2.0))
+            self._js(f"SpicaLive2D.olhar({dx:.2f},{dy:.2f})")
+        except Exception as e:
+            print(f"[Spica/Overlay] olhar: {e}")
+
+    def olhar_para_toque(self, x_tela, y_tela, larg_tela, alt_tela):
+        """Toque em outra parte do app: ela olha na direção do toque (pixels, origem no topo esquerdo)."""
+        if not (HAS_ANDROID and self._modo_live2d and self.iniciado and self.params):
+            return
+        agora = time.time()
+        if agora - self._ultimo_olhar < 0.08:
+            return
+        self._ultimo_olhar = agora
+        cx = self.params.x + LIVE2D_LARGURA / 2.0
+        cy = self.params.y + self.altura_bolha / 2.0
+        dx = max(-1.0, min(1.0, (x_tela - cx) / (larg_tela / 2.0)))
+        dy = max(-1.0, min(1.0, -((y_tela - cy) / (alt_tela / 2.0))))
+        self._js(f"SpicaLive2D.olhar({dx:.2f},{dy:.2f})")
 
     @run_on_ui_thread
     def _js(self, codigo):

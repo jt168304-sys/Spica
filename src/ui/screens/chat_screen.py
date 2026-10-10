@@ -1,5 +1,7 @@
 # chat_screen.py — Spica v16 (Sincronizado com o Motor de Voz Global)
 import os
+import time
+from kivy.core.window import Window
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
@@ -188,6 +190,28 @@ class Bolha(MDBoxLayout):
 
 # ── Tela de chat — MD3 Compliant ──────────────────────────────────────────────
 class ChatScreen(MDScreen):
+    # --- a Spica (bolha Live2D) olha na direção dos toques nesta tela ---
+    def on_touch_down(self, touch):
+        self._olhar_toque(touch)
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        self._olhar_toque(touch)
+        return super().on_touch_move(touch)
+
+    def _olhar_toque(self, touch):
+        try:
+            agora = time.time()
+            if agora - getattr(self, "_t_olhar", 0) < 0.1:
+                return
+            self._t_olhar = agora
+            from src.services.overlay import SpicaOverlay
+            inst = SpicaOverlay._instancia_ativa
+            if inst is not None:
+                inst.olhar_para_toque(touch.x, Window.height - touch.y, Window.width, Window.height)
+        except Exception as e:
+            print(f"[Spica] olhar_toque: {e}")
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._imagem_pendente = None

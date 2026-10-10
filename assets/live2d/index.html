@@ -179,6 +179,7 @@
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
         diag("modelo: carregado");
+        try { model.autoInteract = false; } catch (e) {}   // o olhar é controlado pelo app (SpicaLive2D.olhar)
         try { model.internalModel.renderer.setClippingMaskBufferSize(1024); } catch (e) { diag("mascara 1024: " + resumo(e)); }
         if (Q.get("debug") === "1") {
           var borda = document.createElement("div");
@@ -188,10 +189,6 @@
           info.style.cssText = "position:fixed;left:3px;top:3px;color:#ff0;font:10px monospace;z-index:9999;pointer-events:none;text-shadow:0 0 2px #000;white-space:pre";
           info.textContent = innerWidth + "x" + innerHeight + " dpr " + (window.devicePixelRatio || 1) + "\ncanvas " + model.internalModel.originalWidth + "x" + model.internalModel.originalHeight;
           document.body.appendChild(info);
-          var caixa = new PIXI.Graphics();
-          caixa.lineStyle(3, 0x00ff00, 1);
-          caixa.drawRect(0, 0, model.internalModel.originalWidth, model.internalModel.originalHeight);
-          model.addChild(caixa);
         }
         app.ticker.stop();                       // diagnóstico por fases, sem laço de erros
         try {
@@ -231,24 +228,48 @@
         }
       });
     },
+    // O Core guarda a "origem" do modelo (CanvasOriginY). A biblioteca desenha como se a origem
+    // fosse o centro do canvas, então este modelo aparece deslocado para baixo (pés cortados).
+    _origemY: function () {
+      try {
+        var v = model.internalModel.coreModel._model.canvasinfo.CanvasOriginY;
+        if (typeof v === "number") return v;
+      } catch (e) {}
+      var q = parseFloat(Q.get("oy"));
+      return isNaN(q) ? null : q;
+    },
     _ajustarTamanho: function () {
       if (!model) return;
-      if (OVERLAY) {                 // corpo inteiro, centralizado na bolha
-        var zoom = parseFloat(Q.get("zoom")) || 1.0, dy = parseFloat(Q.get("y")) || 0;
-        var esc2 = Math.min(app.screen.width / model.internalModel.originalWidth,
-                            app.screen.height / model.internalModel.originalHeight) * zoom;
-        model.anchor.set(0.5, 0.5);
-        model.scale.set(esc2);
-        model.position.set(app.screen.width / 2, app.screen.height / 2 + app.screen.height * dy);
-        return;
-      }
-      var escala = Math.min(app.screen.width / model.internalModel.originalWidth,
-                            app.screen.height / model.internalModel.originalHeight) * 0.95;
-      model.scale.set(escala);
+      var W = app.screen.width, H = app.screen.height;
+      var ow = model.internalModel.originalWidth, oh = model.internalModel.originalHeight;
+      var zoom = OVERLAY ? (parseFloat(Q.get("zoom")) || 1.0) : 0.95;
+      var dy = OVERLAY ? (parseFloat(Q.get("y")) || 0) : 0;
+      var esc = Math.min(W / ow, H / oh) * zoom;
+      var oy = SpicaLive2D._origemY();
+      var corr = (oy === null) ? 0 : (oh / 2 - oy) * esc;       // sobe o modelo para alinhar a origem
       model.anchor.set(0.5, 0.5);
-      model.position.set(app.screen.width / 2, app.screen.height / 2);
+      model.scale.set(esc);
+      model.position.set(W / 2, H / 2 + H * dy - corr);
+      if (Q.get("debug") === "1") {                              // caixa verde = área do canvas já corrigida
+        if (window._caixaVerde) app.stage.removeChild(window._caixaVerde);
+        var g = new PIXI.Graphics();
+        g.lineStyle(2, 0x00ff00, 1);
+        g.drawRect(model.x - ow * esc / 2, model.y - oh * esc / 2, ow * esc, oh * esc);
+        app.stage.addChild(g);
+        window._caixaVerde = g;
+      }
     },
     falarSimples: function (v) { falando = !!v; },
+    // olhar na direção (dx, dy) em [-1,1] (dy positivo = para cima); volta ao centro após 2,5 s
+    olhar: function (dx, dy) {
+      if (!model) return;
+      dx = Math.max(-1, Math.min(1, dx)); dy = Math.max(-1, Math.min(1, dy));
+      model.internalModel.focusController.focus(dx, dy, false);
+      clearTimeout(window._timerOlhar);
+      window._timerOlhar = setTimeout(function () {
+        if (model) model.internalModel.focusController.focus(0, 0, false);
+      }, 2500);
+    },
     setHumor: function (nome) {
       var def = HUMORES[nome] || HUMORES.neutro;
       TODOS.forEach(function (k) { alvo[k] = def[k] || 0; });
