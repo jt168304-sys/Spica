@@ -98,6 +98,7 @@
   var app = new PIXI.Application({
     view: document.getElementById("canvas"),
     autoStart: true, backgroundAlpha: 0, resizeTo: window, antialias: true,
+    resolution: Math.min(window.devicePixelRatio || 1, 3), autoDensity: true,   // nitidez em telas de alta densidade
   });
 
   var model = null;
@@ -219,18 +220,18 @@
       if (!model) return;
       if (OVERLAY) {                 // corpo inteiro, centralizado na bolha
         var zoom = parseFloat(Q.get("zoom")) || 1.0, dy = parseFloat(Q.get("y")) || 0;
-        var esc2 = Math.min(app.renderer.width / model.internalModel.originalWidth,
-                            app.renderer.height / model.internalModel.originalHeight) * zoom;
+        var esc2 = Math.min(app.screen.width / model.internalModel.originalWidth,
+                            app.screen.height / model.internalModel.originalHeight) * zoom;
         model.anchor.set(0.5, 0.5);
         model.scale.set(esc2);
-        model.position.set(app.renderer.width / 2, app.renderer.height / 2 + app.renderer.height * dy);
+        model.position.set(app.screen.width / 2, app.screen.height / 2 + app.screen.height * dy);
         return;
       }
-      var escala = Math.min(app.renderer.width / model.internalModel.originalWidth,
-                            app.renderer.height / model.internalModel.originalHeight) * 0.95;
+      var escala = Math.min(app.screen.width / model.internalModel.originalWidth,
+                            app.screen.height / model.internalModel.originalHeight) * 0.95;
       model.scale.set(escala);
       model.anchor.set(0.5, 0.5);
-      model.position.set(app.renderer.width / 2, app.renderer.height / 2);
+      model.position.set(app.screen.width / 2, app.screen.height / 2);
     },
     falarSimples: function (v) { falando = !!v; },
     setHumor: function (nome) {
