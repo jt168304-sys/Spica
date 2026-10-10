@@ -35,10 +35,10 @@ except Exception:
 
 # ---- Modelo Live2D na bolha (1.2) ----
 USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
-LIVE2D_LARGURA, LIVE2D_ALTURA = 324, 608   # tamanho da bolha em pixels (proporção do modelo: 4000x7500)
-LIVE2D_ZOOM, LIVE2D_Y = 0.96, 0.0          # enquadramento: corpo inteiro com folga (zoom e deslocamento vertical)
+LIVE2D_LARGURA, LIVE2D_ALTURA = 256, 608   # tamanho da bolha em pixels (estreita: o corpo ocupa ~60% da largura do canvas)
+LIVE2D_ZOOM, LIVE2D_Y = 1.07, 0.0          # enquadramento pela ALTURA (corpo inteiro com folga): zoom e deslocamento vertical
 LIVE2D_ORIGEM_Y = 1500                     # origem vertical do modelo (lida do arquivo .moc3; usada se o Core não informar)
-LIVE2D_DEBUG = True                        # True = mostra moldura vermelha (janela) e verde (área do modelo) para ajustar; depois vira False
+LIVE2D_DEBUG = False                       # True = mostra moldura vermelha (janela) e verde (canvas) para ajustar
 
 
 def tem_permissao_overlay():
@@ -223,6 +223,8 @@ class SpicaOverlay:
         )
 
         self._configurar_toque_na_bolha()
+        if self._modo_live2d:
+            self._ligar_olhar_na_janela()
         print(f"[Spica/Overlay] Bolha ({'Live2D' if self._modo_live2d else 'PNG por humor'}) injetada no sistema!")
 
     def _configurar_toque_na_bolha(self):
@@ -543,6 +545,31 @@ class SpicaOverlay:
             return
         self.definir_avatar_png(falar=self._falando)
 
+    def _ligar_olhar_na_janela(self):
+        """Escuta TODOS os toques da janela do app (qualquer tela) para ela olhar na direção do dedo."""
+        try:
+            from kivy.core.window import Window
+            self._cb_toque_janela = lambda janela, touch: self._tocou_janela(janela, touch)
+            Window.bind(on_touch_down=self._cb_toque_janela, on_touch_move=self._cb_toque_janela)
+        except Exception as e:
+            print(f"[Spica/Overlay] olhar na janela: {e}")
+
+    def _desligar_olhar_na_janela(self):
+        try:
+            from kivy.core.window import Window
+            cb = getattr(self, "_cb_toque_janela", None)
+            if cb:
+                Window.unbind(on_touch_down=cb, on_touch_move=cb)
+        except Exception as e:
+            print(f"[Spica/Overlay] desligar olhar: {e}")
+
+    def _tocou_janela(self, janela, touch):
+        try:
+            self.olhar_para_toque(touch.x, janela.height - touch.y, janela.width, janela.height)
+        except Exception as e:
+            print(f"[Spica/Overlay] toque janela: {e}")
+        return False        # não consome o toque
+
     def _olhar_no_toque(self, event, view):
         """Toque/arrasto na própria bolha: ela olha na direção do dedo."""
         if not self._modo_live2d:
@@ -598,6 +625,7 @@ class SpicaOverlay:
 
                 self.window_manager.removeView(self.image_view)
                 if self._modo_live2d:
+                    self._desligar_olhar_na_janela()
                     try:
                         self.image_view.destroy()
                     except Exception:

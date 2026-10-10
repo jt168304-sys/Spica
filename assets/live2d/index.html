@@ -244,7 +244,7 @@
       var ow = model.internalModel.originalWidth, oh = model.internalModel.originalHeight;
       var zoom = OVERLAY ? (parseFloat(Q.get("zoom")) || 1.0) : 0.95;
       var dy = OVERLAY ? (parseFloat(Q.get("y")) || 0) : 0;
-      var esc = Math.min(W / ow, H / oh) * zoom;
+      var esc = (OVERLAY ? (H / oh) : Math.min(W / ow, H / oh)) * zoom;   // na bolha: encaixa pela altura
       var oy = SpicaLive2D._origemY();
       var corr = (oy === null) ? 0 : (oh / 2 - oy) * esc;       // sobe o modelo para alinhar a origem
       model.anchor.set(0.5, 0.5);
