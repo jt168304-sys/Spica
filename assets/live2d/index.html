@@ -46,7 +46,9 @@
     div.textContent = (div.textContent ? div.textContent + " | " : "") + msg;
   }
   function resumo(e) { return String((e && (e.stack || e.message)) || e).split("\n").slice(0, 4).join(" | ").slice(0, 330); }
-  var DEBUG = true;   // false = esconde o diagnóstico (versão final)
+  var Q = new URLSearchParams(location.search);
+  var OVERLAY = Q.get("overlay") === "1";      // dentro da bolha flutuante
+  var DEBUG = !OVERLAY;                         // diagnóstico só na tela de teste   // false = esconde o diagnóstico (versão final)
   function diag(msg) {
     if (!DEBUG) return;
     var d = document.getElementById("diag");
@@ -200,6 +202,8 @@
         try { app.renderer.render(app.stage); diag("fase render: OK"); }
         catch (e) { diag("fase render: ERRO " + resumo(e).slice(0, 120)); return; }
         model.internalModel.on("beforeModelUpdate", aplicarFrame);
+        if (OVERLAY) app.ticker.maxFPS = 30;      // economiza bateria na bolha
+        SpicaLive2D.setHumor(Q.get("humor") || "neutro");
         app.ticker.start();
         diag("rodando");
       }).catch(function (err) {
@@ -213,6 +217,15 @@
     },
     _ajustarTamanho: function () {
       if (!model) return;
+      if (OVERLAY) {                 // enquadra o busto (rosto e tronco) na bolha
+        var zoom = parseFloat(Q.get("zoom")) || 1.15, dy = parseFloat(Q.get("y"));
+        if (isNaN(dy)) dy = 0.02;
+        var esc2 = (app.renderer.width * zoom) / model.internalModel.originalWidth;
+        model.anchor.set(0.5, 0);
+        model.scale.set(esc2);
+        model.position.set(app.renderer.width / 2, app.renderer.height * dy);
+        return;
+      }
       var escala = Math.min(app.renderer.width / model.internalModel.originalWidth,
                             app.renderer.height / model.internalModel.originalHeight) * 0.95;
       model.scale.set(escala);

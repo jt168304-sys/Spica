@@ -12,6 +12,8 @@ try:
     WindowManager = autoclass('android.view.WindowManager')
     LayoutParams = autoclass('android.view.WindowManager$LayoutParams')
     ImageView = autoclass('android.widget.ImageView')
+    WebView = autoclass('android.webkit.WebView')
+    WebViewClient = autoclass('android.webkit.WebViewClient')
     BitmapFactory = autoclass('android.graphics.BitmapFactory')
     PixelFormat = autoclass('android.graphics.PixelFormat')
     PythonActivity = autoclass("org.kivy.android.PythonActivity")
@@ -30,6 +32,11 @@ try:
 except Exception:
     HAS_ANDROID = False
     def run_on_ui_thread(func): return func
+
+# ---- Modelo Live2D na bolha (1.2) ----
+USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
+LIVE2D_LARGURA, LIVE2D_ALTURA = 340, 420   # tamanho da bolha em pixels (modo Live2D)
+LIVE2D_ZOOM, LIVE2D_Y = 1.15, 0.02         # enquadramento do busto (zoom e deslocamento vertical)
 
 
 def tem_permissao_overlay():
@@ -85,6 +92,8 @@ class SpicaOverlay:
         self.mutado = False
         self.escuta_continua = False
         self._falando = False
+        self._modo_live2d = False
+        self.altura_bolha = 280
         self._humor_atual = "neutro"  # humor exibido agora; muda via definir_expressao()
 
         self._menu_view = None
@@ -100,6 +109,7 @@ class SpicaOverlay:
         # cobertura parcial e vai enriquecendo conforme mais PNGs forem
         # adicionados, sem precisar mexer em código.
         self.path_expressoes_dir = os.path.join(base_dir, "assets", "expressoes")
+        self.path_live2d = os.path.join(base_dir, "assets", "live2d", "index.html")
 
     def _resolver_caminho_expressao(self, humor, falar):
         sufixo = "aberta" if falar else "fechada"
@@ -136,34 +146,65 @@ class SpicaOverlay:
     @run_on_ui_thread
     def ligar_bolha(self):
         if not HAS_ANDROID or self.iniciado: return
+        self.iniciado = True          # evita criar duas bolhas se tocarem duas vezes
+        self._ligar_bolha_interno()
+
+    @run_on_ui_thread
+    def _ligar_bolha_interno(self):
+        """Roda na thread de UI do Android (a WebView exige isso)."""
         try:
-            self._ligar_bolha_interno()
+            self._montar_bolha()
         except Exception as e:
             import traceback
-            erro_completo = traceback.format_exc()
-            print(f"[Spica/Overlay] ERRO CRÍTICO ao ligar bolha:\n{erro_completo}")
+            self.iniciado = False
+            print(f"[Spica/Overlay] ERRO CRÍTICO ao ligar bolha:\n{traceback.format_exc()}")
             self._toast(f"[Spica] Erro ao ligar bolha: {type(e).__name__}: {e}")
 
-    def _ligar_bolha_interno(self):
+    def _criar_view_live2d(self, ctx):
+        wv = WebView(ctx)
+        cfg = wv.getSettings()
+        cfg.setJavaScriptEnabled(True)
+        cfg.setDomStorageEnabled(True)
+        cfg.setAllowFileAccess(True)
+        try:  # necessário para o modelo/Cubism carregarem via file://
+            cfg.setAllowFileAccessFromFileURLs(True)
+            cfg.setAllowUniversalAccessFromFileURLs(True)
+        except Exception as e:
+            print(f"[Spica/Overlay] acesso a arquivos: {e}")
+        wv.setBackgroundColor(0)   # fundo transparente (sem setLayerType SOFTWARE: WebGL precisa de hardware)
+        wv.setWebViewClient(WebViewClient())
+        wv.loadUrl(f"file://{self.path_live2d}?overlay=1&zoom={LIVE2D_ZOOM}&y={LIVE2D_Y}&humor={self._humor_atual}")
+        return wv
+
+    def _montar_bolha(self):
         ctx = PythonActivity.mActivity
         self.window_manager = ctx.getSystemService(Context.WINDOW_SERVICE)
-        self.image_view = ImageView(ctx)
-        # CORRIGIDO: sem isso, o ImageView podia herdar um fundo (branco,
-        # em geral) do tema do Android — o PixelFormat.TRANSLUCENT ali embaixo
-        # só deixa a JANELA suportar transparência, não torna o fundo da View
-        # em si transparente sozinho. Isso aparecia como um fundo branco atrás
-        # da cabeça/cantos onde o desenho não cobre o quadrado inteiro.
-        self.image_view.setBackgroundColor(0)
 
-        self.definir_avatar_png(falar=False)
+        view = None
+        self._modo_live2d = False
+        if USAR_LIVE2D and os.path.exists(self.path_live2d):
+            try:
+                view = self._criar_view_live2d(ctx)
+                self._modo_live2d = True
+            except Exception as e:
+                print(f"[Spica/Overlay] Live2D indisponível, usando PNG: {e}")
+                view = None
+        if view is None:
+            view = ImageView(ctx)
+            # sem isso o ImageView podia herdar um fundo branco do tema
+            view.setBackgroundColor(0)
+        self.image_view = view
+        if not self._modo_live2d:
+            self.definir_avatar_png(falar=False)
 
+        largura, altura = (LIVE2D_LARGURA, LIVE2D_ALTURA) if self._modo_live2d else (280, 280)
+        self.altura_bolha = altura
         window_type = 2038
         flags = LayoutParams.FLAG_NOT_FOCUSABLE | LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        if self._modo_live2d:
+            flags |= LayoutParams.FLAG_HARDWARE_ACCELERATED   # janelas de overlay não têm GPU por padrão
 
-        self.params = LayoutParams(
-            280, 280,
-            window_type, flags, PixelFormat.TRANSLUCENT
-        )
+        self.params = LayoutParams(largura, altura, window_type, flags, PixelFormat.TRANSLUCENT)
         self.params.gravity = 51
         self.params.x = 150
         self.params.y = 150
@@ -179,8 +220,7 @@ class SpicaOverlay:
         )
 
         self._configurar_toque_na_bolha()
-
-        print("[Spica/Overlay] Bolha (PNG por humor) injetada no sistema e sincronizada ao TTS!")
+        print(f"[Spica/Overlay] Bolha ({'Live2D' if self._modo_live2d else 'PNG por humor'}) injetada no sistema!")
 
     def _configurar_toque_na_bolha(self):
         """Permite arrastar a bolha pela tela e tocar rápido para abrir o menu."""
@@ -313,7 +353,7 @@ class SpicaOverlay:
             if self.params.y > 1200:
                 menu_params.y = self.params.y - 200
             else:
-                menu_params.y = self.params.y + 180
+                menu_params.y = self.params.y + self.altura_bolha - 100
 
             self.window_manager.addView(container, menu_params)
             self._menu_view = container
@@ -464,6 +504,9 @@ class SpicaOverlay:
         if not HAS_ANDROID or not self.image_view:
             return
         self._falando = falar
+        if self._modo_live2d:
+            self._js(f"SpicaLive2D.falarSimples({'true' if falar else 'false'})")
+            return
 
         if self._bitmap_atual:
             try:
@@ -490,7 +533,19 @@ class SpicaOverlay:
         if not HAS_ANDROID or not self.image_view:
             return
         self._humor_atual = nome_expressao
+        if self._modo_live2d:
+            self._js(f"SpicaLive2D.setHumor('{nome_expressao}')")
+            return
         self.definir_avatar_png(falar=self._falando)
+
+    @run_on_ui_thread
+    def _js(self, codigo):
+        """Executa JavaScript na página do Live2D (thread de UI)."""
+        try:
+            if self._modo_live2d and self.image_view is not None:
+                self.image_view.evaluateJavascript(codigo, None)
+        except Exception as e:
+            print(f"[Spica/Overlay] js: {e}")
 
     @run_on_ui_thread
     def desligar_bolha(self):
@@ -506,6 +561,11 @@ class SpicaOverlay:
                     self._bitmap_atual = None
 
                 self.window_manager.removeView(self.image_view)
+                if self._modo_live2d:
+                    try:
+                        self.image_view.destroy()
+                    except Exception:
+                        pass
                 self.image_view = None
                 self.iniciado = False
                 self.escuta_continua = False
