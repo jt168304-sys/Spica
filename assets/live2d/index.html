@@ -217,13 +217,13 @@
     },
     _ajustarTamanho: function () {
       if (!model) return;
-      if (OVERLAY) {                 // enquadra o busto (rosto e tronco) na bolha
-        var zoom = parseFloat(Q.get("zoom")) || 1.15, dy = parseFloat(Q.get("y"));
-        if (isNaN(dy)) dy = 0.02;
-        var esc2 = (app.renderer.width * zoom) / model.internalModel.originalWidth;
-        model.anchor.set(0.5, 0);
+      if (OVERLAY) {                 // corpo inteiro, centralizado na bolha
+        var zoom = parseFloat(Q.get("zoom")) || 1.0, dy = parseFloat(Q.get("y")) || 0;
+        var esc2 = Math.min(app.renderer.width / model.internalModel.originalWidth,
+                            app.renderer.height / model.internalModel.originalHeight) * zoom;
+        model.anchor.set(0.5, 0.5);
         model.scale.set(esc2);
-        model.position.set(app.renderer.width / 2, app.renderer.height * dy);
+        model.position.set(app.renderer.width / 2, app.renderer.height / 2 + app.renderer.height * dy);
         return;
       }
       var escala = Math.min(app.renderer.width / model.internalModel.originalWidth,

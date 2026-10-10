@@ -35,8 +35,8 @@ except Exception:
 
 # ---- Modelo Live2D na bolha (1.2) ----
 USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
-LIVE2D_LARGURA, LIVE2D_ALTURA = 340, 420   # tamanho da bolha em pixels (modo Live2D)
-LIVE2D_ZOOM, LIVE2D_Y = 1.15, 0.02         # enquadramento do busto (zoom e deslocamento vertical)
+LIVE2D_LARGURA, LIVE2D_ALTURA = 270, 506
+LIVE2D_ZOOM, LIVE2D_Y = 1.0, 0.0
 
 
 def tem_permissao_overlay():
