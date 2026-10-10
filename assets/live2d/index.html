@@ -98,7 +98,8 @@
   var app = new PIXI.Application({
     view: document.getElementById("canvas"),
     autoStart: true, backgroundAlpha: 0, resizeTo: window, antialias: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 3), autoDensity: true,   // nitidez em telas de alta densidade
+    resolution: Math.min((window.devicePixelRatio || 1) * (OVERLAY ? 1.5 : 1), 4), autoDensity: true,   // na bolha desenha maior e reduz (bordas mais suaves)
+      // nitidez em telas de alta densidade
   });
 
   var model = null;
@@ -178,6 +179,20 @@
       PIXI.live2d.Live2DModel.from(modelUrl).then(function (m) {
         model = m;
         diag("modelo: carregado");
+        try { model.internalModel.renderer.setClippingMaskBufferSize(1024); } catch (e) { diag("mascara 1024: " + resumo(e)); }
+        if (Q.get("debug") === "1") {
+          var borda = document.createElement("div");
+          borda.style.cssText = "position:fixed;inset:0;border:2px solid #f00;pointer-events:none;z-index:9999;box-sizing:border-box";
+          document.body.appendChild(borda);
+          var info = document.createElement("div");
+          info.style.cssText = "position:fixed;left:3px;top:3px;color:#ff0;font:10px monospace;z-index:9999;pointer-events:none;text-shadow:0 0 2px #000;white-space:pre";
+          info.textContent = innerWidth + "x" + innerHeight + " dpr " + (window.devicePixelRatio || 1) + "\ncanvas " + model.internalModel.originalWidth + "x" + model.internalModel.originalHeight;
+          document.body.appendChild(info);
+          var caixa = new PIXI.Graphics();
+          caixa.lineStyle(3, 0x00ff00, 1);
+          caixa.drawRect(0, 0, model.internalModel.originalWidth, model.internalModel.originalHeight);
+          model.addChild(caixa);
+        }
         app.ticker.stop();                       // diagnóstico por fases, sem laço de erros
         try {
           var dr = model.internalModel.coreModel._model.drawables;

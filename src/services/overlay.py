@@ -35,8 +35,9 @@ except Exception:
 
 # ---- Modelo Live2D na bolha (1.2) ----
 USAR_LIVE2D = True                         # False = volta para os PNGs de expressão
-LIVE2D_LARGURA, LIVE2D_ALTURA = 270, 506
-LIVE2D_ZOOM, LIVE2D_Y = 1.0, 0.0
+LIVE2D_LARGURA, LIVE2D_ALTURA = 324, 608   # tamanho da bolha em pixels (proporção do modelo: 4000x7500)
+LIVE2D_ZOOM, LIVE2D_Y = 1.0, 0.0           # enquadramento: corpo inteiro (zoom e deslocamento vertical)
+LIVE2D_DEBUG = True                        # True = mostra moldura vermelha (janela) e verde (área do modelo) para ajustar; depois vira False
 
 
 def tem_permissao_overlay():
@@ -173,7 +174,7 @@ class SpicaOverlay:
             print(f"[Spica/Overlay] acesso a arquivos: {e}")
         wv.setBackgroundColor(0)   # fundo transparente (sem setLayerType SOFTWARE: WebGL precisa de hardware)
         wv.setWebViewClient(WebViewClient())
-        wv.loadUrl(f"file://{self.path_live2d}?overlay=1&zoom={LIVE2D_ZOOM}&y={LIVE2D_Y}&humor={self._humor_atual}")
+        wv.loadUrl(f"file://{self.path_live2d}?overlay=1&zoom={LIVE2D_ZOOM}&y={LIVE2D_Y}&humor={self._humor_atual}&debug={1 if LIVE2D_DEBUG else 0}")
         return wv
 
     def _montar_bolha(self):
