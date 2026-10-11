@@ -1,8 +1,8 @@
 # Spica
 
-Assistente virtual para Android, feita em Python com Kivy/KivyMD. Funciona como app normal e também como uma bolha flutuante com expressões, que fica por cima de outros apps e escuta e responde mesmo com o app minimizado.
+Assistente virtual para Android, feita em Python com Kivy/KivyMD. Funciona como app normal e também como uma personagem Live2D de corpo inteiro que flutua por cima de outros apps, escuta e responde mesmo com o app minimizado.
 
-**Versão atual: 1.1**
+**Versão atual: 1.2**
 
 ## O que ela faz
 
@@ -12,7 +12,10 @@ Assistente virtual para Android, feita em Python com Kivy/KivyMD. Funciona como 
 - **Entende imagens**: você manda uma foto e ela analisa e responde (modelo de visão da Qwen via Groq).
 - **Escuta contínua fora do app**: com a bolha ativa, o app é minimizado e a Spica continua ouvindo (testado no Android 14).
 - **Fala em voz alta**, com o motor de texto para voz nativo do Android.
-- **Bolha flutuante com expressões**: a IA se classifica em um de 6 humores (neutro, feliz, surpresa, confusa, triste, chocada) e a expressão muda sozinha. Dá para arrastar a bolha, e um toque abre o menu de falar, mutar ou fechar.
+- **Personagem Live2D na bolha**: modelo de corpo inteiro (WebView com WebGL), com piscar, movimento de cabeça e **olhar que acompanha os toques dentro do app**. A IA classifica o próprio tom em um de 6 humores (neutro, feliz, surpresa, confusa, triste, chocada) e o rosto muda sozinho. A **boca acompanha o texto falado** (vogais abrem, B/M/P fecham, pausas em vírgula e ponto). Dá para arrastar a bolha, e um toque abre o menu de falar, mutar ou fechar.
+- **Design próprio**: paleta tirada do modelo (menta, pêssego, creme), logo e ícone novos, tema escuro.
+- **Chat fluido**: o texto aparece rápido, uma nova mensagem interrompe a anterior (texto e voz), foto enviada aparece no balão e **toque longo** em qualquer balão copia a mensagem.
+- **Fala natural**: emojis e markdown são removidos do que é mostrado e falado, e os prompts pedem frases curtas, jeito de conversa e sem formalidade.
 - Sabe a data e a hora reais do aparelho a cada resposta.
 - Tema claro/escuro nas configurações.
 
@@ -48,9 +51,12 @@ extra_manifest.xml             Bloco <queries> exigido desde o Android 11
 
 src/
 ├── core/app_manager.py        App principal: tema, telas, permissões
+├── ui/screens/                chat_screen.py, settings_screen.py
+├── ui/image_handler.py        Seletor de imagem (câmera/galeria)
 ├── ui/
-│   ├── image_handler.py       Seletor de imagem (câmera/galeria)
-│   └── screens/               chat_screen.py, settings_screen.py
+│   ├── tema.py                Paleta e helpers de estilo (editar aqui muda o visual todo)
+│   ├── barra.py               Barra superior com logo
+│   └── menu_texto.py          Menu de colar/copiar em português
 ├── services/
 │   ├── groq_service.py        API do Groq (texto, visão), tool calling e humor
 │   ├── ferramentas.py         buscar_web, ler_pagina, clima, calcular
@@ -61,14 +67,14 @@ src/
 │   ├── listen_ipc.py          Pedido de escuta entre a Activity e o serviço
 │   ├── fg_service.py          Foreground service (tipo microphone)
 │   ├── tts_service.py         Texto para voz nativo
-│   ├── overlay.py             Bolha flutuante
+│   ├── overlay.py             Bolha flutuante (WebView Live2D, com reserva em PNG)
 │   └── web_service.py         Scraper antigo, sem uso (pode ser removido)
 ├── utils/                     logger, service_log, permissions, thread_safe, keepalive
 └── config/settings.py         Configurações persistentes (JSON local)
 
 assets/
 ├── expressoes/                PNGs por humor (boca aberta/fechada) + humor.json
-└── live2d/                    Modelo Live2D (em pausa, previsto para a 1.2)
+└── live2d/                    Página e modelo Live2D (index.html, osagegirl, bibliotecas)
 ```
 
 ## Build
@@ -92,12 +98,20 @@ Para a bolha, libere a permissão "Exibir sobre outros apps" (o app leva você �
 
 ## Limitações conhecidas
 
-- **Sem corretor de texto no chat**: o campo do Kivy não lida bem com teclado preditivo. Previsto para a 1.3, com campo nativo do Android.
+- **Sem corretor de texto no chat**: o campo do Kivy não lida bem com teclado preditivo. Previsto com campo nativo do Android.
+- O olhar só acompanha toques **dentro do app** (o Android não permite ver toques em outros apps).
+- A boca é guiada pelo texto, não pelo áudio, então pode ficar um pouco adiantada ou atrasada.
+- Só dá para copiar mensagens inteiras (botão ao lado ou toque longo), não trechos.
 - A pesquisa na web pode não achar canais ou pessoas muito pequenos.
 
 ## Roadmap
 
 - **1.0**: versão bruta (chat, visão, voz e bolha).
 - **1.1**: ajustes finos, suporte ao Android 14 e pesquisa na web.
-- **1.2**: design novo (paleta baseada no modelo) e modelo V-tuber Live2D.
-- **1.3**: ajustes finos.
+- **1.2**: design novo, modelo Live2D na bolha, boca e olhar, prompts e fala mais naturais.
+- **1.3** (planejado): geração de imagens, provedores de IA reserva, memória de longo prazo em arquivos, captura de tela com comentários, base de conhecimento por URL e retoques finais.
+
+## Créditos
+
+- Modelo Live2D "osagegirl": créditos ao autor original (conforme a página do modelo).
+- Live2D Cubism SDK © Live2D Inc.

@@ -2,7 +2,7 @@
 title = Spica
 package.name = spica
 package.domain = com.spica
-version = 1.1
+version = 1.2
 source.dir = .
 # 1. ADICIONADO: Garantindo que a extensão .kv (se houver) e os atlas entrem no APK
 source.include_exts = py,png,jpg,json,kv,atlas,moc3,html,js
