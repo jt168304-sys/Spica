@@ -512,7 +512,17 @@ class SpicaOverlay:
             return
         self._falando = falar
         if self._modo_live2d:
-            self._js(f"SpicaLive2D.falarSimples({'true' if falar else 'false'})")
+            if falar:
+                try:
+                    import json as _json
+                    from src.services.tts_service import TtsService
+                    tts = TtsService.get_instance()
+                    self._js(f"SpicaLive2D.falarTexto({_json.dumps(tts.ultimo_texto or '')},{tts.chars_por_seg:.1f})")
+                except Exception as e:
+                    print(f"[Spica/Overlay] boca por texto: {e}")
+                    self._js("SpicaLive2D.falarSimples(true)")
+            else:
+                self._js("SpicaLive2D.falarSimples(false)")
             return
 
         if self._bitmap_atual:

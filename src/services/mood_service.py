@@ -48,19 +48,21 @@ class MoodService:
         return list(self._humores.keys())
 
     def bloco_prompt_humor(self) -> str:
-        """Monta o trecho de instrução pro system prompt, listando os humores
-        disponíveis dinamicamente — se você adicionar um humor novo no
-        humor.json, o prompt já reflete isso sozinho, sem editar código."""
-        chaves = ", ".join(self.humores_disponiveis())
+        """Instrução do humor para o system prompt. Lista cada humor com a descrição do
+        humor.json, então adicionar um humor novo lá já reflete aqui sem mexer no código."""
+        linhas = "\n".join(
+            f"- {chave}: {dados.get('descricao', '')}" for chave, dados in self._humores.items()
+        )
         return (
-            f"\n\n[SISTEMA DE HUMOR - OBRIGATORIO]\n"
-            f"No FINAL de toda resposta, numa linha separada, adicione exatamente uma tag "
-            f"classificando seu proprio tom emocional naquela resposta especifica. "
-            f"Formato exato: [HUMOR:chave]\n"
-            f"Chaves disponiveis: {chaves}\n"
-            f"Escolha a que mais combina com o que voce quis dizer. Essa tag e interna, "
-            f"o usuario NUNCA ve nem ouve ela - e so pra controlar sua expressao facial. "
-            f"Nao mencione essa tag na conversa, nao explique ela, so adicione no final."
+            "\n\n[SISTEMA DE HUMOR - OBRIGATORIO]\n"
+            "No FINAL de toda resposta, numa linha separada, adicione uma tag com o seu tom emocional "
+            "NAQUELA resposta. Formato exato: [HUMOR:chave]\n"
+            f"Chaves e quando usar cada uma:\n{linhas}\n"
+            "Escolha pelo que voce sente ao dizer aquilo, nao pelo assunto. Varie: use 'neutro' so em conversa "
+            "comum e deixe as outras para quando a emocao for real (elogio ou boa noticia = feliz, "
+            "algo inesperado = surpresa, nao entendeu = confusa, ma noticia ou desanimo = triste, "
+            "situacao constrangedora ou absurda = chocada). A tag e interna: a pessoa nunca ve nem ouve. "
+            "Nao a mencione nem explique, so adicione no final."
         )
 
     def extrair_humor(self, texto_resposta: str):

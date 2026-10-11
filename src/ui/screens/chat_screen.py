@@ -45,6 +45,7 @@ from kivymd.app import MDApp
 # Import do seletor de imagens seguro e do novo serviço de voz global centralizado
 from src.ui.image_handler import abrir_seletor_seguro
 from src.ui import tema as T
+from src.ui import menu_texto  # noqa: F401  (traduz o menu de colar/copiar)
 from src.ui.barra import criar_barra
 from src.services.tts_service import TtsService
 

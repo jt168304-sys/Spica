@@ -32,6 +32,9 @@ class TtsService:
         self._init_listener = None
         self._on_start_speak = None
         self._on_done_speak = None
+        self.ultimo_texto = ""          # texto da fala atual (a boca da Spica acompanha por ele)
+        self.chars_por_seg = 14.0       # ritmo estimado da voz; se ajusta sozinho a cada fala
+        self._t_inicio = 0.0
         if platform == "android":
             self._inicializar_tts()
 
@@ -115,6 +118,9 @@ class TtsService:
                 slog("Chamando tts.speak()...")
                 self.tts.speak(texto, 0, params)
                 slog("tts.speak() retornou sem lançar exceção")
+                self.ultimo_texto = texto
+                import time as _t
+                self._t_inicio = _t.time()
 
                 if self._on_start_speak:
                     try:
@@ -132,6 +138,13 @@ class TtsService:
                 while self.tts.isSpeaking():
                     time.sleep(0.1)
                 slog("tts.isSpeaking() virou False — fala REALMENTE terminou agora")
+                try:   # aprende o ritmo real da voz (média móvel) para a boca ficar no compasso
+                    dur = time.time() - self._t_inicio
+                    if dur > 1.0 and len(texto) > 20:
+                        medido = len(texto) / dur
+                        self.chars_por_seg = max(8.0, min(24.0, 0.6 * self.chars_por_seg + 0.4 * medido))
+                except Exception:
+                    pass
 
                 if self._on_done_speak:
                     try:
