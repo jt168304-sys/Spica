@@ -1,5 +1,6 @@
 # chat_screen.py — Spica v16 (Sincronizado com o Motor de Voz Global)
 import os
+import re
 import time
 from kivy.core.window import Window
 from kivy.clock import Clock
@@ -77,11 +78,14 @@ class Bolha(MDBoxLayout):
         label.bind(texture_size=lambda i, v: setattr(i, "height", v[1] + dp(8)))
         label.bind(width=lambda i, w: setattr(i, "text_size", (w, None)))
         card.bind(minimum_height=card.setter("height"))
-        card.ao_toque_longo = lambda: self._copiar_com_aviso(card)
-        if imagem and e_usuario:
+        if imagem and not e_usuario:     # imagem criada pela Spica: segurar salva na galeria
+            card.ao_toque_longo = lambda: self._salvar_na_galeria(imagem)
+        else:
+            card.ao_toque_longo = lambda: self._copiar_com_aviso(card)
+        if imagem:
             try:
                 from kivy.uix.image import Image as KImg
-                altura = dp(170)
+                altura = dp(170) if e_usuario else dp(260)
                 img = KImg(source=imagem, size_hint=(None, None), height=altura,
                            allow_stretch=True, keep_ratio=True)
 
@@ -164,6 +168,22 @@ class Bolha(MDBoxLayout):
         """Mostra o texto inteiro agora e para a animação (usado ao interromper)."""
         if self._finalizar_anim:
             self._finalizar_anim()
+
+    def _salvar_na_galeria(self, caminho):
+        try:
+            from jnius import autoclass
+            ctx = autoclass("org.kivy.android.PythonActivity").mActivity
+            Media = autoclass("android.provider.MediaStore$Images$Media")
+            Media.insertImage(ctx.getContentResolver(), caminho, "Spica", "Criada pela Spica")
+            aviso = "Imagem salva na galeria"
+        except Exception as e:
+            print(f"[Spica] salvar imagem: {e}")
+            aviso = "Não consegui salvar a imagem"
+        try:
+            from kivymd.toast import toast
+            toast(aviso)
+        except Exception:
+            pass
 
     def _copiar_com_aviso(self, card):
         if not self._texto:
@@ -418,8 +438,8 @@ class ChatScreen(MDScreen):
             return                      # chat foi limpo enquanto respondia
         self._hide_typing()
         self._aguardando = False
-        self._spica(texto)
-        if self._som_ativo:
+        texto = self._mostrar_resposta(texto)
+        if self._som_ativo and texto:
             self._tts.falar(texto)
 
     def iniciar_escuta_voz(self):
@@ -463,8 +483,8 @@ class ChatScreen(MDScreen):
             return                      # chat foi limpo enquanto respondia
         self._hide_typing()
         self._aguardando = False
-        self._spica(texto)
-        if self._som_ativo:
+        texto = self._mostrar_resposta(texto)
+        if self._som_ativo and texto:
             Clock.schedule_once(lambda dt: self._tts.falar(texto), 0.3)
 
     def _galeria(self):
@@ -505,6 +525,25 @@ class ChatScreen(MDScreen):
     def _usuario(self, t, imagem=None):
         self._msgs.add_widget(Bolha(t, "usuario", imagem=imagem))
         self._rolar()
+
+    _RE_IMAGEM = re.compile(r"\n?\[IMAGEM:([^\]]+)\]")
+
+    def _separar_imagens(self, texto):
+        """Tira os marcadores [IMAGEM:caminho] do texto. Devolve (texto_limpo, [caminhos])."""
+        imagens = [m for m in self._RE_IMAGEM.findall(texto or "") if os.path.exists(m)]
+        return self._RE_IMAGEM.sub("", texto or "").strip(), imagens
+
+    def _spica_imagem(self, caminho):
+        self._msgs.add_widget(Bolha("", "spica", imagem=caminho))
+        self._rolar()
+
+    def _mostrar_resposta(self, texto, falar_depois=None):
+        texto, imagens = self._separar_imagens(texto)
+        if texto:
+            self._spica(texto)
+        for img in imagens:
+            self._spica_imagem(img)
+        return texto
 
     def _spica(self, t):
         if self._anim_atual is not None:        # termina a anterior antes de começar outra

@@ -34,6 +34,7 @@ class SettingsScreen(MDScreen):
 
         # Adicionando os cards
         lista.add_widget(self._card_api_key())
+        lista.add_widget(self._card_cloudflare())
         lista.add_widget(self._card_bolha())
 
         lista.add_widget(self._card_sobre())
@@ -78,6 +79,56 @@ class SettingsScreen(MDScreen):
         self._botao_principal(btn)
         card.add_widget(btn)
         return card
+
+    def _card_cloudflare(self):
+        app = MDApp.get_running_app()
+        pronto = bool(app.settings.get("cf_account", "") and app.settings.get("cf_token", ""))
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(170),
+            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Imagens (Cloudflare)"))
+        card.add_widget(self._descricao(
+            "Cria imagens com FLUX (cota diária grátis). " + ("Configurado." if pronto else "Falta configurar."), dp(44)))
+        btn = MDRaisedButton(text="Configurar Cloudflare", size_hint_y=None, height=dp(40),
+                             on_release=lambda x: self._dialogo_cloudflare())
+        self._botao_principal(btn)
+        card.add_widget(btn)
+        return card
+
+    def _dialogo_cloudflare(self):
+        from kivymd.uix.dialog import MDDialog
+        from kivymd.uix.textfield import MDTextField
+
+        app = MDApp.get_running_app()
+        caixa = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None, height=dp(150))
+        campo_conta = MDTextField(hint_text="Account ID (32 caracteres)",
+                                  text=app.settings.get("cf_account", ""), mode="rectangle")
+        campo_token = MDTextField(hint_text="API Token (Workers AI)",
+                                  text=app.settings.get("cf_token", ""), mode="rectangle", password=True)
+        for campo in (campo_conta, campo_token):
+            T.estilizar(campo, line_color_normal=T.BORDA, line_color_focus=T.MENTA,
+                        text_color_normal=T.CREME, text_color_focus=T.CREME,
+                        hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
+            caixa.add_widget(campo)
+
+        def salvar(*a):
+            app.settings.set("cf_account", campo_conta.text.strip())
+            app.settings.set("cf_token", campo_token.text.strip())
+            dialogo.dismiss()
+            self.clear_widgets()
+            Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
+
+        btn_cancelar = MDFlatButton(text="Cancelar")
+        btn_salvar = MDFlatButton(text="Salvar")
+        T.estilizar(btn_cancelar, theme_text_color="Custom", text_color=T.TEXTO_2)
+        T.estilizar(btn_salvar, theme_text_color="Custom", text_color=T.MENTA)
+        dialogo = MDDialog(title="Cloudflare (imagens)", type="custom", content_cls=caixa,
+                           buttons=[btn_cancelar, btn_salvar])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
+        btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
+        btn_salvar.bind(on_release=salvar)
+        dialogo.open()
 
     def _card_bolha(self):
         card = MDCard(

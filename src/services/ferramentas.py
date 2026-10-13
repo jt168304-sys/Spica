@@ -2,12 +2,16 @@
 # Ferramentas: buscar_web, ler_pagina, clima, calcular.
 # Regra de ouro: NENHUMA ferramenta lança exceção — sempre devolve um JSON (string).
 import ast
+import base64
 import html
 import ipaddress
 import json
 import math
 import operator
+import os
+import random
 import re
+import time
 import urllib.parse
 
 from src.services.web_search import buscar_web
@@ -197,6 +201,89 @@ def calcular(expressao):
         return _json({"erro": f"não consegui calcular: {e}"})
 
 
+# ------------------------------------------------------------------ gerar_imagem
+_IMAGENS = []          # caminhos das imagens criadas na conversa atual (o chat as mostra)
+
+
+def pegar_imagens_geradas():
+    """Devolve (e esvazia) a lista de imagens criadas desde a última chamada."""
+    itens = list(_IMAGENS)
+    del _IMAGENS[:]
+    return itens
+
+
+def _pasta_imagens():
+    base = os.environ.get("ANDROID_PRIVATE") or os.path.expanduser("~")
+    pasta = os.path.join(base, "imagens")
+    os.makedirs(pasta, exist_ok=True)
+    return pasta
+
+
+def _imagem_cloudflare(prompt):
+    """FLUX.1 schnell no Cloudflare Workers AI (cota diária grátis). Devolve (bytes, erro)."""
+    try:
+        from src.config.settings import Settings
+        cfg = Settings()
+        conta = (cfg.get("cf_account", "") or "").strip()
+        token = (cfg.get("cf_token", "") or "").strip()
+    except Exception as e:
+        return None, f"configuração: {e}"
+    if not conta or not token:
+        return None, "Cloudflare não configurado"
+    import requests
+    url = f"https://api.cloudflare.com/client/v4/accounts/{conta}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
+                      json={"prompt": prompt, "steps": 8}, timeout=90)
+    if r.status_code != 200:
+        return None, f"Cloudflare HTTP {r.status_code}: {r.text[:140]}"
+    dados = (r.json().get("result") or {}).get("image")
+    if not dados:
+        return None, "Cloudflare respondeu sem imagem"
+    return base64.b64decode(dados), ""
+
+
+def _imagem_pollinations(prompt):
+    """Reserva grátis e sem chave (qualidade menor, com marca d'água)."""
+    import requests
+    url = ("https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) +
+           f"?width=768&height=768&model=flux&nologo=true&seed={random.randint(1, 99999)}")
+    r = requests.get(url, headers={"User-Agent": UA}, timeout=90)
+    tipo = (r.headers.get("Content-Type") or "").lower()
+    if r.status_code != 200 or "image" not in tipo or len(r.content) < 5000:
+        return None, f"Pollinations HTTP {r.status_code}"
+    return r.content, ""
+
+
+def gerar_imagem(descricao):
+    try:
+        prompt = (descricao or "").strip()
+        if not prompt:
+            return _json({"erro": "descrição vazia"})
+        prompt = prompt[:900]
+        falhas, dados, motor = [], None, ""
+        for nome, funcao in (("cloudflare", _imagem_cloudflare), ("pollinations", _imagem_pollinations)):
+            try:
+                dados, erro = funcao(prompt)
+            except Exception as e:
+                dados, erro = None, f"{type(e).__name__}: {e}"
+            if dados:
+                motor = nome
+                break
+            falhas.append(f"{nome}: {erro}")
+        if not dados:
+            return _json({"erro": "não consegui gerar a imagem agora", "detalhes": falhas})
+        caminho = os.path.join(_pasta_imagens(), time.strftime("spica_%Y%m%d_%H%M%S") + ".jpg")
+        with open(caminho, "wb") as arq:
+            arq.write(dados)
+        _IMAGENS.append(caminho)
+        aviso = ("Imagem criada e já aparece no chat; comente em uma frase curta."
+                 if motor == "cloudflare" else
+                 "Imagem criada pela reserva (qualidade menor, com marca d'água); já aparece no chat.")
+        return _json({"ok": True, "motor": motor, "aviso": aviso})
+    except Exception as e:
+        return _json({"erro": f"falha ao gerar imagem: {type(e).__name__}: {e}"})
+
+
 # ----------------------------------------------- declaração (formato Groq/OpenAI)
 FERRAMENTAS = [
     {"type": "function", "function": {
@@ -220,6 +307,17 @@ FERRAMENTAS = [
             "cidade": {"type": "string", "description": "Ex.: 'São Paulo' ou 'Recife, PE'."}},
             "required": ["cidade"]}}},
     {"type": "function", "function": {
+        "name": "gerar_imagem",
+        "description": ("Cria uma imagem a partir de uma descrição. Use quando a pessoa pedir para "
+                        "criar, desenhar ou gerar uma imagem, ilustração ou arte. A imagem aparece "
+                        "sozinha no chat. Não serve para editar imagens que a pessoa enviou."),
+        "parameters": {"type": "object", "properties": {
+            "descricao": {"type": "string", "description": (
+                "Descrição detalhada EM INGLÊS: assunto, estilo, iluminação, composição e clima. "
+                "Ex.: 'a cozy log cabin in a snowy pine forest at dusk, warm window light, "
+                "cinematic, highly detailed'.")}},
+            "required": ["descricao"]}}},
+    {"type": "function", "function": {
         "name": "calcular",
         "description": ("Calculadora exata. Operadores + - * / // % ** ( ) e funções "
                         "sqrt, sin, cos, tan, log, log10, exp, abs, round, min, max, floor, ceil, "
@@ -230,7 +328,7 @@ FERRAMENTAS = [
 ]
 
 _FUNCOES = {"buscar_web": buscar_web, "ler_pagina": ler_pagina,
-            "clima": clima, "calcular": calcular}
+            "clima": clima, "calcular": calcular, "gerar_imagem": gerar_imagem}
 
 
 def executar_ferramenta(nome, argumentos_json):
