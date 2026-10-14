@@ -233,7 +233,7 @@ def _imagem_cloudflare(prompt):
     import requests
     url = f"https://api.cloudflare.com/client/v4/accounts/{conta}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
-                      json={"prompt": prompt, "steps": 8}, timeout=90)
+                      json={"prompt": prompt, "steps": 8, "seed": random.randint(1, 2**31 - 1)}, timeout=90)
     if r.status_code != 200:
         return None, f"Cloudflare HTTP {r.status_code}: {r.text[:140]}"
     dados = (r.json().get("result") or {}).get("image")
@@ -254,34 +254,237 @@ def _imagem_pollinations(prompt):
     return r.content, ""
 
 
-def gerar_imagem(descricao):
+_PADROES_ARTE = {
+    "padrao": {"estilo": "anime", "enquadramento": "meio corpo", "fundo": "simple soft background, uncluttered"},
+    "qualidade": "masterpiece, best quality, highly detailed, sharp focus",
+    "anatomia": "anatomically correct, two arms, five fingers on each hand",
+    "estilos": {"anime": {"palavras": ["anime"], "tags": "modern anime illustration, clean line art, cel shading, vibrant colors"}},
+    "enquadramentos": {"meio corpo": {"palavras": ["meio corpo"], "tags": "waist-up shot, both arms visible"}},
+}
+
+
+def _guia_arte():
+    """Carrega assets/conhecimento/arte_anime.json (editável); se faltar, usa o padrão embutido."""
     try:
-        prompt = (descricao or "").strip()
-        if not prompt:
-            return _json({"erro": "descrição vazia"})
-        prompt = prompt[:900]
-        falhas, dados, motor = [], None, ""
-        for nome, funcao in (("cloudflare", _imagem_cloudflare), ("pollinations", _imagem_pollinations)):
-            try:
-                dados, erro = funcao(prompt)
-            except Exception as e:
-                dados, erro = None, f"{type(e).__name__}: {e}"
-            if dados:
-                motor = nome
+        caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                               "assets", "conhecimento", "arte_anime.json")
+        with open(os.path.normpath(caminho), encoding="utf-8") as arq:
+            dados = json.load(arq)
+        guia = dict(_PADROES_ARTE)
+        guia.update({k: v for k, v in dados.items() if not k.startswith("_")})
+        return guia
+    except Exception:
+        return _PADROES_ARTE
+
+
+def _escolher(tabela, texto, padrao):
+    """Acha o item cujas palavras aparecem no texto; senão usa o padrão."""
+    texto = (texto or "").lower()
+    for nome, item in tabela.items():
+        if any(p.lower() in texto for p in item.get("palavras", [])):
+            return nome, item.get("tags", "")
+    item = tabela.get(padrao) or next(iter(tabela.values()))
+    return padrao, item.get("tags", "")
+
+
+def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fundo=""):
+    """Monta o prompt final (em inglês) com o guia de arte: assunto primeiro, depois pose,
+    enquadramento, luz, fundo, estilo, qualidade e anatomia."""
+    guia = _guia_arte()
+    pad = guia.get("padrao", {})
+    _, tags_estilo = _escolher(guia["estilos"], estilo, pad.get("estilo", "anime"))
+    _, tags_enq = _escolher(guia["enquadramentos"], enquadramento, pad.get("enquadramento", "meio corpo"))
+    partes = [assunto.strip(), (acao or "").strip(), tags_enq, (luz or "").strip(),
+              (fundo or "").strip() or pad.get("fundo", ""), tags_estilo,
+              guia.get("qualidade", ""), guia.get("anatomia", "")]
+    return ", ".join(x.strip(" ,") for x in partes if x and x.strip(" ,"))[:1800]
+
+
+def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=None,
+                 fundo=None, variacoes=1, descricao=None, **_ignorados):
+    try:
+        base_texto = (assunto or descricao or "").strip()
+        if not base_texto:
+            return _json({"erro": "faltou descrever o que desenhar"})
+        prompt = montar_prompt_arte(base_texto, acao or "", enquadramento or "", estilo or "",
+                                    luz or "", fundo or "")
+        try:
+            quantidade = max(1, min(int(variacoes), 2))
+        except (TypeError, ValueError):
+            quantidade = 1
+        feitas, motor, falhas = 0, "", []
+        for n in range(quantidade):
+            dados, erro = None, ""
+            for nome, funcao in (("cloudflare", _imagem_cloudflare), ("pollinations", _imagem_pollinations)):
+                try:
+                    dados, erro = funcao(prompt)
+                except Exception as e:
+                    dados, erro = None, f"{type(e).__name__}: {e}"
+                if dados:
+                    motor = nome
+                    break
+                falhas.append(f"{nome}: {erro}")
+            if not dados:
                 break
-            falhas.append(f"{nome}: {erro}")
-        if not dados:
-            return _json({"erro": "não consegui gerar a imagem agora", "detalhes": falhas})
-        caminho = os.path.join(_pasta_imagens(), time.strftime("spica_%Y%m%d_%H%M%S") + ".jpg")
-        with open(caminho, "wb") as arq:
-            arq.write(dados)
-        _IMAGENS.append(caminho)
-        aviso = ("Imagem criada e já aparece no chat; comente em uma frase curta."
+            caminho = os.path.join(_pasta_imagens(), time.strftime("spica_%Y%m%d_%H%M%S") + f"_{n + 1}.jpg")
+            with open(caminho, "wb") as arq:
+                arq.write(dados)
+            _IMAGENS.append(caminho)
+            feitas += 1
+        if feitas == 0:
+            return _json({"erro": "não consegui gerar a imagem agora", "detalhes": falhas[:4]})
+        aviso = ("Imagem(ns) criada(s) e já aparece(m) no chat; comente em uma frase curta."
                  if motor == "cloudflare" else
-                 "Imagem criada pela reserva (qualidade menor, com marca d'água); já aparece no chat.")
-        return _json({"ok": True, "motor": motor, "aviso": aviso})
+                 "Criada pela reserva (qualidade menor, com marca d'água); já aparece no chat.")
+        return _json({"ok": True, "quantidade": feitas, "motor": motor, "aviso": aviso})
     except Exception as e:
         return _json({"erro": f"falha ao gerar imagem: {type(e).__name__}: {e}"})
+
+
+# ------------------------------------------------------------- consultar_anime (AniList)
+_ANILIST = "https://graphql.anilist.co"
+_Q_MIDIA = """query ($busca: String, $tipo: MediaType) {
+  Media(search: $busca, type: $tipo, isAdult: false) {
+    title { romaji english native } format status episodes chapters volumes
+    season seasonYear startDate { year month day } endDate { year month day }
+    averageScore popularity genres studios(isMain: true) { nodes { name } }
+    nextAiringEpisode { episode airingAt } description(asHtml: false) siteUrl
+  }
+}"""
+_Q_PERSONAGEM = """query ($busca: String) {
+  Character(search: $busca) {
+    name { full native } gender age description(asHtml: false) siteUrl
+    media(perPage: 3, sort: POPULARITY_DESC) { nodes { title { romaji english } type } }
+  }
+}"""
+_Q_TEMPORADA = """query ($season: MediaSeason, $ano: Int) {
+  Page(perPage: 10) {
+    media(season: $season, seasonYear: $ano, type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+      title { romaji english } format episodes status averageScore
+      nextAiringEpisode { episode airingAt }
+    }
+  }
+}"""
+
+
+def _anilist(consulta, variaveis):
+    import requests
+    r = requests.post(_ANILIST, json={"query": consulta, "variables": variaveis},
+                      headers={"Content-Type": "application/json", "Accept": "application/json"}, timeout=15)
+    if r.status_code == 404:
+        return None                      # AniList usa 404 quando não acha nada
+    r.raise_for_status()
+    return r.json().get("data")
+
+
+def _limpar_descricao(txt, limite=420):
+    txt = re.sub(r"~!.*?!~", "", txt or "", flags=re.S)       # tira spoilers
+    txt = re.sub(r"<br\s*/?>", " ", txt)
+    txt = html.unescape(re.sub(r"<[^>]+>", "", txt))
+    return re.sub(r"\s+", " ", txt).strip()[:limite]
+
+
+def _data(d):
+    if not d or not d.get("year"):
+        return ""
+    return "-".join(f"{int(v):02d}" if k != "year" else str(v) for k, v in
+                    (("year", d.get("year")), ("month", d.get("month")), ("day", d.get("day"))) if v)
+
+
+def _proximo(ep):
+    if not ep or not ep.get("airingAt"):
+        return None
+    dias = (ep["airingAt"] - time.time()) / 86400
+    return {"episodio": ep.get("episode"), "quando": time.strftime("%d/%m %H:%M", time.localtime(ep["airingAt"])),
+            "em_dias": round(dias, 1)}
+
+
+def _titulo(t):
+    t = t or {}
+    return t.get("english") or t.get("romaji") or t.get("native") or "?"
+
+
+_TEMPORADAS = (("inverno", "WINTER"), ("winter", "WINTER"), ("primavera", "SPRING"), ("spring", "SPRING"),
+               ("verao", "SUMMER"), ("verão", "SUMMER"), ("summer", "SUMMER"), ("outono", "FALL"), ("fall", "FALL"))
+
+
+def _temporada(busca):
+    agora = time.localtime()
+    padrao = ("WINTER", "SPRING", "SUMMER", "FALL")[(agora.tm_mon - 1) // 3]
+    texto = (busca or "").lower()
+    estacao = next((cod for nome, cod in _TEMPORADAS if nome in texto), padrao)
+    achou = re.search(r"(20\d\d)", texto)
+    return estacao, int(achou.group(1)) if achou else agora.tm_year
+
+
+def consultar_anime(tipo=None, busca=None, **_ignorados):
+    try:
+        tipo = (tipo or "anime").strip().lower()
+        busca = (busca or "").strip()
+        if tipo.startswith(("temp", "season", "lanc", "estr")):
+            estacao, ano = _temporada(busca)
+            dados = _anilist(_Q_TEMPORADA, {"season": estacao, "ano": ano}) or {}
+            itens = (dados.get("Page") or {}).get("media") or []
+            if not itens:
+                return _json({"erro": f"não achei animes da temporada {estacao} {ano}"})
+            lista = [{"titulo": _titulo(m["title"]), "formato": m.get("format"), "episodios": m.get("episodes"),
+                      "status": m.get("status"), "nota": m.get("averageScore"),
+                      "proximo_episodio": _proximo(m.get("nextAiringEpisode"))} for m in itens]
+            return _json({"temporada": f"{estacao} {ano}", "animes_mais_populares": lista})
+        if not busca:
+            return _json({"erro": "faltou o nome da obra ou personagem"})
+        if tipo.startswith(("pers", "char")):
+            c = (_anilist(_Q_PERSONAGEM, {"busca": busca}) or {}).get("Character")
+            if not c:
+                return _json({"erro": f"não achei o personagem '{busca}' no AniList"})
+            return _json({"nome": c["name"].get("full"), "nome_original": c["name"].get("native"),
+                          "genero": c.get("gender"), "idade": c.get("age"),
+                          "aparece_em": [f"{_titulo(n['title'])} ({n.get('type')})" for n in (c.get("media") or {}).get("nodes", [])],
+                          "descricao": _limpar_descricao(c.get("description")), "fonte": c.get("siteUrl")})
+        tipo_api = "MANGA" if tipo.startswith(("man", "livro", "novel")) else "ANIME"
+        m = (_anilist(_Q_MIDIA, {"busca": busca, "tipo": tipo_api}) or {}).get("Media")
+        if not m:
+            return _json({"erro": f"não achei '{busca}' no AniList"})
+        saida = {"titulo": _titulo(m["title"]), "titulo_romaji": (m["title"] or {}).get("romaji"),
+                 "tipo": tipo_api.lower(), "formato": m.get("format"), "status": m.get("status"),
+                 "nota_media": m.get("averageScore"), "generos": m.get("genres"),
+                 "estreia": _data(m.get("startDate")), "fim": _data(m.get("endDate")),
+                 "descricao": _limpar_descricao(m.get("description")), "fonte": m.get("siteUrl")}
+        if tipo_api == "ANIME":
+            saida.update({"episodios": m.get("episodes"), "temporada": f"{m.get('season')} {m.get('seasonYear')}",
+                          "estudio": ", ".join(n["name"] for n in (m.get("studios") or {}).get("nodes", [])),
+                          "proximo_episodio": _proximo(m.get("nextAiringEpisode"))})
+        else:
+            saida.update({"capitulos": m.get("chapters"), "volumes": m.get("volumes")})
+        return _json({k: v for k, v in saida.items() if v not in (None, "", [], "None None")})
+    except Exception as e:
+        return _json({"erro": f"falha ao consultar o AniList: {type(e).__name__}: {e}"})
+
+
+# ------------------------------------------------------- identificar cena (trace.moe)
+def identificar_cena_anime(caminho):
+    """Descobre de qual anime/episódio é um print. Devolve um texto curto (ou "" se falhar)."""
+    try:
+        import requests
+        ext = os.path.splitext(caminho)[1].lower()
+        tipo = {"png": "image/png", "webp": "image/webp", "gif": "image/gif"}.get(ext.lstrip("."), "image/jpeg")
+        with open(caminho, "rb") as arq:
+            dados = arq.read()
+        r = requests.post("https://api.trace.moe/search?anilistInfo&cutBorders", data=dados,
+                          headers={"Content-Type": tipo}, timeout=40)
+        if r.status_code != 200:
+            return ""
+        linhas = []
+        for item in (r.json().get("result") or [])[:2]:
+            info = item.get("anilist") or {}
+            nome = _titulo(info.get("title")) if isinstance(info, dict) else str(info)
+            seg = int(item.get("from") or 0)
+            linhas.append(f"{nome} | episódio {item.get('episode')} | por volta de {seg // 60}:{seg % 60:02d} "
+                          f"| similaridade {round((item.get('similarity') or 0) * 100)}%")
+        return "\n".join(linhas)
+    except Exception as e:
+        print(f"[Spica/Cena] trace.moe: {type(e).__name__}: {e}")
+        return ""
 
 
 # ----------------------------------------------- declaração (formato Groq/OpenAI)
@@ -308,15 +511,32 @@ FERRAMENTAS = [
             "required": ["cidade"]}}},
     {"type": "function", "function": {
         "name": "gerar_imagem",
-        "description": ("Cria uma imagem a partir de uma descrição. Use quando a pessoa pedir para "
-                        "criar, desenhar ou gerar uma imagem, ilustração ou arte. A imagem aparece "
-                        "sozinha no chat. Não serve para editar imagens que a pessoa enviou."),
+        "description": ("Cria imagens de arte anime/mangá e outras ilustrações. Use quando a pessoa pedir para "
+                        "criar, desenhar ou gerar uma imagem. A imagem aparece sozinha no chat. Não edita imagens "
+                        "que a pessoa enviou. Dicas: descreva cabelo, olhos e roupa com cores; uma personagem por "
+                        "imagem; poses simples; sem texto escrito na imagem."),
         "parameters": {"type": "object", "properties": {
-            "descricao": {"type": "string", "description": (
-                "Descrição detalhada EM INGLÊS: assunto, estilo, iluminação, composição e clima. "
-                "Ex.: 'a cozy log cabin in a snowy pine forest at dusk, warm window light, "
-                "cinematic, highly detailed'.")}},
-            "required": ["descricao"]}}},
+            "assunto": {"type": "string", "description": (
+                "EM INGLÊS: quem ou o que aparece, com aparência concreta. Ex.: 'a girl with long black hair "
+                "and amber eyes, green jacket, orange ribbon'.")},
+            "acao": {"type": "string", "description": "EM INGLÊS: pose ou ação simples. Ex.: 'standing, smiling softly'."},
+            "enquadramento": {"type": "string", "description": "corpo inteiro, meio corpo, busto, rosto ou cena."},
+            "estilo": {"type": "string", "description": "anime, manga (preto e branco), chibi, retro, fantasia, realista ou pixel."},
+            "luz": {"type": "string", "description": "EM INGLÊS: iluminação e clima. Ex.: 'warm sunset light'."},
+            "fundo": {"type": "string", "description": "EM INGLÊS: fundo. Prefira simples."},
+            "variacoes": {"type": "integer", "description": "1 (padrão) ou 2, só se a pessoa pedir opções."}},
+            "required": ["assunto"]}}},
+    {"type": "function", "function": {
+        "name": "consultar_anime",
+        "description": ("Dados oficiais do AniList sobre animes, mangás e personagens: episódios, status, nota, "
+                        "estreia, próximo episódio e a temporada atual. Use ANTES da pesquisa na web para perguntas "
+                        "sobre obras e personagens de anime/mangá."),
+        "parameters": {"type": "object", "properties": {
+            "tipo": {"type": "string", "description": "anime, manga, personagem ou temporada."},
+            "busca": {"type": "string", "description": (
+                "Nome da obra ou do personagem (em romaji ou inglês funciona melhor). Para temporada: "
+                "'atual' ou algo como 'outono 2026'.")}},
+            "required": ["tipo"]}}},
     {"type": "function", "function": {
         "name": "calcular",
         "description": ("Calculadora exata. Operadores + - * / // % ** ( ) e funções "
@@ -328,7 +548,8 @@ FERRAMENTAS = [
 ]
 
 _FUNCOES = {"buscar_web": buscar_web, "ler_pagina": ler_pagina,
-            "clima": clima, "calcular": calcular, "gerar_imagem": gerar_imagem}
+            "clima": clima, "calcular": calcular, "gerar_imagem": gerar_imagem,
+            "consultar_anime": consultar_anime}
 
 
 def executar_ferramenta(nome, argumentos_json):
