@@ -84,7 +84,7 @@ class SettingsScreen(MDScreen):
         app = MDApp.get_running_app()
         pronto = bool(app.settings.get("cf_account", "") and app.settings.get("cf_token", ""))
         card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(170),
+            orientation="vertical", size_hint_y=None, height=dp(225),
             padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
         )
         card.add_widget(self._titulo("Imagens (Cloudflare)"))
@@ -94,7 +94,30 @@ class SettingsScreen(MDScreen):
                              on_release=lambda x: self._dialogo_cloudflare())
         self._botao_principal(btn)
         card.add_widget(btn)
+        btn_teste = MDFlatButton(text="Testar conexão", on_release=lambda x: self._testar_cloudflare())
+        T.estilizar(btn_teste, theme_text_color="Custom", text_color=T.MENTA)
+        card.add_widget(btn_teste)
         return card
+
+    def _testar_cloudflare(self):
+        """Gera uma imagem pequena de teste e mostra o resultado (ou o motivo da falha)."""
+        import threading
+        try:
+            from kivymd.toast import toast
+        except Exception:
+            toast = print
+        toast("Testando o Cloudflare (alguns segundos)...")
+
+        def trabalho():
+            try:
+                from src.services.ferramentas import _imagem_cloudflare
+                dados, erro = _imagem_cloudflare("a small red apple on a white table, simple illustration")
+                msg = "Cloudflare OK: imagem de teste criada." if dados else str(erro)
+            except Exception as e:
+                msg = f"Erro no teste: {type(e).__name__}: {e}"
+            Clock.schedule_once(lambda dt: toast(msg), 0)
+
+        threading.Thread(target=trabalho, daemon=True).start()
 
     def _dialogo_cloudflare(self):
         from kivymd.uix.dialog import MDDialog

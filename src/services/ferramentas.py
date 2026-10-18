@@ -235,7 +235,9 @@ def _imagem_cloudflare(prompt):
     r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
                       json={"prompt": prompt, "steps": 8, "seed": random.randint(1, 2**31 - 1)}, timeout=90)
     if r.status_code != 200:
-        return None, f"Cloudflare HTTP {r.status_code}: {r.text[:140]}"
+        motivos = {400: "pedido recusado", 401: "token inválido", 403: "token sem permissão de Workers AI",
+                   404: "Account ID errado", 429: "a cota diária do Cloudflare acabou"}
+        return None, f"Cloudflare: {motivos.get(r.status_code, 'erro')} (HTTP {r.status_code})"
     dados = (r.json().get("result") or {}).get("image")
     if not dados:
         return None, "Cloudflare respondeu sem imagem"
@@ -331,11 +333,20 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
                 arq.write(dados)
             _IMAGENS.append(caminho)
             feitas += 1
+            if motor != "cloudflare":      # a reserva limita pedidos seguidos: só uma imagem
+                break
+        if falhas:
+            print(f"[Spica/Imagem] falhas: {falhas[:4]}")
         if feitas == 0:
             return _json({"erro": "não consegui gerar a imagem agora", "detalhes": falhas[:4]})
-        aviso = ("Imagem(ns) criada(s) e já aparece(m) no chat; comente em uma frase curta."
-                 if motor == "cloudflare" else
-                 "Criada pela reserva (qualidade menor, com marca d'água); já aparece no chat.")
+        if motor == "cloudflare":
+            aviso = "Imagem(ns) criada(s) e já aparece(m) no chat; comente em uma frase curta."
+        else:
+            motivo = falhas[0] if falhas else ""
+            aviso = ("Criada pela reserva (qualidade menor, com marca d'água); já aparece no chat. "
+                     + ("Avise que o Cloudflare não está configurado (Configurações > Imagens)."
+                        if "não configurado" in motivo else
+                        f"Avise que o Cloudflare falhou: {motivo[:80]}."))
         return _json({"ok": True, "quantidade": feitas, "motor": motor, "aviso": aviso})
     except Exception as e:
         return _json({"erro": f"falha ao gerar imagem: {type(e).__name__}: {e}"})
@@ -345,10 +356,18 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
 _ANILIST = "https://graphql.anilist.co"
 _Q_MIDIA = """query ($busca: String, $tipo: MediaType) {
   Media(search: $busca, type: $tipo, isAdult: false) {
-    title { romaji english native } format status episodes chapters volumes
+    id title { romaji english native } format status episodes chapters volumes
     season seasonYear startDate { year month day } endDate { year month day }
     averageScore popularity genres studios(isMain: true) { nodes { name } }
     nextAiringEpisode { episode airingAt } description(asHtml: false) siteUrl
+    relations { edges { relationType node { id type format } } }
+  }
+}"""
+_Q_SEQUELA = """query ($id: Int) {
+  Media(id: $id) {
+    id title { romaji english } format status episodes season seasonYear startDate { year month day }
+    nextAiringEpisode { episode airingAt }
+    relations { edges { relationType node { id type format } } }
   }
 }"""
 _Q_PERSONAGEM = """query ($busca: String) {
@@ -395,8 +414,44 @@ def _proximo(ep):
     if not ep or not ep.get("airingAt"):
         return None
     dias = (ep["airingAt"] - time.time()) / 86400
-    return {"episodio": ep.get("episode"), "quando": time.strftime("%d/%m %H:%M", time.localtime(ep["airingAt"])),
+    return {"episodio": ep.get("episode"),
+            "data": time.strftime("%d/%m/%Y %H:%M", time.localtime(ep["airingAt"])),
             "em_dias": round(dias, 1)}
+
+
+_STATUS_PT = {"RELEASING": "em exibição", "FINISHED": "finalizado", "NOT_YET_RELEASED": "ainda não lançado",
+              "CANCELLED": "cancelado", "HIATUS": "em hiato"}
+
+
+def _resumo_temporada(m):
+    prox = _proximo(m.get("nextAiringEpisode"))
+    item = {"titulo": _titulo(m.get("title")), "formato": m.get("format"),
+            "status": _STATUS_PT.get(m.get("status"), m.get("status")),
+            "estreia": _data(m.get("startDate")) or (f"{m.get('season')} {m.get('seasonYear')}" if m.get("seasonYear") else ""),
+            "episodios": m.get("episodes"), "proximo_episodio": prox}
+    if prox and prox.get("episodio"):
+        item["episodios_ja_exibidos"] = prox["episodio"] - 1
+    return {k: v for k, v in item.items() if v not in (None, "")}
+
+
+def _sequelas(m, maximo=5):
+    """Segue a cadeia de SEQUEL (TV/ONA) a partir da obra achada: ajuda em 'quando sai a nova temporada'."""
+    vistos, saida, atual = {m.get("id")}, [], m
+    for _ in range(maximo):
+        arestas = ((atual.get("relations") or {}).get("edges")) or []
+        prox = next((e["node"] for e in arestas if e.get("relationType") == "SEQUEL"
+                     and (e.get("node") or {}).get("type") == "ANIME"
+                     and (e["node"].get("format") in ("TV", "TV_SHORT", "ONA", None))
+                     and e["node"].get("id") not in vistos), None)
+        if not prox:
+            break
+        vistos.add(prox["id"])
+        dados = (_anilist(_Q_SEQUELA, {"id": prox["id"]}) or {}).get("Media")
+        if not dados:
+            break
+        saida.append(_resumo_temporada(dados))
+        atual = dados
+    return saida
 
 
 def _titulo(t):
@@ -450,10 +505,19 @@ def consultar_anime(tipo=None, busca=None, **_ignorados):
                  "nota_media": m.get("averageScore"), "generos": m.get("genres"),
                  "estreia": _data(m.get("startDate")), "fim": _data(m.get("endDate")),
                  "descricao": _limpar_descricao(m.get("description")), "fonte": m.get("siteUrl")}
+        saida["status"] = _STATUS_PT.get(m.get("status"), m.get("status"))
+        saida["hoje"] = time.strftime("%d/%m/%Y")
         if tipo_api == "ANIME":
+            prox = _proximo(m.get("nextAiringEpisode"))
             saida.update({"episodios": m.get("episodes"), "temporada": f"{m.get('season')} {m.get('seasonYear')}",
                           "estudio": ", ".join(n["name"] for n in (m.get("studios") or {}).get("nodes", [])),
-                          "proximo_episodio": _proximo(m.get("nextAiringEpisode"))})
+                          "proximo_episodio": prox})
+            if prox and prox.get("episodio"):
+                saida["episodios_ja_exibidos"] = prox["episodio"] - 1
+            try:
+                saida["temporadas_seguintes"] = _sequelas(m)
+            except Exception as e:
+                print(f"[Spica/Anime] sequências: {type(e).__name__}: {e}")
         else:
             saida.update({"capitulos": m.get("chapters"), "volumes": m.get("volumes")})
         return _json({k: v for k, v in saida.items() if v not in (None, "", [], "None None")})
@@ -511,10 +575,7 @@ FERRAMENTAS = [
             "required": ["cidade"]}}},
     {"type": "function", "function": {
         "name": "gerar_imagem",
-        "description": ("Cria imagens de arte anime/mangá e outras ilustrações. Use quando a pessoa pedir para "
-                        "criar, desenhar ou gerar uma imagem. A imagem aparece sozinha no chat. Não edita imagens "
-                        "que a pessoa enviou. Dicas: descreva cabelo, olhos e roupa com cores; uma personagem por "
-                        "imagem; poses simples; sem texto escrito na imagem."),
+        "description": "Cria imagens (arte anime/mangá). A imagem aparece sozinha no chat. Não edita imagens enviadas.",
         "parameters": {"type": "object", "properties": {
             "assunto": {"type": "string", "description": (
                 "EM INGLÊS: quem ou o que aparece, com aparência concreta. Ex.: 'a girl with long black hair "
