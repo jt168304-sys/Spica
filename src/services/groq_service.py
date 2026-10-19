@@ -100,7 +100,11 @@ class GroqService:
     # groq/compound faz busca web NATIVA e server-side quando julga necessário
     # (substitui o scraper manual do DuckDuckGo, que estava quebrado) e cita as fontes.
     MODEL_TEXTO = "openai/gpt-oss-120b"
-    MODEL_RESERVA = "llama-3.3-70b-versatile"     # outra cota gratuita; usado quando o principal estoura o limite
+    # modelos de reserva (cada um tem a própria cota); só entram os que a sua conta realmente tem
+    MODELOS_RESERVA = ["openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3-32b"]
+    _modelos_cache = None
+    _PALAVRAS_ANIME = ("anime", "manga", "mangá", "temporada", "episodio", "episódio", "estreia", "estreou",
+                       "estréia", "season", "lancamento", "lançamento", "proximo ep", "próximo ep")
     MSG_LIMITE = "Estou no limite de uso gratuito do Groq por agora. Espera uns segundos e tenta de novo."
     MODEL_VISAO = "qwen/qwen3.8-27b"
 
@@ -372,6 +376,27 @@ class GroqService:
             return None
         return int(m.group(1) or 0) * 60 + float(m.group(2))
 
+    def _modelos_disponiveis(self, requests):
+        """Pergunta ao Groq quais modelos a conta tem (guarda o resultado)."""
+        if self._modelos_cache is None:
+            try:
+                r = requests.get("https://api.groq.com/openai/v1/models", timeout=10,
+                                 headers={"Authorization": f"Bearer {self.api_key}"})
+                self._modelos_cache = {m.get("id") for m in r.json().get("data", [])} if r.status_code == 200 else set()
+            except Exception:
+                self._modelos_cache = set()
+        return self._modelos_cache
+
+    def _reservas_para(self, requests, excluidos):
+        """Modelos de reserva ainda não usados (e que existem na conta, quando a lista foi obtida)."""
+        disponiveis = self._modelos_disponiveis(requests)
+        lista = [m for m in self.MODELOS_RESERVA if m not in excluidos]
+        return [m for m in lista if m in disponiveis] if disponiveis else lista
+
+    def _pergunta_de_anime(self, texto):
+        t = (texto or "").lower()
+        return any(p in t for p in self._PALAVRAS_ANIME)
+
     def _post(self, requests, payload):
         """Uma chamada HTTP ao Groq. Devolve (status, dados, detalhe_erro, codigo_erro)."""
         resp = requests.post(
@@ -407,7 +432,9 @@ class GroqService:
         repetiu = False
         pesquisa_falhou = False
         espera_429 = 0
-        trocou_modelo = False
+        usados = {modelo}
+        forcou_anime = False
+        ultimo = base[-1].get("content") if base else ""
         rodada = 0
 
         def ir_para_modo_local():
@@ -431,8 +458,13 @@ class GroqService:
                 "tools": FERRAMENTAS_NATIVAS if modo_nativo else FERRAMENTAS,
                 "tool_choice": "auto",
             }
-            if modo_nativo:
+            if modo_nativo and modelo.startswith("openai/gpt-oss"):
                 payload["reasoning_effort"] = "low"   # recomendado pelo Groq p/ browser_search
+            forcar = (not forcou_anime and rodada == 0 and not coletados and isinstance(ultimo, str)
+                      and self._pergunta_de_anime(ultimo))
+            if forcar:    # pergunta sobre anime/mangá: consulta primeiro o AniList (dados oficiais)
+                payload["tool_choice"] = {"type": "function", "function": {"name": "consultar_anime"}}
+                forcou_anime = True
             status, dados, detalhe, codigo = self._post(requests, payload)
             if status != 200:
                 if status == 429:
@@ -442,14 +474,31 @@ class GroqService:
                         slog(f"Limite do Groq (429): esperando {espera:.1f}s e tentando de novo")
                         time.sleep(espera + 0.5)
                         continue
-                    if not trocou_modelo and modelo != self.MODEL_RESERVA:
-                        trocou_modelo = True
-                        modelo = self.MODEL_RESERVA
+                    reservas = self._reservas_para(requests, usados)
+                    if reservas:
+                        modelo = reservas[0]
+                        usados.add(modelo)
+                        espera_429 = 0
                         slog(f"Limite do Groq (429): trocando para {modelo}")
-                        if modo_nativo:
-                            ir_para_modo_local()      # a reserva não tem a pesquisa nativa
+                        if modo_nativo and not modelo.startswith("openai/gpt-oss"):
+                            ir_para_modo_local()      # só os gpt-oss têm a pesquisa nativa
                         continue
                     return None, self.MSG_LIMITE
+                if status == 404 or codigo == "model_not_found":
+                    slog(f"Modelo {modelo} indisponível na conta: {detalhe[:120]}")
+                    if isinstance(self._modelos_cache, set):
+                        self._modelos_cache.discard(modelo)
+                    reservas = self._reservas_para(requests, usados)
+                    if reservas:
+                        modelo = reservas[0]
+                        usados.add(modelo)
+                        if modo_nativo and not modelo.startswith("openai/gpt-oss"):
+                            ir_para_modo_local()
+                        continue
+                    return None, "O modelo de IA não está disponível agora. Tenta de novo daqui a pouco."
+                if status == 400 and forcar:           # a escolha forçada de ferramenta foi recusada: segue sem forçar
+                    slog(f"tool_choice forçado recusado: {getattr(self, '_ultimo_erro_bruto', detalhe)[:160]}")
+                    continue
                 if status == 400 and (codigo == "tool_use_failed" or "tool" in detalhe.lower()
                                       or "reasoning" in detalhe.lower()):
                     slog(f"Groq recusou a ferramenta (modo {'nativo' if modo_nativo else 'local'}, "
@@ -529,13 +578,19 @@ class GroqService:
                 break
             espera = self._espera_429(detalhe)
             if espera is None or espera > 12:
-                if payload["model"] != self.MODEL_RESERVA and not isinstance(msgs[-1].get("content"), list):
-                    payload["model"] = self.MODEL_RESERVA   # outra cota
+                reservas = self._reservas_para(requests, {payload["model"]})
+                if reservas and not isinstance(msgs[-1].get("content"), list):
+                    payload["model"] = reservas[0]   # outra cota
                     status, dados_resp, detalhe, _ = self._post(requests, payload)
                     continue
                 break
             time.sleep(espera + 0.5)
             status, dados_resp, detalhe, _ = self._post(requests, payload)
+        if status == 404 and not isinstance(msgs[-1].get("content"), list):   # modelo inexistente na conta
+            reservas = self._reservas_para(requests, {payload["model"]})
+            if reservas:
+                payload["model"] = reservas[0]
+                status, dados_resp, detalhe, _ = self._post(requests, payload)
         if status == 429:
             slog("Resposta final: limite do Groq")
             return (self._resumo_de_emergencia(coletados) or None), (None if self._resumo_de_emergencia(coletados) else self.MSG_LIMITE)

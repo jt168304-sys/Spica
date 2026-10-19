@@ -233,11 +233,15 @@ def _imagem_cloudflare(prompt):
     import requests
     url = f"https://api.cloudflare.com/client/v4/accounts/{conta}/ai/run/@cf/black-forest-labs/flux-1-schnell"
     r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
-                      json={"prompt": prompt, "steps": 8, "seed": random.randint(1, 2**31 - 1)}, timeout=90)
+                      json={"prompt": prompt, "steps": 8}, timeout=90)
     if r.status_code != 200:
         motivos = {400: "pedido recusado", 401: "token inválido", 403: "token sem permissão de Workers AI",
                    404: "Account ID errado", 429: "a cota diária do Cloudflare acabou"}
-        return None, f"Cloudflare: {motivos.get(r.status_code, 'erro')} (HTTP {r.status_code})"
+        try:
+            msg_cf = ((r.json().get("errors") or [{}])[0].get("message") or "")[:90]
+        except Exception:
+            msg_cf = ""
+        return None, f"Cloudflare: {motivos.get(r.status_code, 'erro')} (HTTP {r.status_code}) {msg_cf}".strip()
     dados = (r.json().get("result") or {}).get("image")
     if not dados:
         return None, "Cloudflare respondeu sem imagem"
@@ -343,10 +347,11 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             aviso = "Imagem(ns) criada(s) e já aparece(m) no chat; comente em uma frase curta."
         else:
             motivo = falhas[0] if falhas else ""
-            aviso = ("Criada pela reserva (qualidade menor, com marca d'água); já aparece no chat. "
-                     + ("Avise que o Cloudflare não está configurado (Configurações > Imagens)."
-                        if "não configurado" in motivo else
-                        f"Avise que o Cloudflare falhou: {motivo[:80]}."))
+            causa = ("o Cloudflare não está configurado (Configurações > Imagens)"
+                     if "não configurado" in motivo else f"o Cloudflare falhou ({motivo[:80]})")
+            aviso = ("SUCESSO: a imagem FOI criada e já está no chat, pela reserva (qualidade menor, com marca "
+                     f"d'água). Diga em uma frase curta que usou a reserva porque {causa}. "
+                     "NÃO diga que deu erro nem peça desculpas.")
         return _json({"ok": True, "quantidade": feitas, "motor": motor, "aviso": aviso})
     except Exception as e:
         return _json({"erro": f"falha ao gerar imagem: {type(e).__name__}: {e}"})
