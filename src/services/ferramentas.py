@@ -202,6 +202,7 @@ def calcular(expressao):
 
 
 # ------------------------------------------------------------------ gerar_imagem
+_ULTIMO = {"assunto": ""}   # aparência da última imagem (para 'mesma personagem em outra pose')
 _IMAGENS = []          # caminhos das imagens criadas na conversa atual (o chat as mostra)
 
 
@@ -307,9 +308,11 @@ def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fu
 
 
 def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=None,
-                 fundo=None, variacoes=1, descricao=None, **_ignorados):
+                 fundo=None, variacoes=1, descricao=None, mesma_personagem=False, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
+        if mesma_personagem and _ULTIMO["assunto"]:
+            base_texto = _ULTIMO["assunto"]      # mantém a aparência exata da imagem anterior
         if not base_texto:
             return _json({"erro": "faltou descrever o que desenhar"})
         prompt = montar_prompt_arte(base_texto, acao or "", enquadramento or "", estilo or "",
@@ -336,6 +339,7 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             with open(caminho, "wb") as arq:
                 arq.write(dados)
             _IMAGENS.append(caminho)
+            _ULTIMO["assunto"] = base_texto
             feitas += 1
             if motor != "cloudflare":      # a reserva limita pedidos seguidos: só uma imagem
                 break
@@ -477,6 +481,38 @@ def _temporada(busca):
     return estacao, int(achou.group(1)) if achou else agora.tm_year
 
 
+_Q_SEQ = """query ($id: Int) { Media(id: $id) {
+  id title { romaji english } format status season seasonYear startDate { year }
+  nextAiringEpisode { episode airingAt }
+  relations { edges { relationType node { id type format } } } } }"""
+
+
+def _cadeia_sequencias(m, max_saltos=6):
+    """Segue as sequências (SEQUEL) do anime e devolve as temporadas seguintes registradas no AniList."""
+    cadeia, atual = [], m
+    for _ in range(max_saltos):
+        prox_id = None
+        for e in ((atual.get("relations") or {}).get("edges") or []):
+            n = e.get("node") or {}
+            if e.get("relationType") == "SEQUEL" and n.get("type") == "ANIME" and n.get("format") in ("TV", "TV_SHORT", "ONA", None):
+                prox_id = n.get("id")
+                break
+        if not prox_id:
+            break
+        try:
+            atual = (_anilist(_Q_SEQ, {"id": prox_id}) or {}).get("Media") or {}
+        except Exception:
+            break
+        if not atual:
+            break
+        cadeia.append({"titulo": _titulo(atual.get("title")),
+                       "status": _STATUS_PT.get(atual.get("status"), atual.get("status")),
+                       "ano": atual.get("seasonYear") or (atual.get("startDate") or {}).get("year"),
+                       "estacao": atual.get("season"),
+                       "proximo_episodio": _proximo(atual.get("nextAiringEpisode"))})
+    return cadeia
+
+
 def consultar_anime(tipo=None, busca=None, **_ignorados):
     try:
         tipo = (tipo or "anime").strip().lower()
@@ -513,6 +549,9 @@ def consultar_anime(tipo=None, busca=None, **_ignorados):
         saida["status"] = _STATUS_PT.get(m.get("status"), m.get("status"))
         saida["hoje"] = time.strftime("%d/%m/%Y")
         if tipo_api == "ANIME":
+            saida["sequencias_conhecidas"] = _cadeia_sequencias(m)
+            saida["aviso_sequencias"] = ("Temporadas seguintes registradas no AniList. Se uma temporada não aparece "
+                                         "aqui, NÃO há registro nem anúncio dela: não a confirme.")
             prox = _proximo(m.get("nextAiringEpisode"))
             saida.update({"episodios": m.get("episodes"), "temporada": f"{m.get('season')} {m.get('seasonYear')}",
                           "estudio": ", ".join(n["name"] for n in (m.get("studios") or {}).get("nodes", [])),
@@ -579,7 +618,7 @@ FERRAMENTAS = [
             "cidade": {"type": "string", "description": "Ex.: 'São Paulo' ou 'Recife, PE'."}},
             "required": ["cidade"]}}},
     {"type": "function", "function": {
-        "name": "gerar_imagem",
+        "name": "generate_image",
         "description": "Cria imagens (arte anime/mangá). A imagem aparece sozinha no chat. Não edita imagens enviadas.",
         "parameters": {"type": "object", "properties": {
             "assunto": {"type": "string", "description": (
@@ -590,6 +629,7 @@ FERRAMENTAS = [
             "estilo": {"type": "string", "description": "anime, manga (preto e branco), chibi, retro, fantasia, realista ou pixel."},
             "luz": {"type": "string", "description": "EM INGLÊS: iluminação e clima. Ex.: 'warm sunset light'."},
             "fundo": {"type": "string", "description": "EM INGLÊS: fundo. Prefira simples."},
+            "mesma_personagem": {"type": "boolean", "description": "true para outra pose, cena ou ângulo da MESMA personagem da imagem anterior (mantém a aparência)."},
             "variacoes": {"type": "integer", "description": "1 (padrão) ou 2, só se a pessoa pedir opções."}},
             "required": ["assunto"]}}},
     {"type": "function", "function": {
@@ -614,7 +654,7 @@ FERRAMENTAS = [
 ]
 
 _FUNCOES = {"buscar_web": buscar_web, "ler_pagina": ler_pagina,
-            "clima": clima, "calcular": calcular, "gerar_imagem": gerar_imagem,
+            "clima": clima, "calcular": calcular, "gerar_imagem": gerar_imagem, "generate_image": gerar_imagem,
             "consultar_anime": consultar_anime}
 
 
