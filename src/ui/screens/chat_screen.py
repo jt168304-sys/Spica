@@ -103,11 +103,17 @@ class Bolha(MDBoxLayout):
             card.add_widget(label)
 
         if not e_usuario:
-            btn = MDIconButton(
-                icon="content-copy", 
-                size_hint=(None, None), size=(dp(32), dp(32)),
-                on_release=lambda x: self._copiar(),
-            )
+            if imagem:      # imagem da Spica: o botão ao lado salva na galeria
+                btn = MDIconButton(
+                    icon="download", size_hint=(None, None), size=(dp(32), dp(32)),
+                    on_release=lambda x: self._salvar_na_galeria(imagem),
+                )
+            else:
+                btn = MDIconButton(
+                    icon="content-copy",
+                    size_hint=(None, None), size=(dp(32), dp(32)),
+                    on_release=lambda x: self._copiar(),
+                )
             T.icone(btn)
             col = MDBoxLayout(
                 orientation="vertical", size_hint_x=0.18,
@@ -170,15 +176,35 @@ class Bolha(MDBoxLayout):
             self._finalizar_anim()
 
     def _salvar_na_galeria(self, caminho):
+        """Salva em Imagens/Spica (MediaStore, Android 10+); se falhar, tenta o método antigo."""
+        aviso = "Imagem salva em Imagens/Spica"
         try:
             from jnius import autoclass
             ctx = autoclass("org.kivy.android.PythonActivity").mActivity
+            resolver = ctx.getContentResolver()
             Media = autoclass("android.provider.MediaStore$Images$Media")
-            Media.insertImage(ctx.getContentResolver(), caminho, "Spica", "Criada pela Spica")
-            aviso = "Imagem salva na galeria"
+            Valores = autoclass("android.content.ContentValues")
+            Colunas = autoclass("android.provider.MediaStore$MediaColumns")
+            v = Valores()
+            v.put(Colunas.DISPLAY_NAME, os.path.basename(caminho))
+            v.put(Colunas.MIME_TYPE, "image/jpeg")
+            v.put(Colunas.RELATIVE_PATH, "Pictures/Spica")
+            uri = resolver.insert(Media.EXTERNAL_CONTENT_URI, v)
+            saida = resolver.openOutputStream(uri)
+            entrada = autoclass("java.io.FileInputStream")(caminho)
+            autoclass("android.os.FileUtils").copy(entrada, saida)
+            entrada.close()
+            saida.close()
         except Exception as e:
-            print(f"[Spica] salvar imagem: {e}")
-            aviso = "Não consegui salvar a imagem"
+            print(f"[Spica] salvar imagem (MediaStore): {e}")
+            try:
+                from jnius import autoclass
+                ctx = autoclass("org.kivy.android.PythonActivity").mActivity
+                Media = autoclass("android.provider.MediaStore$Images$Media")
+                Media.insertImage(ctx.getContentResolver(), caminho, "Spica", "Criada pela Spica")
+            except Exception as e2:
+                print(f"[Spica] salvar imagem (insertImage): {e2}")
+                aviso = "Não consegui salvar a imagem"
         try:
             from kivymd.toast import toast
             toast(aviso)

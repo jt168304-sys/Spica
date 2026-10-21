@@ -11,6 +11,7 @@ from src.database.storage import Storage
 from src.services.mood_service import MoodService
 import time
 import json
+import random
 
 # Tool Calling: o modelo decide sozinho quando usar busca web, leitura de página,
 # clima e calculadora (ferramentas.py). Se algo falhar ao importar, a Spica continua
@@ -104,7 +105,8 @@ class GroqService:
     MODELOS_RESERVA = ["openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3-32b"]
     _modelos_cache = None
     _PALAVRAS_ANIME = ("anime", "manga", "mangá", "temporada", "episodio", "episódio", "estreia", "estreou",
-                       "estréia", "season", "lancamento", "lançamento", "proximo ep", "próximo ep")
+                       "estréia", "season", "lancamento", "lançamento", "proximo ep", "próximo ep",
+                       "personagem", "protagonista", "obra", "vilao", "vilão")
     MSG_LIMITE = "Estou no limite de uso gratuito do Groq por agora. Espera uns segundos e tenta de novo."
     MODEL_VISAO = "qwen/qwen3.8-27b"
 
@@ -393,6 +395,18 @@ class GroqService:
         lista = [m for m in self.MODELOS_RESERVA if m not in excluidos]
         return [m for m in lista if m in disponiveis] if disponiveis else lista
 
+    @staticmethod
+    def _texto_imagem_pronta(j):
+        """Comentário curto e fixo após criar a imagem: evita uma 2ª chamada à IA (gasta cota e,
+        com modelos reserva, saía truncada ou com a tag de humor quebrada)."""
+        if j.get("motor") != "cloudflare":
+            return ("Fiz pela reserva, que é mais simples, porque o Cloudflare falhou. Quer que eu tente de novo?\n"
+                    "[HUMOR:neutro]")
+        if (j.get("quantidade") or 1) > 1:
+            return random.choice(["Fiz duas versões, qual você prefere?", "Aqui estão as duas, qual ficou melhor?"]) + "\n[HUMOR:feliz]"
+        return random.choice(["Pronto, olha como ficou.", "Aqui está, o que achou?",
+                              "Saiu assim, quer algum ajuste?", "Prontinho, ficou legal."]) + "\n[HUMOR:feliz]"
+
     def _pergunta_de_anime(self, texto):
         t = (texto or "").lower()
         return any(p in t for p in self._PALAVRAS_ANIME)
@@ -546,6 +560,13 @@ class GroqService:
                     resultado = json.dumps({"erro": "limite de chamadas por rodada"})
                 mensagens.append({"role": "tool", "tool_call_id": c["id"],
                                   "name": nome, "content": resultado[:3500]})
+            if chamadas and all(c["function"]["name"] in ("generate_image", "gerar_imagem") for c in chamadas) and coletados:
+                try:
+                    resultado_img = json.loads(coletados[-1][1])
+                except Exception:
+                    resultado_img = {}
+                if resultado_img.get("ok"):
+                    return self._texto_imagem_pronta(resultado_img), None
             rodada += 1
 
     def _resposta_final_limpa(self, requests, base, coletados, temperatura, aviso_falha=False):

@@ -10,7 +10,9 @@ from src.utils.logger import WindLogger
 
 class MoodService:
     _instancia = None
-    TAG_REGEX = re.compile(r"\s*\[HUMOR:\s*([a-zA-ZçãõáéíóúâêîôûÇÃÕÁÉÍÓÚ_]+)\s*\]\s*$")
+    # tolera erros do modelo: [HUDOR:neutro], [HUMOR : ??], espaços, ":" ou "="
+    TAG_REGEX = re.compile(r"\s*\[\s*H[Uu][A-Za-z]{1,4}\s*[:：=]\s*([^\]\n]{0,24}?)\s*\]\s*$")
+    _TAG_ABERTA = re.compile(r"\s*\[\s*H[Uu][A-Za-z]{1,4}\s*[:：=][^\]\n]*$")
 
     @classmethod
     def get_instance(cls):
@@ -75,10 +77,10 @@ class MoodService:
 
         match = self.TAG_REGEX.search(texto_resposta)
         if not match:
-            return texto_resposta.strip(), None
+            return self._TAG_ABERTA.sub("", texto_resposta).strip(), None   # tag quebrada: só some
 
         chave_humor = match.group(1).strip().lower()
-        texto_limpo = self.TAG_REGEX.sub("", texto_resposta).strip()
+        texto_limpo = self._TAG_ABERTA.sub("", self.TAG_REGEX.sub("", texto_resposta)).strip()
 
         humor = self._humores.get(chave_humor)
         if humor is None:
