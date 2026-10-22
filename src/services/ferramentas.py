@@ -381,7 +381,7 @@ _Q_SEQUELA = """query ($id: Int) {
 }"""
 _Q_PERSONAGEM = """query ($busca: String) {
   Character(search: $busca) {
-    name { full native } gender age description(asHtml: false) siteUrl
+    name { full native } gender age description(asHtml: false) siteUrl image { large }
     media(perPage: 3, sort: POPULARITY_DESC) { nodes { title { romaji english } type } }
   }
 }"""
@@ -513,6 +513,35 @@ def _cadeia_sequencias(m, max_saltos=6):
     return cadeia
 
 
+def _descrever_arte(url):
+    """Baixa a arte oficial do personagem (AniList) e pede ao modelo de visão a APARÊNCIA dela.
+    O AniList não traz cor de cabelo/olhos/roupa em texto, então olhar a arte evita inventar."""
+    try:
+        import requests
+        from src.config.settings import Settings
+        chave = (Settings().get("api_key", "") or "").strip()
+        if not chave or not url:
+            return ""
+        img = requests.get(url, headers={"User-Agent": UA}, timeout=15)
+        if img.status_code != 200 or len(img.content) > 2_500_000:
+            return ""
+        from src.services.groq_service import GroqService
+        dados = "data:image/jpeg;base64," + base64.b64encode(img.content).decode()
+        corpo = {"model": GroqService.MODEL_VISAO, "max_tokens": 220, "temperature": 0.2,
+                 "messages": [{"role": "user", "content": [
+                     {"type": "text", "text": ("Describe ONLY this anime character's appearance for an image generator, in English, "
+                                               "max 45 words: hair color/length/style, eye color, skin tone, outfit with colors, "
+                                               "accessories, apparent age. No story, no names.")},
+                     {"type": "image_url", "image_url": {"url": dados}}]}]}
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions", json=corpo, timeout=40,
+                          headers={"Authorization": f"Bearer {chave}"})
+        if r.status_code != 200:
+            return ""
+        return (r.json()["choices"][0]["message"].get("content") or "").strip()[:420]
+    except Exception:
+        return ""
+
+
 def consultar_anime(tipo=None, busca=None, **_ignorados):
     try:
         tipo = (tipo or "anime").strip().lower()
@@ -533,7 +562,11 @@ def consultar_anime(tipo=None, busca=None, **_ignorados):
             c = (_anilist(_Q_PERSONAGEM, {"busca": busca}) or {}).get("Character")
             if not c:
                 return _json({"erro": f"não achei o personagem '{busca}' no AniList"})
-            return _json({"nome": c["name"].get("full"), "nome_original": c["name"].get("native"),
+            aparencia = _descrever_arte((c.get("image") or {}).get("large"))
+            return _json({"aparencia_vista_na_arte": aparencia,
+                          "aviso_aparencia": ("Aparência vista na arte oficial: use-a ao gerar imagem deste personagem. "
+                                              "Se vazia, não invente cores."),
+                          "nome": c["name"].get("full"), "nome_original": c["name"].get("native"),
                           "genero": c.get("gender"), "idade": c.get("age"),
                           "aparece_em": [f"{_titulo(n['title'])} ({n.get('type')})" for n in (c.get("media") or {}).get("nodes", [])],
                           "descricao": _limpar_descricao(c.get("description")), "fonte": c.get("siteUrl")})
