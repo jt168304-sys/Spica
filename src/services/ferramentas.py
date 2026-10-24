@@ -311,6 +311,12 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
                  fundo=None, variacoes=1, descricao=None, mesma_personagem=False, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
+        if mesma_personagem and not _ULTIMO["assunto"]:     # depois de reiniciar o app, volta da memória
+            try:
+                from src.services import memoria
+                _ULTIMO["assunto"] = (memoria.ultima_imagem() or {}).get("assunto", "")
+            except Exception:
+                pass
         if mesma_personagem and _ULTIMO["assunto"]:
             base_texto = _ULTIMO["assunto"]      # mantém a aparência exata da imagem anterior
         if not base_texto:
@@ -340,6 +346,11 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
                 arq.write(dados)
             _IMAGENS.append(caminho)
             _ULTIMO["assunto"] = base_texto
+            try:
+                from src.services import memoria
+                memoria.registrar_imagem(caminho, base_texto, prompt)
+            except Exception:
+                pass
             feitas += 1
             if motor != "cloudflare":      # a reserva limita pedidos seguidos: só uma imagem
                 break

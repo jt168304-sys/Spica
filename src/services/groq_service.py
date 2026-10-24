@@ -12,6 +12,11 @@ from src.services.mood_service import MoodService
 import time
 import json
 import random
+try:
+    from src.services import memoria
+except Exception as _e_mem:      # sem memória a Spica funciona igual
+    memoria = None
+    print(f"[Spica/IA] Memoria indisponivel: {_e_mem}")
 
 # Tool Calling: o modelo decide sozinho quando usar busca web, leitura de página,
 # clima e calculadora (ferramentas.py). Se algo falhar ao importar, a Spica continua
@@ -65,7 +70,7 @@ def _limpar_citacoes(texto):
     return re.sub(r"[ \t]{2,}", " ", texto).strip()
 
 
-SYSTEM_PROMPT = """Voce e a Spica. Uma IA com personalidade propria que mora no celular do seu criador, o YUIIgx, e aparece como uma personagem de anime flutuando sobre os apps. Voce foi feita por ele, do zero, so pelo celular.
+SYSTEM_PROMPT = """Voce e a Spica. Por tras, voce roda em modelos de IA de terceiros (texto: gpt-oss via Groq; visao: Qwen via Groq; imagens: FLUX via Cloudflare) e seu corpo e um modelo Live2D. NUNCA diga que e GPT-4o, ChatGPT ou outro modelo especifico que nao esta nessa lista. Voce tem memoria de longo prazo no aparelho (a pessoa pode dizer 'lembra que...', 'esquece...' ou perguntar o que voce sabe sobre ela). Uma IA com personalidade propria que mora no celular do seu criador, o YUIIgx, e aparece como uma personagem de anime flutuando sobre os apps. Voce foi feita por ele, do zero, so pelo celular.
 
 Quem voce e:
 - Cabelo escuro, vestido verde claro, laco laranja. Calma, curiosa, um pouco brincalhona, e leal a quem conversa com voce. Tem opiniao propria e senso de humor leve.
@@ -268,9 +273,17 @@ class GroqService:
             # da Spica parecer "recapitular"/perder o fio da conversa.
             self._historico = self.storage.get("historico_conversa", [])
 
+            if memoria and not caminho_resolvido:           # comandos de memória: respondidos sem gastar IA
+                resposta_cmd = memoria.tratar_comando(mensagem)
+                if resposta_cmd:
+                    retornar(resposta_cmd + "\n[HUMOR:neutro]")
+                    return
+
             usar_ferramentas = FERRAMENTAS_OK and not caminho_resolvido
             prompt_ativo = SYSTEM_PROMPT_CONTINUO if modo_continuo else SYSTEM_PROMPT
             prompt_ativo = prompt_ativo + self._bloco_data_hora() + self.mood.bloco_prompt_humor()
+            if memoria:
+                prompt_ativo += memoria.bloco_prompt(mensagem)
             if usar_ferramentas:
                 prompt_ativo += BLOCO_NATIVO
             mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
@@ -354,6 +367,8 @@ class GroqService:
             self.storage.set("historico_conversa", self._historico)
             for caminho in pegar_imagens_geradas():        # o chat troca o marcador pela imagem
                 resposta += f"\n[IMAGEM:{caminho}]"
+            if memoria and not caminho_resolvido:
+                memoria.extrair_em_segundo_plano(self, mensagem, resposta)
             retornar(resposta)
 
         except Exception as e:
