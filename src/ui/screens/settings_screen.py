@@ -35,6 +35,7 @@ class SettingsScreen(MDScreen):
         # Adicionando os cards
         lista.add_widget(self._card_api_key())
         lista.add_widget(self._card_cloudflare())
+        lista.add_widget(self._card_memoria())
         lista.add_widget(self._card_bolha())
 
         lista.add_widget(self._card_sobre())
@@ -151,6 +152,82 @@ class SettingsScreen(MDScreen):
         T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
         btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
         btn_salvar.bind(on_release=salvar)
+        dialogo.open()
+
+    def _card_memoria(self):
+        try:
+            from src.services import memoria
+            n = len(memoria.listar_fatos(500))
+        except Exception:
+            memoria, n = None, 0
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(262),
+            padding=dp(20), spacing=dp(6), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Memória"))
+        card.add_widget(self._descricao(
+            f"{n} coisa{'s' if n != 1 else ''} guardada{'s' if n != 1 else ''} no aparelho. "
+            "Diga: lembra que..., esquece..., ou: o que você sabe sobre mim?", dp(66)))
+        btn = MDRaisedButton(text="Ver memória", on_release=lambda x: self._ver_memoria())
+        self._botao_principal(btn)
+        card.add_widget(btn)
+        b2 = MDFlatButton(text="Exportar cópia (JSON)", on_release=lambda x: self._exportar_memoria())
+        b3 = MDFlatButton(text="Apagar tudo", on_release=lambda x: self._confirmar_apagar_memoria())
+        T.estilizar(b2, theme_text_color="Custom", text_color=T.MENTA)
+        T.estilizar(b3, theme_text_color="Custom", text_color=T.ALERTA)
+        card.add_widget(b2)
+        card.add_widget(b3)
+        return card
+
+    def _toast(self, msg):
+        try:
+            from kivymd.toast import toast
+            toast(msg)
+        except Exception:
+            print(msg)
+
+    def _ver_memoria(self):
+        from kivymd.uix.dialog import MDDialog
+        try:
+            from src.services import memoria
+            fatos = memoria.listar_fatos(25)
+        except Exception:
+            fatos = []
+        texto = "\n".join("• " + f for f in fatos) or "Ainda não guardei nada sobre você."
+        dialogo = MDDialog(title="O que eu sei sobre você", text=texto,
+                           buttons=[MDFlatButton(text="Fechar")])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
+        dialogo.buttons[0].bind(on_release=lambda x: dialogo.dismiss())
+        dialogo.open()
+
+    def _exportar_memoria(self):
+        try:
+            from src.services import memoria
+            onde, n = memoria.exportar()
+            self._toast(f"{n} itens salvos em {onde}")
+        except Exception as e:
+            self._toast(f"Não consegui exportar: {e}")
+
+    def _confirmar_apagar_memoria(self):
+        from kivymd.uix.dialog import MDDialog
+        cancelar = MDFlatButton(text="Cancelar")
+        apagar = MDFlatButton(text="Apagar")
+        T.estilizar(apagar, theme_text_color="Custom", text_color=T.ALERTA)
+        dialogo = MDDialog(title="Apagar a memória?", text="Isso apaga tudo que a Spica guardou sobre você.",
+                           buttons=[cancelar, apagar])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
+
+        def confirmar(*a):
+            try:
+                from src.services import memoria
+                memoria.apagar_tudo()
+            except Exception as e:
+                print(e)
+            dialogo.dismiss()
+            self.clear_widgets()
+            Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
+        cancelar.bind(on_release=lambda x: dialogo.dismiss())
+        apagar.bind(on_release=confirmar)
         dialogo.open()
 
     def _card_bolha(self):

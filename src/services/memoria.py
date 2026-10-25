@@ -114,6 +114,45 @@ def bloco_prompt(mensagem):
         return ""
 
 
+def exportar():
+    """Salva a memória em JSON legível: na pasta externa do app (Android/data/<pacote>/files) e em Download.
+    A memória de verdade fica na pasta PRIVADA do app (o Android não deixa ver); isto é uma cópia para você."""
+    with _TRAVA, _con() as con:
+        fatos = [{"texto": t, "atualizado": time.strftime("%d/%m/%Y %H:%M", time.localtime(a))}
+                 for t, a in con.execute("SELECT texto, atualizado FROM fatos ORDER BY atualizado DESC")]
+        imagens = [{"assunto": a, "prompt": p} for a, p in con.execute("SELECT assunto, prompt FROM imagens ORDER BY id DESC LIMIT 30")]
+    texto = json.dumps({"fatos": fatos, "imagens_criadas": imagens}, ensure_ascii=False, indent=1)
+    local = []
+    try:
+        from jnius import autoclass
+        ctx = autoclass("org.kivy.android.PythonActivity").mActivity
+        base = ctx.getExternalFilesDir(None).getAbsolutePath()
+        caminho = os.path.join(base, "memoria_spica.json")
+        with open(caminho, "w", encoding="utf-8") as arq:
+            arq.write(texto)
+        local.append("Android/data/.../files/memoria_spica.json")
+        try:    # cópia em Download (Android 10+)
+            Baixados = autoclass("android.provider.MediaStore$Downloads")
+            Colunas = autoclass("android.provider.MediaStore$MediaColumns")
+            v = autoclass("android.content.ContentValues")()
+            v.put(Colunas.DISPLAY_NAME, "memoria_spica.json")
+            v.put(Colunas.MIME_TYPE, "application/json")
+            v.put(Colunas.RELATIVE_PATH, "Download")
+            resolver = ctx.getContentResolver()
+            saida = resolver.openOutputStream(resolver.insert(Baixados.EXTERNAL_CONTENT_URI, v))
+            saida.write(texto.encode("utf-8"))
+            saida.close()
+            local.append("Download/memoria_spica.json")
+        except Exception as e:
+            print(f"[Spica/Memoria] export Download: {e}")
+    except Exception:
+        caminho = os.path.join(_pasta(), "memoria_spica.json")
+        with open(caminho, "w", encoding="utf-8") as arq:
+            arq.write(texto)
+        local.append(caminho)
+    return " e ".join(local), len(fatos)
+
+
 # ------------------------------------------------------------------ imagens
 def registrar_imagem(caminho, assunto, prompt):
     try:
