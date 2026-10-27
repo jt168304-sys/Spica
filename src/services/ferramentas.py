@@ -270,45 +270,85 @@ _PADROES_ARTE = {
 }
 
 
+def _t(item, *chaves):
+    for k in chaves:
+        if isinstance(item, dict) and item.get(k):
+            return item[k] if isinstance(item[k], str) else ", ".join(map(str, item[k]))
+    return ""
+
+
 def _guia_arte():
-    """Carrega assets/conhecimento/arte_anime.json (editável); se faltar, usa o padrão embutido."""
+    """Carrega assets/conhecimento/arte.json (um único guia, vários tipos de arte) e o normaliza."""
     try:
         caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
-                               "assets", "conhecimento", "arte_anime.json")
+                               "assets", "conhecimento", "arte.json")
         with open(os.path.normpath(caminho), encoding="utf-8") as arq:
-            dados = json.load(arq)
-        guia = dict(_PADROES_ARTE)
-        guia.update({k: v for k, v in dados.items() if not k.startswith("_")})
-        return guia
-    except Exception:
-        return _PADROES_ARTE
+            d = json.load(arq)
+        q = d.get("qualidade_positiva") or {}
+        nucleo = ", ".join((q.get("nucleo") or [])[:6]) if isinstance(q.get("nucleo"), list) else str(q.get("nucleo") or "")
+        reforco = q.get("reforco_anime")
+        reforco = ", ".join(reforco[:4]) if isinstance(reforco, list) else str(reforco or "")
+        limpa = lambda sec, *k: {n: {"palavras": v.get("palavras", []), "tags": _t(v, *k)}
+                                 for n, v in (d.get(sec) or {}).items() if isinstance(v, dict) and not n.startswith("_")}
+        return {"estilos": limpa("estilos_anime", "tags_flux_sdxl", "tags"),
+                "gerais": limpa("estilos_gerais", "tags_flux_sdxl", "tags"),
+                "enquadramentos": limpa("enquadramentos", "tags", "tags_flux_sdxl"),
+                "categorias": {n: dict(v, tags=_t(v, "tags", "tags_flux_sdxl")) for n, v in (d.get("categorias") or {}).items()
+                               if isinstance(v, dict) and not n.startswith("_")},
+                "qualidade": (nucleo + ", " + reforco).strip(", "), "qualidade_geral": nucleo or "high quality, highly detailed",
+                "anatomia": str(d.get("anatomia_positiva") or "anatomically correct, two arms, five fingers on each hand")}
+    except Exception as e:
+        print(f"[Spica/Arte] guia: {e}")
+        return {"estilos": {}, "gerais": {}, "enquadramentos": {}, "categorias": {},
+                "qualidade": "masterpiece, best quality, highly detailed", "qualidade_geral": "high quality, highly detailed",
+                "anatomia": "anatomically correct, two arms, five fingers on each hand"}
 
 
-def _escolher(tabela, texto, padrao):
-    """Acha o item cujas palavras aparecem no texto; senão usa o padrão."""
+def _escolher(tabela, texto, padrao=None):
+    """Item cujas palavras aparecem no texto (senão o padrão, se houver). Devolve (nome, tags)."""
     texto = (texto or "").lower()
     for nome, item in tabela.items():
         if any(p.lower() in texto for p in item.get("palavras", [])):
             return nome, item.get("tags", "")
-    item = tabela.get(padrao) or next(iter(tabela.values()))
-    return padrao, item.get("tags", "")
+    item = tabela.get(padrao) if padrao else None
+    return (padrao, item.get("tags", "")) if item else ("", "")
 
 
-def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fundo=""):
-    """Monta o prompt final (em inglês) com o guia de arte: assunto primeiro, depois pose,
-    enquadramento, luz, fundo, estilo, qualidade e anatomia."""
-    guia = _guia_arte()
-    pad = guia.get("padrao", {})
-    _, tags_estilo = _escolher(guia["estilos"], estilo, pad.get("estilo", "anime"))
-    _, tags_enq = _escolher(guia["enquadramentos"], enquadramento, pad.get("enquadramento", "meio corpo"))
-    partes = [assunto.strip(), (acao or "").strip(), tags_enq, (luz or "").strip(),
-              (fundo or "").strip() or pad.get("fundo", ""), tags_estilo,
-              guia.get("qualidade", ""), guia.get("anatomia", "")]
-    return ", ".join(x.strip(" ,") for x in partes if x and x.strip(" ,"))[:1800]
+def _detectar_categoria(texto, categoria=""):
+    cats = _guia_arte().get("categorias") or {}
+    pedida = (categoria or "").lower().strip()
+    if pedida in cats:
+        return pedida
+    t = (texto + " " + pedida).lower()
+    if any(p in t for p in (cats.get("anime", {}).get("palavras") or ["anime", "mangá", "manga", "chibi"])):
+        return "anime"                      # anime SÓ quando pedirem anime/mangá/personagem de anime
+    for nome, item in cats.items():
+        if nome != "anime" and any(p in t for p in item.get("palavras", [])):
+            return nome
+    return "livre"
+
+
+def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fundo="", categoria=""):
+    """Prompt final (em inglês). Anime usa os estilos de anime; os outros tipos, as tags da categoria."""
+    g = _guia_arte()
+    cat = _detectar_categoria(" ".join([assunto, acao, enquadramento, estilo, fundo]), categoria)
+    _, enq = _escolher(g["enquadramentos"], enquadramento)
+    if cat == "anime":
+        _, est = _escolher(g["estilos"], estilo, "anime_padrao")
+        partes = [assunto, acao, enq or _escolher(g["enquadramentos"], "meio corpo")[1], luz,
+                  fundo or "simple soft background, uncluttered", est, g["qualidade"], g["anatomia"]]
+    else:
+        item = g["categorias"].get(cat, {})
+        _, est = _escolher(g["gerais"], estilo)
+        partes = [assunto, acao, est or estilo, item.get("tags", ""), enq or enquadramento, luz, fundo,
+                  g["qualidade_geral"]]
+        if item.get("pessoas"):
+            partes.append("anatomically correct, natural proportions")
+    return ", ".join(x.strip(" ,") for x in partes if x and str(x).strip(" ,"))[:1800]
 
 
 def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=None,
-                 fundo=None, variacoes=1, descricao=None, mesma_personagem=False, **_ignorados):
+                 fundo=None, variacoes=1, descricao=None, mesma_personagem=False, categoria=None, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
         if mesma_personagem and not _ULTIMO["assunto"]:     # depois de reiniciar o app, volta da memória
@@ -321,8 +361,21 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             base_texto = _ULTIMO["assunto"]      # mantém a aparência exata da imagem anterior
         if not base_texto:
             return _json({"erro": "faltou descrever o que desenhar"})
+        texto_total = " ".join(x or "" for x in (base_texto, acao, estilo, categoria, fundo)).lower()
+        try:                       # mapa de masmorra/batalha com grade: o código acerta o que o modelo de imagem erra
+            from src.services import mapa_rpg
+            ilustrado = any(k in texto_total for k in ("world map", "mapa do mundo", "mapa-mundi", "parchment", "pergaminho", "regional", "ilustrado", "illustrated"))
+            if mapa_rpg.eh_pedido_de_mapa(texto_total) and not ilustrado and not mesma_personagem:
+                dados_png, resumo = mapa_rpg.gerar(texto_total)
+                caminho = os.path.join(_pasta_imagens(), time.strftime("spica_%Y%m%d_%H%M%S") + "_mapa.png")
+                with open(caminho, "wb") as arq:
+                    arq.write(dados_png)
+                _IMAGENS.append(caminho)
+                return _json({"ok": True, "quantidade": 1, "motor": "codigo", "resumo": resumo})
+        except Exception as e:
+            print(f"[Spica/Mapa] {e}")
         prompt = montar_prompt_arte(base_texto, acao or "", enquadramento or "", estilo or "",
-                                    luz or "", fundo or "")
+                                    luz or "", fundo or "", categoria or "")
         try:
             quantidade = max(1, min(int(variacoes), 2))
         except (TypeError, ValueError):
@@ -669,6 +722,7 @@ FERRAMENTAS = [
                 "EM INGLÊS: quem ou o que aparece, com aparência concreta. Ex.: 'a girl with long black hair "
                 "and amber eyes, green jacket, orange ribbon'.")},
             "acao": {"type": "string", "description": "EM INGLÊS: pose ou ação simples. Ex.: 'standing, smiling softly'."},
+            "categoria": {"type": "string", "description": "tipo de imagem: anime (SÓ se pedirem anime, mangá ou personagem de anime), retrato, paisagem, mapa, logo, icone, objeto, interior, comida, criatura, pixel, fantasia, infantil, abstrato ou outro."},
             "enquadramento": {"type": "string", "description": "corpo inteiro, meio corpo, busto, rosto ou cena."},
             "estilo": {"type": "string", "description": "anime, manga (preto e branco), chibi, retro, fantasia, realista ou pixel."},
             "luz": {"type": "string", "description": "EM INGLÊS: iluminação e clima. Ex.: 'warm sunset light'."},

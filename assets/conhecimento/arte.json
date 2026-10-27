@@ -1,0 +1,786 @@
+{
+  "_meta": {
+    "nome": "Spica Art System",
+    "versao": "3.0",
+    "descricao": "Sistema unificado de criação de imagem. Estruturado para IA geradora com suporte a anime, arte geral, design, mapas, UI, arquitetura, veículos, criaturas e integração com APIs externas.",
+    "compatibilidade": [
+      "Stable Diffusion 1.5",
+      "SDXL",
+      "SDXL Lightning",
+      "FLUX.1 Schnell",
+      "Pony Diffusion V6 XL",
+      "Illustrious-XL",
+      "Modelos baseados em Danbooru tags"
+    ],
+    "instrucoes_para_ia": "Monte o prompt final na ordem: [qualidade_positiva] + [categoria.tags] + [estilo.tags] + [enquadramento.tags] + [iluminacao.tags (opcional)] + [camera_lente.tags (opcional)] + [composicao.tags (opcional)] + [cor.tags (opcional)] + [materiais.tags (opcional)] + [sujeito descrevido pelo usuário]. Use negative_prompt combinado de qualidade_negativa + anatomia_negativa + artefatos_negativos + tags específicas da categoria. Para modelos Pony, adicione o score ladder no início do positivo e score baixo no negativo. Para Illustrious, use 'masterpiece, best quality, very aesthetic'. Para FLUX/SDXL natural language, prefira frases descritivas curtas em vez de excesso de tags. Respeite o limite de peso ~1.3 para evitar distorção.",
+    "ordem_de_montagem": [
+      "qualidade_positiva",
+      "categoria.tags",
+      "estilo.tags",
+      "enquadramento.tags",
+      "iluminacao.tags",
+      "camera_lente.tags",
+      "composicao.tags",
+      "cor.tags",
+      "materiais.tags",
+      "sujeito (descrição do usuário)",
+      "qualidade_geral (reforço final)"
+    ],
+    "separador": ", ",
+    "peso_maximo_recomendado": 1.3,
+    "observacao_peso": "Use (termo:1.1) a (termo:1.3) apenas para 1 ou 2 características críticas. Acima disso, o modelo distorce."
+  },
+
+  "qualidade_positiva": {
+    "nucleo": "masterpiece, best quality, very aesthetic, high resolution, absurdres, ultra detailed, intricate details, sharp focus, professional, award-winning",
+    "reforco_anime": "anime coloring, clean line art, detailed eyes, detailed hair, beautiful detailed background, official art",
+    "reforco_realista": "photorealistic, natural skin texture, fine details, realistic materials, physically based rendering, 8k uhd, dslr",
+    "reforco_ilustracao": "beautiful illustration, detailed illustration, vibrant colors, harmonious composition, polished finish",
+    "reforco_3d": "octane render, unreal engine 5, ray tracing, global illumination, subsurface scattering, high polygon count",
+    "reforco_concept": "concept art, production-ready, cinematic composition, matte painting, detailed environment design"
+  },
+
+  "qualidade_negativa": {
+    "nucleo": "worst quality, low quality, normal quality, lowres, blurry, jpeg artifacts, pixelated, noisy, grainy, oversharpened, plastic surfaces, oversaturated",
+    "composicao": "cropped, out of frame, cut off, watermark, signature, username, text, error, logo, border, frame",
+    "estilo": "photorealistic (quando não desejado), cartoonish (quando não desejado), flat colors (quando não desejado), 3d render (quando não desejado)"
+  },
+
+  "anatomia_positiva": "anatomically correct, well-proportioned, correct limb proportions, natural pose, proper joint alignment, realistic muscle placement, believable weight distribution, symmetrical face, five fingers on each hand, two arms, two legs, detailed hands, detailed face",
+  "anatomia_negativa": "bad anatomy, bad proportions, deformed, disfigured, mutated, malformed limbs, extra limbs, missing limbs, extra arms, extra legs, extra fingers, fewer digits, fused fingers, mutated hands, poorly drawn hands, poorly drawn face, bad face, cloned face, long neck, gross proportions, unnatural posture, amputee, duplicate",
+  "artefatos_negativos": "artifacts, glitch, distorted, warped, melted, oversmoothed, uncanny, deformed eyes, asymmetric eyes, cross-eyed, blurry face, blurry hands, noise, film grain (quando não desejado)",
+  "negativo_por_categoria": {
+    "mapa": "people, characters, text, labels (a menos que solicitado), perspective distortion, blurry terrain",
+    "logo": "photo, realistic texture, gradient mesh complexo, tiny details, illegible text, 3d bevel",
+    "icone": "photo, realistic texture, complex background, small details that vanish at small size",
+    "pixel": "anti-aliasing, blur, smooth gradients, high resolution noise, non-pixel edges",
+    "interior": "people, clutter excessivo, distorted perspective, floating furniture",
+    "comida": "plastic look, unappetizing colors, blurry, messy plating, artificial",
+    "objeto": "multiple objects, messy background, hands, people, shadows duras incoerentes",
+    "arma": "hands, people, floating weapon, inconsistent perspective, plastic metal",
+    "criatura": "bad anatomy, extra limbs aleatórios, inconsistência de peso, human face on animal (a menos que solicitado)",
+    "paisagem": "people, characters, text, distorted horizon, repeated patterns, tiling",
+    "retrato": "deformed face, extra fingers, asymmetrical eyes, blurry, low quality, plastic skin",
+    "arquitetura": "distorted perspective, impossible geometry, floating structures, inconsistent scale",
+    "veiculo": "distorted wheels, inconsistent perspective, melted metal, extra parts",
+    "mecha": "organic anatomy (a menos que solicitado), inconsistent joints, melted panels",
+    "nave": "atmospheric distortion (a menos que solicitado), impossible engines, inconsistent scale",
+    "tecnico": "artistic brushstrokes, painterly, perspective distortion, illegible annotations",
+    "cientifico": "artistic distortion, inaccurate anatomy, unlabeled parts (se diagrama)",
+    "moda": "bad anatomy, floating clothes, inconsistent fabric, distorted pose",
+    "joia": "blurry, plastic look, inconsistent reflections, messy background",
+    "cartaz": "cluttered layout, illegible text, low contrast, unbalanced composition",
+    "hud": "cluttered, illegible text, inconsistent icon style, low contrast"
+  },
+
+  "estilos_anime": {
+    "_nota": "Use a sintaxe correta por modelo. Pony usa score ladder; Illustrious usa quality tags curtas; FLUX/SDXL aceitam frases naturais.",
+    "anime_padrao": {
+      "palavras": ["anime", "padrao", "personagem de anime", "estilo anime"],
+      "tags_illustrious": "masterpiece, best quality, very aesthetic, anime illustration, clean line art, cel shading, vibrant colors, detailed eyes, detailed hair strands, soft gradients, crisp outlines",
+      "tags_pony": "score_9, score_8_up, score_7_up, source_anime, anime coloring, clean line art, cel shading, detailed eyes, detailed hair, vibrant colors",
+      "tags_flux_sdxl": "modern anime illustration, clean line art, cel shading, vibrant colors, large expressive eyes, detailed hair strands, soft gradients, crisp outlines, appealing character design"
+    },
+    "manga": {
+      "palavras": ["manga", "mangá", "preto e branco", "black and white", "p&b"],
+      "tags_illustrious": "masterpiece, best quality, manga illustration, black and white, bold ink linework, screentone shading, high contrast, dynamic composition, detailed crosshatching, clean panels",
+      "tags_pony": "score_9, score_8_up, score_7_up, monochrome, manga style, ink linework, screentone, high contrast, dynamic composition",
+      "tags_flux_sdxl": "black and white manga illustration, bold ink linework, screentone shading, high contrast, dynamic composition, dramatic shadows, detailed crosshatching, clean panels"
+    },
+    "chibi": {
+      "palavras": ["chibi", "fofo", "super deformed", "kawaii"],
+      "tags_illustrious": "masterpiece, best quality, chibi, super deformed, oversized head, cute, thick clean outlines, pastel colors, simple shading, big shiny eyes, small body",
+      "tags_pony": "score_9, score_8_up, score_7_up, chibi, super deformed, cute, pastel colors, thick outlines, big eyes, small body",
+      "tags_flux_sdxl": "chibi anime style, super deformed, oversized head, cute, thick clean outlines, pastel colors, simple shading, big shiny eyes, small body, expressive pose"
+    },
+    "retro_90s": {
+      "palavras": ["retro", "retrô", "anos 90", "90s", "classico", "clássico"],
+      "tags_illustrious": "masterpiece, best quality, 1990s retro anime style, cel animation look, slightly grainy, muted saturated colors, hand-drawn feel, vintage aesthetic",
+      "tags_pony": "score_9, score_8_up, score_7_up, retro anime, 90s style, cel animation, vintage, grainy, muted colors",
+      "tags_flux_sdxl": "1990s retro anime style, cel animation look, slightly grainy, muted saturated colors, hand-drawn feel, vintage aesthetic, soft bloom, nostalgic"
+    },
+    "fantasia_anime": {
+      "palavras": ["fantasia anime", "fantasy anime", "isekai", "épico anime", "magia anime"],
+      "tags_illustrious": "masterpiece, best quality, fantasy anime illustration, painterly background, epic lighting, rich colors, magical atmosphere, detailed costume design, glowing effects",
+      "tags_pony": "score_9, score_8_up, score_7_up, fantasy anime, painterly background, epic lighting, magical atmosphere, detailed costume",
+      "tags_flux_sdxl": "fantasy anime illustration, painterly background, epic lighting, rich colors, magical atmosphere, detailed costume design, glowing effects, dramatic sky"
+    },
+    "realista_anime": {
+      "palavras": ["realista anime", "semi-realista", "anime realista"],
+      "tags_illustrious": "masterpiece, best quality, semi-realistic anime painting, detailed shading, cinematic lighting, soft skin rendering, realistic hair physics, intricate clothing folds",
+      "tags_pony": "score_9, score_8_up, score_7_up, semi-realistic anime, detailed shading, cinematic lighting, realistic hair, intricate clothing",
+      "tags_flux_sdxl": "semi-realistic anime painting, detailed shading, cinematic lighting, soft skin rendering, realistic hair physics, intricate clothing folds"
+    },
+    "pixel_anime": {
+      "palavras": ["pixel anime", "pixel art anime", "sprite anime"],
+      "tags_illustrious": "masterpiece, best quality, pixel art anime character, 16-bit style, limited color palette, crisp pixels, clean sprite, readable silhouette, retro game aesthetic",
+      "tags_pony": "score_9, score_8_up, score_7_up, pixel art, anime sprite, 16-bit, limited palette, crisp pixels",
+      "tags_flux_sdxl": "pixel art anime character, 16-bit style, limited color palette, crisp pixels, clean sprite, readable silhouette, retro game aesthetic"
+    }
+  },
+
+  "estilos_gerais": {
+    "aquarela": {
+      "palavras": ["aquarela", "watercolor"],
+      "tags": "watercolor painting, soft translucent washes, visible paper texture, delicate color bleeding, light and airy, expressive brushstrokes, natural color blending"
+    },
+    "oleo": {
+      "palavras": ["óleo", "oleo", "oil painting"],
+      "tags": "oil painting, thick impasto brushstrokes, rich saturated colors, classical technique, visible canvas texture, dramatic chiaroscuro, old master quality"
+    },
+    "lapis": {
+      "palavras": ["lápis", "lapis", "grafite", "pencil", "sketch", "esboço"],
+      "tags": "pencil sketch, graphite drawing, fine hatching, detailed linework, monochrome, paper texture, expressive strokes, study drawing"
+    },
+    "carvao": {
+      "palavras": ["carvão", "carvao", "charcoal"],
+      "tags": "charcoal drawing, deep blacks, soft smudged shadows, rough paper texture, dramatic contrast, expressive gestural marks"
+    },
+    "tinta_nanquim": {
+      "palavras": ["tinta", "nanquim", "ink", "a pena"],
+      "tags": "ink illustration, bold black linework, high contrast, crosshatching, clean negative space, graphic style, dynamic strokes"
+    },
+    "3d_render": {
+      "palavras": ["3d", "render", "renderizado", "3d render"],
+      "tags": "3D rendered image, physically based rendering, realistic materials, global illumination, subsurface scattering, ray tracing, octane render, unreal engine 5, high polygon count, detailed textures"
+    },
+    "low_poly": {
+      "palavras": ["low poly", "lowpoly"],
+      "tags": "low poly 3D art, faceted geometry, flat shading, minimalist polygons, stylized, clean edges, geometric aesthetic"
+    },
+    "voxel": {
+      "palavras": ["voxel", "voxels", "voxel art"],
+      "tags": "voxel art, 3D pixel blocks, cubic construction, isometric perspective, limited palette, retro 3D aesthetic"
+    },
+    "vetor": {
+      "palavras": ["vetor", "vector", "vetorial"],
+      "tags": "vector illustration, clean paths, flat colors, smooth gradients, scalable, crisp edges, graphic design style"
+    },
+    "gravura": {
+      "palavras": ["gravura", "engraving", "woodcut", "xilogravura"],
+      "tags": "engraving style, fine parallel lines, crosshatching, vintage print look, monochrome, detailed linework, antique illustration"
+    },
+    "art_nouveau": {
+      "palavras": ["art nouveau"],
+      "tags": "Art Nouveau style, flowing organic lines, floral motifs, decorative borders, elegant curves, muted gold and jewel tones, Mucha-inspired"
+    },
+    "art_deco": {
+      "palavras": ["art deco", "art déco"],
+      "tags": "Art Deco style, geometric patterns, bold symmetry, metallic gold accents, sleek lines, 1920s glamour, luxurious"
+    },
+    "cyberpunk": {
+      "palavras": ["cyberpunk", "cyber punk", "cyber"],
+      "tags": "cyberpunk aesthetic, neon lights, rainy city streets, high tech low life, holographic displays, chrome and glass, magenta and cyan palette, gritty atmosphere"
+    },
+    "steampunk": {
+      "palavras": ["steampunk", "steam punk"],
+      "tags": "steampunk style, brass and copper machinery, gears and cogs, Victorian aesthetic, steam pipes, leather and wood, warm amber lighting"
+    },
+    "gotico": {
+      "palavras": ["gótico", "gotico", "gothic"],
+      "tags": "gothic style, dark atmosphere, ornate architecture, candlelight, stained glass, dramatic shadows, melancholic mood, rich burgundy and black"
+    },
+    "minimalista": {
+      "palavras": ["minimalista", "minimalist", "minimalism"],
+      "tags": "minimalist design, negative space, limited color palette, simple shapes, clean lines, elegant simplicity, zen composition"
+    },
+    "surrealista": {
+      "palavras": ["surrealista", "surreal", "surrealism"],
+      "tags": "surrealist art, dreamlike imagery, impossible geometry, melting forms, symbolic elements, vivid contrast, Dalí-inspired, uncanny atmosphere"
+    },
+    "impressionista": {
+      "palavras": ["impressionista", "impressionist", "impressionismo"],
+      "tags": "impressionist painting, visible brushstrokes, dappled light, soft color blending, plein air feel, atmospheric, Monet-inspired"
+    },
+    "pop_art": {
+      "palavras": ["pop art", "pop-art"],
+      "tags": "pop art style, bold flat colors, halftone dots, comic book influence, high contrast, Warhol-inspired, graphic repetition"
+    },
+    "vaporwave": {
+      "palavras": ["vaporwave", "vapor wave"],
+      "tags": "vaporwave aesthetic, pastel pink and cyan, retro 80s/90s, glitch effects, VHS artifacts, palm trees, grid landscapes, nostalgic surrealism"
+    },
+    "synthwave": {
+      "palavras": ["synthwave", "synth wave", "outrun"],
+      "tags": "synthwave aesthetic, neon grid, chrome sun, purple and pink gradient sky, retro futuristic, 80s neon, dramatic perspective"
+    },
+    "bauhaus": {
+      "palavras": ["bauhaus"],
+      "tags": "Bauhaus style, geometric abstraction, primary colors, functional design, clean typography, grid-based composition"
+    },
+    "realismo_classico": {
+      "palavras": ["realista clássico", "classical realism", "academico", "acadêmico"],
+      "tags": "classical realism, academic painting, precise anatomy, subtle skin tones, dramatic chiaroscuro, museum quality, old master technique"
+    },
+    "dark_fantasy": {
+      "palavras": ["dark fantasy", "fantasia sombria", "dark souls"],
+      "tags": "dark fantasy art, grim atmosphere, desaturated palette, dramatic volumetric light, gothic architecture, weathered textures, ominous mood"
+    },
+    "solarpunk": {
+      "palavras": ["solarpunk", "solar punk"],
+      "tags": "solarpunk aesthetic, lush greenery integrated with technology, warm sunlight, optimistic future, sustainable architecture, vibrant natural colors"
+    },
+    "brutalismo": {
+      "palavras": ["brutalismo", "brutalist", "brutalista"],
+      "tags": "brutalist design, raw concrete, heavy geometric forms, monumental scale, harsh shadows, monochromatic palette"
+    },
+    "ukiyo_e": {
+      "palavras": ["ukiyo-e", "ukiyoe", "gravura japonesa"],
+      "tags": "ukiyo-e style, Japanese woodblock print, flat colors, bold outlines, wave patterns, traditional Japanese motifs, limited palette"
+    },
+    "storybook": {
+      "palavras": ["storybook", "livro de histórias", "ilustração infantil"],
+      "tags": "storybook illustration, warm colors, soft textures, whimsical characters, detailed environments, gentle lighting, classic children's book aesthetic"
+    }
+  },
+
+  "enquadramentos": {
+    "corpo_inteiro": {
+      "palavras": ["corpo inteiro", "corpo todo", "full body", "de cima a baixo"],
+      "tags": "full body shot, entire body visible from head to toe, standing pose, both arms, both hands and both legs clearly visible, simple pose, feet visible"
+    },
+    "meio_corpo": {
+      "palavras": ["meio corpo", "cintura", "waist up", "cowboy shot"],
+      "tags": "waist-up shot, upper body, both arms visible, hands visible or relaxed at sides"
+    },
+    "busto": {
+      "palavras": ["busto", "retrato", "portrait", "upper body"],
+      "tags": "upper body portrait, bust shot, looking at viewer, shoulders visible, clean background"
+    },
+    "rosto_close": {
+      "palavras": ["rosto", "close", "face", "close-up"],
+      "tags": "close-up portrait, face focus, detailed eyes, skin texture visible, soft background"
+    },
+    "cena_wide": {
+      "palavras": ["cena", "paisagem", "cenario", "cenário", "scenery", "landscape", "wide"],
+      "tags": "wide establishing shot, detailed scenery, atmospheric perspective, character integrated into environment, cinematic framing"
+    },
+    "detalhe_macro": {
+      "palavras": ["detalhe", "close detalhe", "macro", "detail shot"],
+      "tags": "extreme close-up detail shot, macro photography, shallow depth of field, intricate textures visible, high magnification"
+    },
+    "isometrico": {
+      "palavras": ["isometrico", "isométrico", "isometric"],
+      "tags": "isometric view, 45-degree angle, orthographic projection, clean lines, game asset style, consistent perspective"
+    },
+    "aereo": {
+      "palavras": ["aéreo", "aereo", "bird's eye", "vista de cima", "top down"],
+      "tags": "aerial view, bird's eye perspective, top-down shot, orthographic, wide coverage, map-like clarity"
+    },
+    "contra_plongee": {
+      "palavras": ["contra-plongée", "contra plongee", "low angle", "de baixo"],
+      "tags": "low angle shot, worm's eye view, imposing perspective, dramatic upward view, heroic framing"
+    },
+    "dutch_angle": {
+      "palavras": ["dutch angle", "inclinado", "tilted"],
+      "tags": "dutch angle, tilted camera, dynamic tension, psychological unease, diagonal composition"
+    },
+    "over_the_shoulder": {
+      "palavras": ["over the shoulder", "por cima do ombro"],
+      "tags": "over-the-shoulder shot, foreground shoulder silhouette, focus on background subject, cinematic depth"
+    }
+  },
+
+  "iluminacao": {
+    "golden_hour": {
+      "palavras": ["golden hour", "hora dourada", "luz dourada"],
+      "tags": "golden hour lighting, warm soft light, long shadows, lens flare, romantic atmosphere"
+    },
+    "blue_hour": {
+      "palavras": ["blue hour", "hora azul"],
+      "tags": "blue hour lighting, cool moody tones, soft ambient light, twilight atmosphere"
+    },
+    "rembrandt": {
+      "palavras": ["rembrandt", "luz rembrandt"],
+      "tags": "Rembrandt lighting, dramatic triangle of light on the face, deep shadows, classic portrait lighting"
+    },
+    "split_lighting": {
+      "palavras": ["split lighting", "luz dividida"],
+      "tags": "split lighting, half face illuminated, high contrast, dramatic shadow line"
+    },
+    "chiaroscuro": {
+      "palavras": ["chiaroscuro", "claro escuro"],
+      "tags": "chiaroscuro, strong light and shadow drama, deep blacks, luminous highlights, baroque atmosphere"
+    },
+    "rim_light": {
+      "palavras": ["rim light", "luz de contorno", "backlit"],
+      "tags": "rim light, backlit subject, glowing edges, separation from background, dramatic silhouette"
+    },
+    "soft_box": {
+      "palavras": ["soft box", "luz suave", "difusa"],
+      "tags": "soft box lighting, diffused light, even illumination, minimal shadows, studio quality"
+    },
+    "neon": {
+      "palavras": ["neon", "luz neon"],
+      "tags": "neon lighting, colored light sources, magenta and cyan glow, reflective surfaces, cyberpunk atmosphere"
+    },
+    "candlelight": {
+      "palavras": ["candlelight", "luz de vela"],
+      "tags": "candlelight, warm flickering light, intimate atmosphere, deep surrounding shadows"
+    },
+    "volumetric": {
+      "palavras": ["volumetric", "luz volumétrica", "god rays"],
+      "tags": "volumetric lighting, god rays, light beams through atmosphere, dust particles, dramatic depth"
+    }
+  },
+
+  "camera_lente": {
+    "retrato_85mm": {
+      "palavras": ["85mm", "retrato 85mm"],
+      "tags": "shot on 85mm lens, f/1.8, shallow depth of field, portrait compression, creamy bokeh"
+    },
+    "wide_24mm": {
+      "palavras": ["24mm", "wide angle"],
+      "tags": "shot on 24mm lens, wide angle, expansive scene, dramatic perspective, deep depth of field"
+    },
+    "telefoto_135mm": {
+      "palavras": ["135mm", "telefoto", "telephoto"],
+      "tags": "shot on 135mm telephoto lens, strong background compression, isolated subject, cinematic reach"
+    },
+    "macro": {
+      "palavras": ["macro lens", "lente macro"],
+      "tags": "macro lens, extreme close-up, 1:1 magnification, razor-thin depth of field, intricate textures"
+    },
+    "anamorphic": {
+      "palavras": ["anamorphic", "lente anamórfica"],
+      "tags": "anamorphic lens, widescreen cinematic look, oval bokeh, horizontal lens flare, film-like rendering"
+    },
+    "film_35mm": {
+      "palavras": ["35mm film", "filme 35mm", "analógico"],
+      "tags": "shot on 35mm film, Kodak Portra 400, natural grain, filmic color rendition, slight halation"
+    },
+    "hasselblad": {
+      "palavras": ["hasselblad", "médio formato"],
+      "tags": "shot on Hasselblad X2D, medium format, ultra-high detail, rich tonal range, professional studio quality"
+    }
+  },
+
+  "composicao": {
+    "regra_dos_tercos": {
+      "palavras": ["regra dos terços", "rule of thirds"],
+      "tags": "composed using rule of thirds, subject off-center, balanced visual weight, natural framing"
+    },
+    "linhas_guia": {
+      "palavras": ["linhas guia", "leading lines"],
+      "tags": "leading lines guiding the eye, diagonal composition, strong visual flow, depth enhancement"
+    },
+    "simetria": {
+      "palavras": ["simetria", "symmetrical"],
+      "tags": "perfectly symmetrical composition, formal balance, architectural precision, mirrored elements"
+    },
+    "espaco_negativo": {
+      "palavras": ["espaço negativo", "negative space"],
+      "tags": "minimalist composition with generous negative space, isolated subject, breathing room, elegant simplicity"
+    },
+    "foreground_background": {
+      "palavras": ["foreground", "camadas", "profundidade"],
+      "tags": "strong foreground element, layered background, depth and dimension, atmospheric perspective"
+    },
+    "enquadramento_natural": {
+      "palavras": ["enquadramento natural", "natural framing"],
+      "tags": "natural framing through foreground elements, window or arch composition, voyeuristic depth"
+    }
+  },
+
+  "cor": {
+    "analogica": {
+      "palavras": ["cores análogas", "analogous"],
+      "tags": "analogous color palette, harmonious tones, cohesive atmosphere, gentle color transitions"
+    },
+    "complementar": {
+      "palavras": ["complementar", "complementary"],
+      "tags": "complementary color scheme, high contrast, vibrant focal point, dynamic color tension"
+    },
+    "monocromatica": {
+      "palavras": ["monocromático", "monochrome"],
+      "tags": "monochromatic palette, single hue variations, elegant tonal range, subtle color shifts"
+    },
+    "pastel": {
+      "palavras": ["pastel", "tons pastel"],
+      "tags": "pastel color palette, soft muted tones, gentle atmosphere, dreamy aesthetic"
+    },
+    "teal_orange": {
+      "palavras": ["teal and orange", "azul e laranja"],
+      "tags": "teal and orange color grading, cinematic contrast, warm skin tones against cool shadows, blockbuster look"
+    },
+    "saturado": {
+      "palavras": ["saturado", "vibrant", "vibrante"],
+      "tags": "vibrant saturated colors, bold palette, energetic atmosphere, high color impact"
+    }
+  },
+
+  "materiais_texturas": {
+    "metal": {
+      "palavras": ["metal", "metálico"],
+      "tags": "brushed metal, anodized aluminum, chrome reflections, subtle scratches, industrial material"
+    },
+    "madeira": {
+      "palavras": ["madeira", "wood"],
+      "tags": "natural wood grain, carved texture, warm brown tones, visible knots, handcrafted feel"
+    },
+    "tecido": {
+      "palavras": ["tecido", "fabric", "roupa"],
+      "tags": "detailed fabric weave, natural folds, soft draping, textile texture, realistic cloth simulation"
+    },
+    "pedra": {
+      "palavras": ["pedra", "stone", "rocha"],
+      "tags": "rough stone texture, weathered surface, moss and cracks, natural geological detail"
+    },
+    "couro": {
+      "palavras": ["couro", "leather"],
+      "tags": "aged leather texture, fine grain, stitched seams, worn edges, rich patina"
+    },
+    "pele": {
+      "palavras": ["pele", "skin"],
+      "tags": "natural skin texture, subtle pores, soft subsurface scattering, realistic skin tones, fine details"
+    },
+    "vidro": {
+      "palavras": ["vidro", "glass"],
+      "tags": "clear glass, caustic reflections, refraction, transparency, polished edges"
+    },
+    "agua": {
+      "palavras": ["água", "agua", "water"],
+      "tags": "realistic water surface, ripples and reflections, transparency, caustics, fluid dynamics"
+    }
+  },
+
+  "construcao": {
+    "cabeca": "Método Loomis: esfera craniana + plano da mandíbula. Divida em terços: linha dos olhos, base do nariz, linha da boca. Orelhas entre a linha dos olhos e o nariz. Olhos separados por um olho de distância. Queixo e mandíbula definem a leitura do rosto.",
+    "corpo": "Proporções: 7–8 cabeças para adultos, 5–6 para crianças, 4 para chibi. Use gesture drawing (linha de ação) antes dos volumes. Marque caixa torácica, pelve e articulações. Peso e equilíbrio definem a pose. Evite simetria rígida em poses dinâmicas.",
+    "maos": "Palma como bloco, dedos como cilindros em 3 segmentos, polegar em oposição. Para poses difíceis, desenhe a mão como luva ou bloco primeiro. Estude mãos em repouso, segurando e apontando. Erros comuns: dedos fundidos, comprimento inconsistente, polegar sem base.",
+    "perspectiva": "Linha do horizonte + pontos de fuga (1, 2 ou 3 pontos). Objetos mais próximos maiores, mais distantes menores. Perspectiva atmosférica para profundidade. Linhas de guia visíveis durante a construção. Para isométrico, use eixos a 30°.",
+    "composicao": "Regra dos terços, linha de ouro, ponto focal claro, hierarquia visual, contraste de valores. Equilíbrio assimétrico ou simétrico conforme a intenção. Deixe respiro ao redor do assunto principal. Evite tangentes visuais.",
+    "iluminacao": "Defina direção da luz principal, sombras projetadas coerentes, luz de preenchimento, rim light para separar do fundo. Evite sombras planas ou inconsistentes. A luz conta a história do ambiente. Estude valores em escala de cinza antes de colorir.",
+    "cores": "Paleta coesa: análogas para harmonia, complementares para contraste. Use 60-30-10 (dominante, secundária, acento). Evite saturação uniforme. Valores primeiro, cor depois. Cores de luz e sombra devem ser coerentes com a fonte de luz.",
+    "anatomia_animal": "Quadrúpedes: coluna horizontal, escápula e pelve bem definidas, patas traseiras com joelho e jarrete. Aves: quilha no peito, asas com penas em camadas. Peixes: corpo hidrodinâmico, barbatanas. Estude o esqueleto antes da superfície.",
+    "criaturas": "Parta de anatomia real e modifique: adicione membros, escamas, asas, chifres. Mantenha coerência de peso e movimento. Olhos e boca transmitem personalidade. Pense na função ecológica (predador, herbívoro, parasita).",
+    "veiculos": "Blocos de volume primeiro (cabine, motor, rodas), depois detalhes. Respeite perspectiva e proporção. Pneus e suspensão dão peso. Superfícies metálicas com reflexos coerentes. Pense na função (urbano, off-road, espacial).",
+    "arquitetura": "Perspectiva com pontos de fuga, proporção áurea em fachadas, telhados e janelas em escala. Materiais (pedra, madeira, metal) com texturas distintas. Iluminação natural define o clima. Contexto e entorno dão credibilidade.",
+    "armas": "Silhueta clara, cabo confortável, lâmina com fio e contra-fio. Peso visual na guarda ou cabo. Metal com reflexos e desgaste. Consistência histórica ou de fantasia. Pense em como a arma é empunhada.",
+    "objetos": "Forma primária (cubo, esfera, cilindro). Detalhes funcionais (parafusos, botões, costuras). Materiais com brilho, rugosidade e desgaste coerentes. O objeto deve parecer utilizável.",
+    "design_personagem": "Silhueta única e reconhecível, paleta que comunica personalidade, roupas e acessórios contam a história. Variação de formas (grande/médio/pequeno) para ritmo visual. 3 traços marcantes repetidos garantem consistência.",
+    "maos_pose": "Para poses com objetos: desenhe o objeto primeiro e envolva a mão ao redor dele. Para gestos: simplifique em blocos e adicione dedos depois. Evite ângulos em que os dedos se sobreponham de forma confusa.",
+    "expressoes": "Sobrancelhas, olhos e boca carregam a emoção. Testa e queixo tensionam. Assimetria sutil é mais natural que simetria perfeita. Olhe para referências de expressões faciais humanas.",
+    "roupas_dobras": "Dobras de tração (puxão), dobras de compressão (amassado), dobras de queda (gravidade). Tecidos grossos têm dobras maiores e menos numerosas; finos, mais numerosas. O corpo por baixo define a estrutura.",
+    "dinamica_pose": "Linha de ação clara, contrapposto para naturalidade, peso distribuído, membros em ângulos variados. Evite poses de 'boneco de neve'. Use gestos assimétricos para dinamismo."
+  },
+
+  "categorias": {
+    "anime": {
+      "palavras": ["anime", "manga", "mangá", "chibi", "waifu", "personagem de anime", "kawaii", "vtuber", "personagem anime"],
+      "tags": "(usa estilos_anime + enquadramentos + anatomia_positiva)",
+      "pessoas": true
+    },
+    "mapa": {
+      "palavras": ["mapa", "map", "battle map", "battlemap", "masmorra", "dungeon", "tabletop", "mapa do mundo", "world map", "regiao", "região", "mapa de cidade", "city map"],
+      "tags": "top-down overhead view, bird's eye orthographic perspective, detailed fantasy map, clear terrain features, rivers, mountains, forests, roads, parchment texture, no people, no characters, no text, clean cartography, legend symbols, isometric or flat layout"
+    },
+    "logo": {
+      "palavras": ["logo", "logotipo", "marca", "brand", "emblema", "emblem"],
+      "tags": "minimalist vector logo, flat design, simple bold shapes, centered on a plain background, high contrast, clean edges, no photo, scalable, memorable silhouette, negative space use, professional branding"
+    },
+    "icone": {
+      "palavras": ["icone", "ícone", "icon", "app icon"],
+      "tags": "app icon, flat design, rounded square, simple recognizable symbol, clean gradients, centered, high contrast, scalable, readable at small size"
+    },
+    "pixel": {
+      "palavras": ["pixel art", "pixel", "8 bit", "16 bit", "sprite"],
+      "tags": "pixel art, 16-bit game style, limited color palette, crisp pixels, clean readable shapes, strong silhouette, dithering used sparingly, retro game aesthetic"
+    },
+    "interior": {
+      "palavras": ["quarto", "sala", "cozinha", "interior", "decoracao", "decoração", "room", "kitchen", "bedroom", "escritorio", "office"],
+      "tags": "interior design photography, wide angle, natural light, detailed furniture and textures, cozy atmosphere, balanced composition, realistic materials, ambient occlusion"
+    },
+    "comida": {
+      "palavras": ["comida", "prato", "bolo", "food", "dish", "burger", "pizza", "sobremesa", "dessert"],
+      "tags": "professional food photography, appetizing, close-up, shallow depth of field, soft natural light, steam and freshness, styled plating, vibrant colors, 45-degree angle or top-down"
+    },
+    "objeto": {
+      "palavras": ["objeto", "produto", "product", "item", "relogio", "relógio", "object"],
+      "tags": "single object centered, studio product shot, soft studio lighting, clean background, sharp details, material accuracy, subtle reflections, commercial quality"
+    },
+    "arma": {
+      "palavras": ["arma", "espada", "sword", "weapon", "machado", "axe", "lança", "lance", "arco", "bow", "escudo", "shield", "pistola", "gun"],
+      "tags": "weapon concept art, detailed materials, metal and leather textures, functional design, clear silhouette, dramatic lighting, centered composition, sharp edges, wear and tear"
+    },
+    "criatura": {
+      "palavras": ["criatura", "monstro", "dragao", "dragão", "creature", "monster", "dragon", "besta", "demonio", "demônio"],
+      "tags": "creature concept art, full body, detailed anatomy and textures, dramatic lighting, fantasy atmosphere, believable weight, expressive pose, clear silhouette, scale reference"
+    },
+    "animal_fantastico": {
+      "palavras": ["unicórnio", "unicornio", "grifo", "fada", "sereia", "mermaid", "pegasus", "pégaso", "animal fantástico", "fantasy animal"],
+      "tags": "fantasy animal illustration, detailed fur or scales, magical atmosphere, natural pose, coherent anatomy, soft lighting, whimsical design"
+    },
+    "animal": {
+      "palavras": ["animal", "cachorro", "gato", "dog", "cat", "leão", "lion", "pássaro", "bird", "cavalo", "horse"],
+      "tags": "detailed animal illustration, natural pose, accurate anatomy, fur or feather texture, expressive eyes, natural lighting, wildlife photography style or painterly illustration"
+    },
+    "planta": {
+      "palavras": ["planta", "flor", "flower", "árvore", "arvore", "tree", "jardim", "garden", "botânica", "botanical"],
+      "tags": "botanical illustration, precise leaf and petal details, natural colors, scientific accuracy or artistic style, soft lighting, clean composition"
+    },
+    "paisagem": {
+      "palavras": ["paisagem", "cenario", "cenário", "landscape", "scenery", "floresta", "montanha", "praia", "cidade", "city", "forest", "mountain", "deserto", "desert"],
+      "tags": "wide cinematic landscape, atmospheric perspective, detailed environment, natural lighting, no people, layered depth, sky and horizon, color harmony, epic scale or intimate view"
+    },
+    "retrato": {
+      "palavras": ["retrato", "foto realista", "realistic", "portrait", "photo", "fotografia", "foto"],
+      "tags": "realistic portrait photograph, natural skin texture, 85mm lens, soft studio lighting, shallow depth of field, catchlights in eyes, subtle color grading",
+      "pessoas": true
+    },
+    "fantasia": {
+      "palavras": ["fantasia", "epico", "épico", "fantasy", "concept art", "arte conceitual", "magia", "magic"],
+      "tags": "fantasy concept art, epic composition, painterly, dramatic lighting, rich colors, magical atmosphere, detailed environment, cinematic scale"
+    },
+    "infantil": {
+      "palavras": ["infantil", "livro infantil", "children", "aquarela infantil", "fofo infantil"],
+      "tags": "children's book illustration, soft watercolor, gentle colors, whimsical, friendly shapes, playful composition, simple background, warm and inviting"
+    },
+    "abstrato": {
+      "palavras": ["abstrato", "wallpaper", "papel de parede", "abstract", "padrão", "pattern"],
+      "tags": "abstract digital art, flowing shapes, vibrant gradients, balanced wallpaper composition, dynamic rhythm, harmonious color palette, no recognizable objects"
+    },
+    "arquitetura": {
+      "palavras": ["arquitetura", "architecture", "edificio", "edifício", "building", "casa", "house", "castelo", "castle", "torre", "tower"],
+      "tags": "architectural illustration, detailed building exterior, perspective accuracy, material textures (stone, wood, glass), natural or dramatic lighting, environmental context, scale reference"
+    },
+    "veiculo": {
+      "palavras": ["veiculo", "veículo", "vehicle", "carro", "car", "moto", "motorcycle", "caminhao", "truck", "tanque", "tank"],
+      "tags": "vehicle concept art, detailed mechanical parts, metal and paint textures, coherent perspective, dramatic lighting, sense of motion or weight, clean silhouette"
+    },
+    "mecha": {
+      "palavras": ["mecha", "mech", "robo", "robô", "robot", "androide", "android", "gundam"],
+      "tags": "mecha design, giant robot, detailed mechanical joints, panel lines, weathered metal, dynamic pose, dramatic scale, industrial lighting, sci-fi aesthetic"
+    },
+    "nave": {
+      "palavras": ["nave", "spaceship", "space ship", "foguete", "rocket", "astronave"],
+      "tags": "spaceship concept art, sleek or industrial design, detailed hull panels, engine glow, starfield background, dramatic lighting, sense of scale"
+    },
+    "personagem_original": {
+      "palavras": ["personagem original", "oc", "original character", "personagem novo"],
+      "tags": "original character design, full body, clear silhouette, distinctive features, cohesive color palette, personality conveyed through pose and clothing, reference sheet style"
+    },
+    "personagem_rpg": {
+      "palavras": ["personagem rpg", "rpg character", "ficha de personagem", "character sheet"],
+      "tags": "RPG character design, full body, equipment details, race and class features, fantasy or sci-fi setting, readable silhouette, game-ready concept"
+    },
+    "tecnico": {
+      "palavras": ["tecnico", "técnico", "technical drawing", "blueprint", "planta baixa", "schematic"],
+      "tags": "technical drawing, blueprint style, precise linework, measurements and annotations, orthographic views, clean monochrome or blue background, engineering accuracy"
+    },
+    "cientifico": {
+      "palavras": ["cientifico", "científico", "scientific illustration", "diagrama", "diagram"],
+      "tags": "scientific illustration, precise anatomical or biological details, labeled diagram style, neutral background, educational clarity, accurate proportions"
+    },
+    "moda": {
+      "palavras": ["moda", "fashion", "roupa", "clothing", "figurino", "costume", "vestido", "dress"],
+      "tags": "fashion design illustration, detailed fabric textures, elegant pose, runway or editorial style, cohesive color story, accessory details, high fashion aesthetic"
+    },
+    "joia": {
+      "palavras": ["joia", "jóia", "jewelry", "anel", "ring", "colar", "necklace", "brinco", "earring"],
+      "tags": "jewelry design, macro detail, gemstone sparkle, metal reflections, elegant composition, studio lighting, luxurious presentation"
+    },
+    "movel": {
+      "palavras": ["movel", "móvel", "furniture", "cadeira", "chair", "mesa", "table", "sofa", "sofá"],
+      "tags": "furniture design, clean product shot or interior context, material textures (wood, fabric, metal), balanced proportions, soft lighting, modern or classic style"
+    },
+    "cartaz": {
+      "palavras": ["cartaz", "poster", "pôster", "flyer", "panfleto"],
+      "tags": "poster design, bold typography space, strong focal image, graphic composition, balanced negative space, print-ready layout, striking colors"
+    },
+    "capa": {
+      "palavras": ["capa", "book cover", "capa de livro", "capa de album", "album cover"],
+      "tags": "book or album cover design, strong central image, space for title text, graphic impact, cohesive mood, professional layout"
+    },
+    "concept_art": {
+      "palavras": ["concept art", "arte conceitual", "concept design"],
+      "tags": "professional concept art, detailed design, environment or character, cinematic lighting, painterly finish, production-ready, clear visual storytelling"
+    },
+    "sprite_sheet": {
+      "palavras": ["sprite sheet", "spritesheet", "folha de sprites"],
+      "tags": "sprite sheet layout, multiple poses or frames, consistent character design, pixel art or vector, clean grid alignment, game-ready assets"
+    },
+    "tileset": {
+      "palavras": ["tileset", "tile set", "tiles"],
+      "tags": "game tileset, modular tiles, seamless edges, top-down or isometric, consistent style, readable shapes, limited palette"
+    },
+    "hud": {
+      "palavras": ["hud", "ui", "interface", "game ui", "menu"],
+      "tags": "game UI design, HUD elements, clean icons, readable typography, balanced layout, sci-fi or fantasy theme, translucent panels, high contrast"
+    },
+    "infografico": {
+      "palavras": ["infografico", "infográfico", "infographic", "grafico", "gráfico"],
+      "tags": "infographic design, clear data visualization, icons and charts, cohesive color scheme, readable hierarchy, clean layout, modern flat style"
+    },
+    "manga_pagina": {
+      "palavras": ["pagina de manga", "página de mangá", "manga page", "comic page"],
+      "tags": "manga page layout, multiple panels, dynamic panel composition, speech bubbles (se solicitado), black and white or colored, consistent character, dramatic angles"
+    },
+    "character_sheet": {
+      "palavras": ["character sheet", "ficha de personagem", "model sheet", "turnaround"],
+      "tags": "character turnaround sheet, front side back views, consistent design, neutral pose, clean lineart, color callouts, design notes (se solicitado)"
+    },
+    "expressoes_faciais": {
+      "palavras": ["expressões", "expression sheet", "emotions", "emoções"],
+      "tags": "expression sheet, multiple facial expressions, consistent character, clean grid, happy sad angry surprised, readable emotions"
+    },
+    "ambiente_conceito": {
+      "palavras": ["ambiente", "environment concept", "cenário conceitual", "level design"],
+      "tags": "environment concept art, detailed worldbuilding, atmospheric perspective, game level design, interactive space, mood and storytelling through environment"
+    },
+    "props": {
+      "palavras": ["props", "adereços", "objetos de cena", "set design"],
+      "tags": "prop design sheet, multiple objects, consistent style, material callouts, clean presentation, game or film production art"
+    },
+    "tipografia": {
+      "palavras": ["tipografia", "typography", "lettering", "letras"],
+      "tags": "typography design, custom lettering, display font, balanced kerning, graphic impact, space for hierarchy, clean vector edges"
+    },
+    "embalagem": {
+      "palavras": ["embalagem", "packaging", "caixa", "box design"],
+      "tags": "packaging design, product box mockup, clean layout, brand identity, material textures, shelf impact, professional finish"
+    },
+    "rosto_referencia": {
+      "palavras": ["rosto referência", "face reference", "expressão específica"],
+      "tags": "detailed face reference, specific expression, clear features, consistent lighting, neutral background, study quality"
+    }
+  },
+
+  "integracoes": {
+    "cloudflare_workers_ai": {
+      "descricao": "Plataforma de inferência gerenciada da Cloudflare com modelos de imagem como FLUX, SDXL, SDXL Lightning, DreamShaper.",
+      "modelos_suportados": [
+        "@cf/black-forest-labs/flux-1-schnell",
+        "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+        "@cf/bytedance/stable-diffusion-xl-lightning",
+        "@cf/lykon/dreamshaper-8-lcm"
+      ],
+      "observacao_prompt": "FLUX prefere linguagem natural estruturada; SDXL aceita tags e frases; SDXL Lightning é rápido e aceita negativo; DreamShaper é versátil para ilustração.",
+      "recurso_cache": "AI Gateway pode cachear respostas idênticas, reduzindo custo e latência. Útil para prompts repetidos.",
+      "formato_entrada": "Text-to-image e image-to-image (alguns modelos). Suporta negative prompt nos modelos SDXL e DreamShaper."
+    },
+    "jikan_myanimelist": {
+      "descricao": "API não oficial e gratuita do MyAnimeList (Jikan v4), sem autenticação, útil para buscar dados de personagens, animes e mangás antes de montar o prompt.",
+      "endpoints_uteis": [
+        "GET /v4/anime/{id}/characters — personagens de um anime",
+        "GET /v4/characters/{id} — detalhes de um personagem",
+        "GET /v4/top/anime — animes mais bem avaliados",
+        "GET /v4/seasons/now — temporada atual"
+      ],
+      "uso_no_prompt": "Busque o personagem, extraia nome, cabelo, olhos, roupa e características marcantes. Monte o prompt com esses dados em vez de confiar só no nome. Exemplo: em vez de 'Marin Kitagawa', use 'Marin Kitagawa, long blonde hair with pink tips, red eyes, school uniform, black choker, cheerful expression'.",
+      "observacao": "Jikan é não oficial; para dados de lista pessoal, use a API oficial do MyAnimeList com OAuth."
+    },
+    "web_search": {
+      "descricao": "A IA pode consultar a web para obter referências visuais descritivas, tendências e informações atualizadas sobre personagens.",
+      "uso": "Quando o personagem for recente ou pouco conhecido, busque descrições oficiais e incorpore ao prompt."
+    },
+    "boas_praticas_integracao": [
+      "Sempre valide dados de personagens em fontes oficiais ou Jikan antes de gerar.",
+      "Para personagens conhecidos, combine nome + 4 a 6 características visuais concretas.",
+      "Use o cache do Cloudflare AI Gateway para prompts repetidos e economize chamadas.",
+      "Se o modelo for FLUX, prefira frases naturais; se for Pony/Illustrious, use tags Danbooru.",
+      "Não sobrecarregue o prompt com dezenas de tags de personagem; foque nas 6–8 mais distintivas."
+    ]
+  },
+
+  "dicas": [
+    "Descreva o visual com cores e formas concretas: cor e comprimento do cabelo, cor dos olhos, roupa e acessórios.",
+    "Uma personagem por imagem dá resultados melhores que cenas com várias pessoas.",
+    "Poses simples (em pé, sentada, acenando) erram menos que poses de ação complexas.",
+    "Evite mãos segurando objetos pequenos e gestos com os dedos; prefira braços relaxados ou objetos grandes.",
+    "Fundo simples ou desfocado evita bagunça; cenários detalhados só em enquadramento de cena.",
+    "Texto escrito dentro da imagem costuma sair errado; evite ou peça espaço reservado para tipografia.",
+    "Para personagens conhecidos, descreva as características marcantes (cabelo, roupa, cores) além do nome.",
+    "Para mapas: especifique o tipo (masmorra, regional, mundo), o clima (fantasia, sci-fi, realista) e os elementos obrigatórios (rios, estradas, montanhas).",
+    "Para logos: descreva a forma geométrica, o símbolo central e as cores. Evite detalhes minúsculos que somem em escala pequena.",
+    "Para arquitetura: indique o estilo (medieval, moderno, cyberpunk), os materiais e a iluminação desejada.",
+    "Para veículos: especifique o tipo (carro, nave, moto, tanque) e o contexto (urbano, off-road, espacial).",
+    "Para criaturas: defina o habitat, o tamanho e a função ecológica (predador, herbívoro, parasita) para dar coerência.",
+    "Para comida: descreva textura, cor, vapor e ângulo (topo, 45°, close).",
+    "Para personagens originais: invente 3 traços marcantes (cicatriz, roupa, acessório) e repita-os para consistência.",
+    "Sempre inclua a categoria correta para ativar as tags certas; palavras-chave ambíguas podem confundir o sistema.",
+    "Para construção de desenho: peça estudos (sketch, lineart, valores) antes do render final quando precisar de precisão.",
+    "Evite sobrecarregar o prompt: escolha 1 estilo, 1 enquadramento e 1 categoria por imagem.",
+    "Para arte técnica ou científica: peça vistas ortográficas (frontal, lateral, superior) e anotações separadas.",
+    "Para UI/HUD: defina o gênero do jogo (sci-fi, fantasia, moderno) e a paleta antes dos elementos individuais.",
+    "Para tilesets e sprites: peça alinhamento em grade e bordas coerentes para facilitar o uso no jogo.",
+    "Pony Diffusion exige score ladder no positivo (score_9, score_8_up, score_7_up) e score baixo no negativo (score_4, score_5, score_6).",
+    "Illustrious-XL não usa score ladder; use 'masterpiece, best quality, very aesthetic' no início.",
+    "FLUX e SDXL 3.5 respondem melhor a frases naturais do que a pilhas de tags.",
+    "Mantenha pesos entre 1.1 e 1.3; acima disso, o modelo distorce.",
+    "Para anatomia de mãos, adicione 'detailed hands, five fingers' no positivo e 'bad hands, fused fingers, extra digits' no negativo.",
+    "Para retratos realistas, evite 'perfect symmetry'; adicione 'subtle asymmetry, natural imperfections'.",
+    "Para arte conceitual, inclua 'production-ready, concept art, clear visual storytelling'.",
+    "Para mapas, o negativo deve incluir 'people, characters, text' para evitar poluição.",
+    "Use referência de lente (85mm para retrato, 24mm para paisagem) para dar intenção cinematográfica.",
+    "Especifique a proporção (--ar 16:9, 4:5, 1:1) para controlar o enquadramento."
+  ],
+
+  "exemplos_de_prompt": {
+    "anime_illustrious": {
+      "positivo": "masterpiece, best quality, very aesthetic, 1girl, solo, long silver hair, blue eyes, kitsune ears, multiple tails, red kimono, cowboy shot, looking at viewer, cherry blossoms, soft lighting, detailed background, anime illustration, clean line art, cel shading",
+      "negativo": "worst quality, low quality, bad anatomy, extra digits, fused fingers, jpeg artifacts, watermark, signature, text"
+    },
+    "anime_pony": {
+      "positivo": "score_9, score_8_up, score_7_up, source_anime, 1girl, solo, white hair, glowing eyes, dynamic pose, motion blur, energy effects, night city rooftop, neon lights, (detailed eyes:1.2), anime coloring",
+      "negativo": "score_4, score_5, score_6, worst quality, bad anatomy, extra limbs, fused fingers, blurry, jpeg artifacts, watermark"
+    },
+    "retrato_realista": {
+      "positivo": "photorealistic portrait, 30-year-old woman, natural skin texture, subtle freckles, dark wavy hair, white linen shirt, Rembrandt lighting, deep chiaroscuro, shot on 85mm f/1.8, shallow depth of field, soft bokeh background, highly detailed, professional photography",
+      "negativo": "plastic skin, overly smooth, perfect symmetry, distorted face, extra fingers, blurry, low quality, cartoon, 3d render, watermark, text"
+    },
+    "paisagem_fantasia": {
+      "positivo": "epic fantasy landscape, floating islands, waterfalls cascading into clouds, ancient ruins overgrown with vines, volumetric god rays, golden hour lighting, atmospheric perspective, detailed environment concept art, cinematic composition, masterpiece, best quality",
+      "negativo": "people, characters, text, watermark, blurry, low quality, flat lighting, repetitive patterns"
+    },
+    "mapa_masmorra": {
+      "positivo": "top-down dungeon battle map, gridless, stone corridors, torch-lit chambers, treasure room, trap room, wooden doors, rubble, moss, parchment texture, clear terrain features, orthographic, no people, no text, fantasy cartography, detailed",
+      "negativo": "people, characters, text, labels, perspective distortion, blurry, low quality, watermark"
+    },
+    "mecha_concept": {
+      "positivo": "mecha concept art, giant humanoid robot, weathered white and orange armor, panel lines, mechanical joints, dynamic heroic pose, industrial background, dramatic rim lighting, detailed mechanical parts, production-ready, sci-fi",
+      "negativo": "organic anatomy, melted metal, inconsistent joints, blurry, low quality, watermark, text, extra limbs"
+    }
+  },
+
+  "mapeamento_modelos": {
+    "illustrious_xl": {
+      "quality_prefix": "masterpiece, best quality, very aesthetic, absurdres",
+      "estrutura": "tags Danbooru, curtas, separadas por vírgula",
+      "score_ladder": false,
+      "negativo_base": "worst quality, low quality, bad anatomy, extra digits, fused fingers, jpeg artifacts, watermark, signature"
+    },
+    "pony_diffusion_v6_xl": {
+      "quality_prefix": "score_9, score_8_up, score_7_up, score_6_up, source_anime",
+      "estrutura": "tags Danbooru + score ladder no início",
+      "score_ladder": true,
+      "negativo_base": "score_4, score_5, score_6, worst quality, bad anatomy, extra limbs, fused fingers, blurry, jpeg artifacts, watermark"
+    },
+    "flux_1_schnell": {
+      "quality_prefix": "high quality, highly detailed, cinematic",
+      "estrutura": "frases naturais descritivas; tags funcionam, mas não são obrigatórias",
+      "score_ladder": false,
+      "negativo_base": "blurry, low quality, distorted, watermark, text, deformed"
+    },
+    "sdxl_base": {
+      "quality_prefix": "masterpiece, best quality, highly detailed",
+      "estrutura": "tags e frases curtas; aceita negative prompt",
+      "score_ladder": false,
+      "negativo_base": "worst quality, low quality, blurry, bad anatomy, extra fingers, jpeg artifacts, watermark"
+    },
+    "sdxl_lightning": {
+      "quality_prefix": "high quality, sharp focus",
+      "estrutura": "tags curtas; rápido, aceita negativo",
+      "score_ladder": false,
+      "negativo_base": "blurry, low quality, bad anatomy, extra digits, watermark"
+    },
+    "dreamshaper": {
+      "quality_prefix": "masterpiece, best quality, highly detailed",
+      "estrutura": "tags e frases; versátil para ilustração e semi-realismo",
+      "score_ladder": false,
+      "negativo_base": "worst quality, low quality, blurry, bad anatomy, extra limbs, watermark"
+    }
+  },
+
+  "qualidade_geral": "high quality, highly detailed, sharp focus, well composed, professional finish, coherent lighting, color harmony, clean edges, no artifacts, no watermark, no text"
+}

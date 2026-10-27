@@ -187,7 +187,7 @@ class Bolha(MDBoxLayout):
             Colunas = autoclass("android.provider.MediaStore$MediaColumns")
             v = Valores()
             v.put(Colunas.DISPLAY_NAME, os.path.basename(caminho))
-            v.put(Colunas.MIME_TYPE, "image/jpeg")
+            v.put(Colunas.MIME_TYPE, "image/png" if caminho.lower().endswith(".png") else "image/jpeg")
             v.put(Colunas.RELATIVE_PATH, "Pictures/Spica")
             uri = resolver.insert(Media.EXTERNAL_CONTENT_URI, v)
             saida = resolver.openOutputStream(uri)
