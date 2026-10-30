@@ -454,6 +454,11 @@ class SpicaOverlay:
                 return
 
             self._silencios_seguidos = 0
+            try:
+                from src.services import chat_bus
+                chat_bus.publicar("usuario", texto_capturado)
+            except Exception:
+                pass
 
             def processar_resposta_ia(texto_resposta):
                 slog(f"processar_resposta_ia recebeu resposta da Groq: {texto_resposta[:60]!r}")
@@ -466,7 +471,13 @@ class SpicaOverlay:
                     time.sleep(0.6)
                     self._ciclo_escuta_continua()
 
-                TtsService.get_instance().falar(texto_resposta, ao_terminar=_voltar_a_escutar)
+                try:
+                    from src.services import chat_bus
+                    falar_txt, imgs = chat_bus.separar(texto_resposta)
+                    chat_bus.publicar("spica", falar_txt, imgs)
+                except Exception:
+                    falar_txt = texto_resposta
+                TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)
                 slog("TtsService.falar() chamado (retornou sem lançar exceção)")
 
             slog(f"Chamando GroqService.perguntar() com: {texto_capturado!r}")
@@ -493,7 +504,13 @@ class SpicaOverlay:
                 def _voltar_a_escutar():
                     time.sleep(0.6)
                     self._ciclo_escuta_continua()
-                TtsService.get_instance().falar(texto_resposta, ao_terminar=_voltar_a_escutar)
+                try:
+                    from src.services import chat_bus
+                    falar_txt, imgs = chat_bus.separar(texto_resposta)
+                    chat_bus.publicar("spica", falar_txt, imgs)
+                except Exception:
+                    falar_txt = texto_resposta
+                TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)
 
             GroqService.get_instance().perguntar(
                 "(silencio prolongado - a pessoa parou de responder depois da ultima fala dela. Comente com humor e leveza sobre esse silencio, fazendo referencia especifica a ultima coisa que ela disse antes de ficar quieta - tipo brincando que a conversa esfriou ou cobrando ela de leve por ter sumido. Nao mude de assunto do nada, reaja ao silencio em si.)",

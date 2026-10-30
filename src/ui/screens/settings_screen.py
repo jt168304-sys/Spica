@@ -29,8 +29,11 @@ class SettingsScreen(MDScreen):
             esquerda=("arrow-left", lambda: MDApp.get_running_app().navigate_to("chat")),
         ))
 
-        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
-        lista = MDList(padding=dp(12), spacing=dp(14))
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(4),
+                            scroll_type=["bars", "content"], effect_cls="ScrollEffect")
+        # BoxLayout com altura igual à soma dos cards (o MDList não se estica e travava a rolagem)
+        lista = MDBoxLayout(orientation="vertical", size_hint_y=None, padding=dp(12), spacing=dp(14))
+        lista.bind(minimum_height=lista.setter("height"))
 
         # Adicionando os cards
         lista.add_widget(self._card_api_key())

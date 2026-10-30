@@ -67,6 +67,22 @@ class MoodService:
             "Nao a mencione nem explique, so adicione no final."
         )
 
+    _ESTILOS_PADRAO = {
+        "neutro": "Responda de forma natural e direta, no seu ritmo de sempre.",
+        "feliz": "Esteja animada: frases vivas, um pouco mais de energia e entusiasmo, sem exagerar nos adjetivos.",
+        "surpresa": "Reaja primeiro ao que foi dito (um 'opa' ou 'hã?' curto) e só depois responda, de forma rápida.",
+        "confusa": "Mostre o que você entendeu e pergunte o que faltou, de forma leve. Respostas curtas.",
+        "triste": "Fale com calma e acolhimento, frases curtas, sem piada e sem pressa. Ofereça ajuda sem insistir.",
+        "chocada": "Reaja ao absurdo ou ao inesperado com uma frase exclamativa e depois responda com clareza.",
+    }
+
+    def bloco_estilo(self) -> str:
+        """Estilo de resposta do humor da ÚLTIMA resposta. Se humor.json tiver 'estilo_resposta', ele vale."""
+        chave = getattr(self, "humor_atual", None) or "neutro"
+        dados = (getattr(self, "_humores", None) or {}).get(chave) or {}
+        estilo = dados.get("estilo_resposta") or self._ESTILOS_PADRAO.get(chave, self._ESTILOS_PADRAO["neutro"])
+        return f"\n\n[ESTILO DE RESPOSTA AGORA - seu humor atual e {chave}]\n{estilo}"
+
     def extrair_humor(self, texto_resposta: str):
         """Recebe a resposta crua da IA (que deve terminar com [HUMOR:xxx]).
         Devolve (texto_limpo, nome_expressao_ou_None). Se a tag não vier, ou o
@@ -87,4 +103,5 @@ class MoodService:
             self.logger.info(f"[Spica/Humor] IA usou humor desconhecido '{chave_humor}' — ignorando expressao")
             return texto_limpo, None
 
+        self.humor_atual = chave_humor
         return texto_limpo, chave_humor

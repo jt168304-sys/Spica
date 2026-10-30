@@ -291,11 +291,11 @@ def _guia_arte():
         limpa = lambda sec, *k: {n: {"palavras": v.get("palavras", []), "tags": _t(v, *k)}
                                  for n, v in (d.get(sec) or {}).items() if isinstance(v, dict) and not n.startswith("_")}
         return {"estilos": limpa("estilos_anime", "tags_flux_sdxl", "tags"),
-                "gerais": limpa("estilos_gerais", "tags_flux_sdxl", "tags"),
+                "gerais": {n: dict(v, tags=_sem_anime(v["tags"])) for n, v in limpa("estilos_gerais", "tags_flux_sdxl", "tags").items()},
                 "enquadramentos": limpa("enquadramentos", "tags", "tags_flux_sdxl"),
                 "categorias": {n: dict(v, tags=_t(v, "tags", "tags_flux_sdxl")) for n, v in (d.get("categorias") or {}).items()
                                if isinstance(v, dict) and not n.startswith("_")},
-                "qualidade": (nucleo + ", " + reforco).strip(", "), "qualidade_geral": nucleo or "high quality, highly detailed",
+                "qualidade": (nucleo + ", " + reforco).strip(", "), "qualidade_geral": _sem_anime(nucleo) or "high quality, highly detailed",
                 "anatomia": str(d.get("anatomia_positiva") or "anatomically correct, two arms, five fingers on each hand")}
     except Exception as e:
         print(f"[Spica/Arte] guia: {e}")
@@ -314,8 +314,30 @@ def _escolher(tabela, texto, padrao=None):
     return (padrao, item.get("tags", "")) if item else ("", "")
 
 
+_PALAVRAS_EXTRA = {
+    "paisagem": ["lago", "rio", "praia", "mar", "oceano", "campo", "gramado", "ceu", "céu", "nuvens", "deserto",
+                 "neve", "vulcao", "vulcão", "pôr do sol", "por do sol", "sunset", "sunrise", "bosque", "ilha", "montanha"],
+    "objeto": ["bola", "copo", "garrafa", "livro", "carro", "moto", "celular", "teclado", "flor", "fruta", "maçã",
+               "maca", "chave", "cadeira", "mesa", "tenis", "tênis", "bolsa", "oculos", "óculos", "vaso", "lampada"],
+    "criatura": ["gato", "cachorro", "cavalo", "passaro", "pássaro", "peixe", "lobo", "urso", "leao", "leão", "fenix", "fênix"],
+    "logo": ["emblema", "selo", "simbolo", "símbolo", "monograma"],
+    "retrato": ["rosto", "homem", "mulher", "idoso", "crianca", "criança", "senhora", "senhor"],
+    "interior": ["casa", "apartamento", "biblioteca", "loja", "restaurante", "cafeteria", "escritorio", "escritório"],
+    "comida": ["sorvete", "café", "cafe", "sushi", "hamburguer", "hambúrguer", "salada", "doce"],
+    "mapa": ["croqui", "planta baixa", "mapa-mundi", "mapa de cidade"],
+}
+
+
+def _sem_anime(s):
+    """Tira termos de anime de uma lista de tags (para imagens que não são de anime)."""
+    return ", ".join(t for t in (s or "").split(", ") if not re.search(r"anime|manga|chibi|kawaii|cel shad", t, re.I))
+
+
 def _detectar_categoria(texto, categoria=""):
-    cats = _guia_arte().get("categorias") or {}
+    cats = {n: dict(v) for n, v in (_guia_arte().get("categorias") or {}).items()}
+    for n, extra in _PALAVRAS_EXTRA.items():
+        cats.setdefault(n, {"palavras": [], "tags": ""})
+        cats[n]["palavras"] = list(cats[n].get("palavras") or []) + extra
     pedida = (categoria or "").lower().strip()
     if pedida in cats:
         return pedida
@@ -351,8 +373,9 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
                  fundo=None, variacoes=1, descricao=None, mesma_personagem=False, categoria=None, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
+        sem_pessoas = bool(re.search(r"\bsem (a |o )?(personagem|pessoa|pessoas|gente|ninguem|ninguém)\b|no people|no characters", " ".join(x or "" for x in (assunto, descricao, acao)), re.I))
         pede_mesma = bool(mesma_personagem) or bool(re.search(r"\b(mesma|mesmo|essa personagem|esse personagem|ela|ele|outra pose|outra cena|nova pose)\b", (acao or "" + " " + (descricao or "") + " " + (assunto or "")).lower()))
-        mesma_personagem = pede_mesma and not re.search(r"\b(so|só|apenas|somente)\b", (assunto or "" + " " + (descricao or "")).lower())
+        mesma_personagem = pede_mesma and not sem_pessoas and not re.search(r"\b(so|só|apenas|somente)\b", (assunto or "" + " " + (descricao or "")).lower())
         if mesma_personagem and not _ULTIMO["assunto"]:     # depois de reiniciar o app, volta da memória
             try:
                 from src.services import memoria

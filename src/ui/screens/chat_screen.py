@@ -472,7 +472,34 @@ class ChatScreen(MDScreen):
         self._iniciar_mic()
 
     # ── Chat ──────────────────────────────────────────────────────────────────
+    def _ligar_pendentes(self):
+        if getattr(self, "_poll_ligado", False):
+            return
+        self._poll_ligado = True
+        Clock.schedule_interval(self._checar_pendentes, 1.0)
+
+    def _checar_pendentes(self, dt):
+        """Mostra no chat o que foi falado na escuta contínua (perguntas, respostas e imagens)."""
+        try:
+            from src.services import chat_bus
+            itens = chat_bus.ler_pendentes()
+            for item in itens:
+                if item.get("tipo") == "usuario":
+                    if item.get("texto"):
+                        self._usuario(item["texto"])
+                elif item.get("tipo") == "spica":
+                    if item.get("texto"):
+                        self._spica(item["texto"])
+                    for img in item.get("imagens") or []:
+                        self._spica_imagem(img)
+            if itens:
+                self._rolar()
+        except Exception as e:
+            print(f"[Spica/Chat] pendentes: {e}")
+        return True
+
     def _boas_vindas(self, dt):
+        self._ligar_pendentes()
         from src.services.groq_service import GroqService
         if GroqService.get_instance().disponivel:
             self._spica("Ola! Sou a Spica — fale, escreva ou envie imagens!")
