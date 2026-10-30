@@ -351,6 +351,8 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
                  fundo=None, variacoes=1, descricao=None, mesma_personagem=False, categoria=None, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
+        pede_mesma = bool(mesma_personagem) or bool(re.search(r"\b(mesma|mesmo|essa personagem|esse personagem|ela|ele|outra pose|outra cena|nova pose)\b", (acao or "" + " " + (descricao or "") + " " + (assunto or "")).lower()))
+        mesma_personagem = pede_mesma and not re.search(r"\b(so|só|apenas|somente)\b", (assunto or "" + " " + (descricao or "")).lower())
         if mesma_personagem and not _ULTIMO["assunto"]:     # depois de reiniciar o app, volta da memória
             try:
                 from src.services import memoria
@@ -365,7 +367,8 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
         try:                       # mapa de masmorra/batalha com grade: o código acerta o que o modelo de imagem erra
             from src.services import mapa_rpg
             ilustrado = any(k in texto_total for k in ("world map", "mapa do mundo", "mapa-mundi", "parchment", "pergaminho", "regional", "ilustrado", "illustrated"))
-            if mapa_rpg.eh_pedido_de_mapa(texto_total) and not ilustrado and not mesma_personagem:
+            nacoes = any(k in texto_total for k in ("nacoes","nações","reinos","continente","cidades","regioes","regiões","mundo","world","nations","kingdoms"))
+            if mapa_rpg.eh_pedido_de_mapa(texto_total) and not ilustrado and not nacoes and not mesma_personagem:
                 dados_png, resumo = mapa_rpg.gerar(texto_total)
                 caminho = os.path.join(_pasta_imagens(), time.strftime("spica_%Y%m%d_%H%M%S") + "_mapa.png")
                 with open(caminho, "wb") as arq:
@@ -386,6 +389,10 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             for nome, funcao in (("cloudflare", _imagem_cloudflare), ("pollinations", _imagem_pollinations)):
                 try:
                     dados, erro = funcao(prompt)
+                    if not dados and funcao is _imagem_cloudflare and re.search(r"sensív|sensiv|bloque|filter|safety|nsfw", erro or "", re.I):
+                        # filtro achou o prompt sensível: tira pessoas/armas e tenta uma vez
+                        seguro = re.sub(r"\b(person|people|man|woman|girl|boy|warrior|knight|sword|swords|weapon|blood|gore|hands?|mãos?|pessoa|guerreir[oa]|espadas?)\b", "object", prompt, flags=re.I)
+                        dados, erro = funcao(seguro)
                 except Exception as e:
                     dados, erro = None, f"{type(e).__name__}: {e}"
                 if dados:
