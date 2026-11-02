@@ -1,3 +1,4 @@
+import re
 # overlay.py — Controlador de Janela Flutuante e Máquina de Estados (v16 Estável)
 import os
 import time
@@ -67,6 +68,21 @@ def pedir_permissao_overlay():
         print("[Spica/Overlay] Tela de permissão de overlay aberta. Ative e volte ao app.")
     except Exception as e:
         print(f"[Spica/Overlay] Erro ao abrir tela de permissão de overlay: {e}")
+
+_FRASES_FANTASMA = ("legendas pela", "amara.org", "thanks for watching", "subtitles by", "inscreva-se no canal",
+                    "obrigado pela atencao", "obrigada pela atencao")
+
+
+def _eh_alucinacao(texto):
+    """O reconhecimento de voz inventa frases quando há só ruído ('Obrigado.', 'Legendas pela...').
+    Essas falas não devem ser respondidas nem aparecer no chat."""
+    t = re.sub(r"[^a-záéíóúâêôãõç ]", "", (texto or "").lower()).strip()
+    if not t:
+        return True
+    if t in ("obrigado", "obrigada", "tchau", "valeu", "thank you", "thanks", "ok"):
+        return True
+    return any(f in t for f in _FRASES_FANTASMA)
+
 
 class SpicaOverlay:
     # Registro da instância de bolha atualmente ligada (seja a da Activity/UI ou a do
@@ -436,7 +452,7 @@ class SpicaOverlay:
             from src.services.groq_service import GroqService
             from src.services.tts_service import TtsService
 
-            invalido = (not texto_capturado) or texto_capturado.startswith("Nao ouvi") or texto_capturado.startswith("Erro ao ouvir")
+            invalido = (not texto_capturado) or texto_capturado.startswith("Nao ouvi") or texto_capturado.startswith("Erro ao ouvir") or _eh_alucinacao(texto_capturado)
             if invalido:
                 self._silencios_seguidos = getattr(self, "_silencios_seguidos", 0) + 1
                 LIMITE_SILENCIO = 6  # ciclos seguidos sem ninguem falar
@@ -453,6 +469,15 @@ class SpicaOverlay:
                     threading.Timer(1.2, self._ciclo_escuta_continua).start()
                 return
 
+            if not self._fala_dirigida(texto_capturado):
+                slog(f"Fala nao dirigida a Spica, sem resposta: {texto_capturado[:60]!r}")
+                try:
+                    from src.services import chat_bus
+                    chat_bus.publicar("usuario", texto_capturado)
+                except Exception:
+                    pass
+                threading.Timer(0.5, self._ciclo_escuta_continua).start()
+                return
             self._silencios_seguidos = 0
             try:
                 from src.services import chat_bus
@@ -475,6 +500,7 @@ class SpicaOverlay:
                     from src.services import chat_bus
                     falar_txt, imgs = chat_bus.separar(texto_resposta)
                     chat_bus.publicar("spica", falar_txt, imgs)
+                    self._ultima_resposta_t = time.time()
                 except Exception:
                     falar_txt = texto_resposta
                 TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)
@@ -489,6 +515,15 @@ class SpicaOverlay:
             slog(f"EXCEÇÃO em _processar_escuta_continua: {type(e).__name__}: {e}")
             print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
             self._ciclo_escuta_continua()
+
+    def _fala_dirigida(self, texto):
+        """Decide se a fala é para a Spica: chamou pelo nome, ou ela acabou de falar e a pessoa
+        respondeu em poucas palavras (conversa em andamento). Conversa entre outras pessoas fica sem resposta."""
+        t = (texto or "").lower()
+        if re.search(r"\b(spica|espica|spika|spyca)\b", t):
+            return True
+        recente = time.time() - getattr(self, "_ultima_resposta_t", 0) < 25
+        return bool(recente and len(t.split()) <= 15)
 
     def _puxar_assunto_sozinha(self):
         """Depois de muito tempo sem ouvir nada, ela puxa um assunto por conta propria."""
@@ -508,6 +543,7 @@ class SpicaOverlay:
                     from src.services import chat_bus
                     falar_txt, imgs = chat_bus.separar(texto_resposta)
                     chat_bus.publicar("spica", falar_txt, imgs)
+                    self._ultima_resposta_t = time.time()
                 except Exception:
                     falar_txt = texto_resposta
                 TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)

@@ -50,21 +50,19 @@ class MoodService:
         return list(self._humores.keys())
 
     def bloco_prompt_humor(self) -> str:
-        """Instrução do humor para o system prompt. Lista cada humor com a descrição do
-        humor.json, então adicionar um humor novo lá já reflete aqui sem mexer no código."""
-        linhas = "\n".join(
-            f"- {chave}: {dados.get('descricao', '')}" for chave, dados in self._humores.items()
-        )
+        """Humor que acompanha o tom da conversa. Não muda só porque a pessoa pede ('fica feliz').
+        A ordem das opções é embaralhada, para não cair sempre na última."""
+        import random
+        chaves = list(self._humores.keys()) or ["neutro"]
+        random.shuffle(chaves)
+        atual = getattr(self, "humor_atual", None) or "neutro"
         return (
-            "\n\n[SISTEMA DE HUMOR - OBRIGATORIO]\n"
-            "No FINAL de toda resposta, numa linha separada, adicione uma tag com o seu tom emocional "
-            "NAQUELA resposta. Formato exato: [HUMOR:chave]\n"
-            f"Chaves e quando usar cada uma:\n{linhas}\n"
-            "Escolha pelo que voce sente ao dizer aquilo, nao pelo assunto. Varie: use 'neutro' so em conversa "
-            "comum e deixe as outras para quando a emocao for real (elogio ou boa noticia = feliz, "
-            "algo inesperado = surpresa, nao entendeu = confusa, ma noticia ou desanimo = triste, "
-            "situacao constrangedora ou absurda = chocada). A tag e interna: a pessoa nunca ve nem ouve. "
-            "Nao a mencione nem explique, so adicione no final."
+            "\n\n[HUMOR - OBRIGATORIO]\n"
+            f"Seu humor atual e: {atual}. Ele acompanha o TOM do que esta acontecendo na conversa: "
+            "conversa alegre, carinhosa ou com graca -> feliz; algo pesado, triste ou que te magoou -> triste; "
+            "algo que te surpreendeu -> surpresa; nao entendeu -> confusa; absurdo ou choque -> chocada; "
+            "conversa neutra e sem emocao -> neutro. Se o tom mudou, mude. Se nada mudou de verdade, mantenha o atual.\n"
+            f"Escolha UMA chave entre: {', '.join(chaves)}. Termine com [HUMOR:chave] numa linha propria, sem comentar a tag."
         )
 
     _ESTILOS_PADRAO = {
