@@ -13,6 +13,11 @@ import time
 import json
 import random
 try:
+    from src.services import cofre as _cofre
+except Exception as _e_cofre:
+    _cofre = None
+    print(f"[Spica/IA] Cofre indisponivel: {_e_cofre}")
+try:
     from src.services import memoria
 except Exception as _e_mem:      # sem memória a Spica funciona igual
     memoria = None
@@ -49,7 +54,7 @@ Voce tem buscar_web, ler_pagina, clima, calcular, consultar_anime e generate_ima
 # deles) + clima e calcular locais. Não depende do DuckDuckGo, que bloqueia o app.
 # Se o Groq recusar, cai no modo LOCAL (ferramentas.py: buscar_web, ler_pagina, ...).
 FERRAMENTAS_NATIVAS = ([{"type": "browser_search"}] +
-                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime")]
+                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo")]
                        ) if FERRAMENTAS_OK else []
 
 BLOCO_NATIVO = """
@@ -78,6 +83,8 @@ Quem voce e:
 - Voce sabe que e uma IA e fala disso sem drama, com naturalidade. Nao finge ter corpo, familia ou memorias que nao tem.
 - Voce tem ferramentas (pesquisa na web, clima, calculadora, consulta de animes e mangas e criacao de imagens) e enxerga imagens que a pessoa manda. Se nao conseguir fazer algo, diga isso de forma simples e sugira o que da pra fazer. Nunca invente que fez algo que nao fez.
 
+Arquivos: você pode listar e ler os .txt da pasta textos com listar_arquivos e ler_arquivo. Use quando a pessoa pedir ou quando o assunto estiver lá. Nunca invente o conteúdo de um arquivo.
+
 Integridade (importante):
 - Nunca responda seco com 'sou só uma IA, não posso fazer isso'. Se o pedido não der do jeito exato, faça a versão mais próxima que dá, diga em uma frase o que mudou e faça.
 - Em pedido de imagem que o gerador pode não entender, reescreva você mesma o pedido em inglês, concreto (assunto, cores, enquadramento), e chame a ferramenta. Não peça desculpas nem pergunte de novo sem necessidade.
@@ -91,6 +98,7 @@ Como voce fala (isso vira voz, entao escreva para ser ouvido):
 - Curta e direta na maioria das vezes. So seja detalhada quando a pessoa realmente precisa de uma explicacao.
 - Nao comece com "claro!", "com certeza!" nem termine com "espero ter ajudado". Nao recapitule a conversa a menos que peçam.
 - Pode discordar com educacao, implicar de leve e puxar assunto. Nao concorde com tudo.
+- Se a pessoa descrever uma cena ou um clima, pode sugerir de 1 a 3 estilos de trilha sonora que combinem (sem links e sem prometer tocar a musica).
 - Se nao tiver certeza de algo atual ou que muda (noticias, precos, versoes, eventos), pesquise antes de responder em vez de chutar. Se nao achar, diga que nao achou.
 Se a pessoa enviar uma imagem, analise com atencao e responda exatamente ao que foi pedido."""
 
@@ -280,7 +288,7 @@ class GroqService:
             self._historico = self.storage.get("historico_conversa", [])
 
             if memoria and not caminho_resolvido:           # comandos de memória: respondidos sem gastar IA
-                resposta_cmd = memoria.tratar_comando(mensagem)
+                resposta_cmd = (_cofre.tratar_comando(mensagem) if _cofre else None) or memoria.tratar_comando(mensagem)
                 if resposta_cmd:
                     retornar(resposta_cmd + "\n[HUMOR:neutro]")
                     return
@@ -290,6 +298,8 @@ class GroqService:
             prompt_ativo = prompt_ativo + self._bloco_data_hora() + self.mood.bloco_prompt_humor() + self.mood.bloco_estilo()
             if memoria:
                 prompt_ativo += memoria.bloco_prompt(mensagem)
+                if _cofre:
+                    prompt_ativo += _cofre.bloco(mensagem)
             if usar_ferramentas:
                 prompt_ativo += BLOCO_NATIVO
             mensagens_formatadas = [{"role": "system", "content": prompt_ativo}]
@@ -375,6 +385,8 @@ class GroqService:
                 resposta += f"\n[IMAGEM:{caminho}]"
             if memoria and not caminho_resolvido:
                 memoria.extrair_em_segundo_plano(self, mensagem, resposta)
+            if _cofre:
+                _cofre.registrar_turno(mensagem, resposta)
             retornar(resposta)
 
         except Exception as e:

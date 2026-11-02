@@ -214,10 +214,14 @@ def pegar_imagens_geradas():
 
 
 def _pasta_imagens():
-    base = os.environ.get("ANDROID_PRIVATE") or os.path.expanduser("~")
-    pasta = os.path.join(base, "imagens")
-    os.makedirs(pasta, exist_ok=True)
-    return pasta
+    try:
+        from src.services import arquivos
+        return arquivos.pasta("imagens")
+    except Exception:
+        base = os.environ.get("ANDROID_PRIVATE") or os.path.expanduser("~")
+        pasta = os.path.join(base, "imagens")
+        os.makedirs(pasta, exist_ok=True)
+        return pasta
 
 
 def _imagem_cloudflare(prompt):
@@ -350,8 +354,37 @@ def _detectar_categoria(texto, categoria=""):
     return "livre"
 
 
+_LUZES = {
+    "neon": "neon lighting, glowing neon signs, vibrant pink and cyan light, night reflections",
+    "por do sol": "golden hour sunset light, warm orange glow, long soft shadows",
+    "noite": "moonlight, cool blue night lighting, soft lamp glow",
+    "chuva": "rainy atmosphere, wet reflective surfaces, overcast soft light",
+    "nevoeiro": "foggy atmosphere, soft diffused light, muted colors",
+    "dourada": "warm golden light, soft rim light",
+    "estudio": "soft studio lighting, clean even light, subtle shadows",
+    "velas": "candlelight, warm flickering light, deep shadows",
+    "aurora": "aurora borealis glow, green and purple light in the sky",
+}
+_LUZ_PALAVRAS = {
+    "neon": ["neon"], "por do sol": ["por do sol", "pôr do sol", "por do sol", "sunset", "entardecer"],
+    "noite": ["noite", "night", "luar", "lua "], "chuva": ["chuva", "rain", "chovendo"],
+    "nevoeiro": ["nevoeiro", "fog", "neblina"], "dourada": ["dourada", "golden hour", "hora dourada"],
+    "estudio": ["estudio", "estúdio", "studio"], "velas": ["vela", "velas", "candle"], "aurora": ["aurora"],
+}
+
+
+def _luz(luz, texto=""):
+    """Luz pedida (ou citada no texto) vira tags de iluminação; se não reconhecer, usa o que veio."""
+    t = ((luz or "") + " " + (texto or "")).lower()
+    for nome, palavras in _LUZ_PALAVRAS.items():
+        if any(p in t for p in palavras):
+            return _LUZES[nome]
+    return (luz or "").strip()
+
+
 def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fundo="", categoria=""):
     """Prompt final (em inglês). Anime usa os estilos de anime; os outros tipos, as tags da categoria."""
+    luz = _luz(luz, assunto)
     g = _guia_arte()
     cat = _detectar_categoria(" ".join([assunto, acao, enquadramento, estilo, fundo]), categoria)
     _, enq = _escolher(g["enquadramentos"], enquadramento)
@@ -803,3 +836,41 @@ def executar_ferramenta(nome, argumentos_json):
         return _json({"erro": f"parâmetros incorretos: {e}"})
     except Exception as e:
         return _json({"erro": f"falha na ferramenta: {type(e).__name__}: {e}"})
+
+
+# ---- arquivos: listar e ler as pastas textos/imagens do app ----
+def listar_arquivos_tool(pasta="textos"):
+    try:
+        from src.services import arquivos
+        return _json({"pasta": pasta, "arquivos": arquivos.listar(pasta)})
+    except Exception as e:
+        return _json({"erro": f"não consegui listar: {type(e).__name__}: {e}"})
+
+
+def ler_arquivo_tool(pasta="textos", arquivo=""):
+    try:
+        from src.services import arquivos
+        texto, erro = arquivos.ler(pasta, arquivo)
+        if erro:
+            return _json({"erro": erro})
+        return _json({"arquivo": arquivo, "conteudo": texto})
+    except Exception as e:
+        return _json({"erro": f"não consegui ler: {type(e).__name__}: {e}"})
+
+
+FERRAMENTAS.extend([
+    {"type": "function", "function": {
+        "name": "listar_arquivos",
+        "description": "Lista os arquivos da pasta textos (seus .txt) ou imagens do app.",
+        "parameters": {"type": "object", "properties": {
+            "pasta": {"type": "string", "enum": ["textos", "imagens"]}}, "required": ["pasta"]}}},
+    {"type": "function", "function": {
+        "name": "ler_arquivo",
+        "description": "Lê o conteúdo de um .txt ou .md da pasta textos. Use quando a pessoa citar um arquivo ou o assunto estiver lá. Nunca invente o conteúdo.",
+        "parameters": {"type": "object", "properties": {
+            "pasta": {"type": "string", "enum": ["textos"]},
+            "arquivo": {"type": "string", "description": "nome exato do arquivo, ex.: notas.txt"}},
+            "required": ["pasta", "arquivo"]}}},
+])
+_FUNCOES["listar_arquivos"] = listar_arquivos_tool
+_FUNCOES["ler_arquivo"] = ler_arquivo_tool
