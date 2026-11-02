@@ -84,6 +84,17 @@ def _eh_alucinacao(texto):
     return any(f in t for f in _FRASES_FANTASMA)
 
 
+def _parece_spica(palavra):
+    """A voz transcreve 'Spica' de várias formas (Pica, Pique, Espica, Explica). Aceita essas variações."""
+    import difflib
+    p = (palavra or "").lower()
+    if not 4 <= len(p) <= 8:
+        return False
+    if p in ("spica", "espica", "spika", "spyca", "espika"):
+        return True
+    return difflib.SequenceMatcher(None, p, "spica").ratio() >= 0.7
+
+
 class SpicaOverlay:
     # Registro da instância de bolha atualmente ligada (seja a da Activity/UI ou a do
     # service.py em segundo plano). Permite que qualquer parte do código (ex: o sistema
@@ -501,6 +512,7 @@ class SpicaOverlay:
                     falar_txt, imgs = chat_bus.separar(texto_resposta)
                     chat_bus.publicar("spica", falar_txt, imgs)
                     self._ultima_resposta_t = time.time()
+                    self._ultima_resposta_pergunta = falar_txt.rstrip().endswith("?")
                 except Exception:
                     falar_txt = texto_resposta
                 TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)
@@ -520,10 +532,12 @@ class SpicaOverlay:
         """Decide se a fala é para a Spica: chamou pelo nome, ou ela acabou de falar e a pessoa
         respondeu em poucas palavras (conversa em andamento). Conversa entre outras pessoas fica sem resposta."""
         t = (texto or "").lower()
-        if re.search(r"\b(spica|espica|spika|spyca)\b", t):
+        if any(_parece_spica(p) for p in re.findall(r"[a-záéíóúâêôãõç]+", t)):
             return True
-        recente = time.time() - getattr(self, "_ultima_resposta_t", 0) < 25
-        return bool(recente and len(t.split()) <= 15)
+        # sem o nome, só conta como fala para ela se ela acabou de FAZER uma pergunta e a pessoa respondeu logo
+        perguntou = getattr(self, "_ultima_resposta_pergunta", False)
+        recente = time.time() - getattr(self, "_ultima_resposta_t", 0) < 12
+        return bool(perguntou and recente and len(t.split()) <= 10)
 
     def _puxar_assunto_sozinha(self):
         """Depois de muito tempo sem ouvir nada, ela puxa um assunto por conta propria."""
@@ -544,6 +558,7 @@ class SpicaOverlay:
                     falar_txt, imgs = chat_bus.separar(texto_resposta)
                     chat_bus.publicar("spica", falar_txt, imgs)
                     self._ultima_resposta_t = time.time()
+                    self._ultima_resposta_pergunta = falar_txt.rstrip().endswith("?")
                 except Exception:
                     falar_txt = texto_resposta
                 TtsService.get_instance().falar(falar_txt or "Pronto.", ao_terminar=_voltar_a_escutar)
