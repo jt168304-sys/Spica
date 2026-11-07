@@ -343,7 +343,7 @@ class ChatScreen(MDScreen):
         self._campo = MDTextField(
             hint_text="Mensagem...", mode="rectangle",
             multiline=False, size_hint_x=1,
-            keyboard_suggestions=False,
+            keyboard_suggestions=True,
             radius=[dp(20)],
         )
         T.estilizar(self._campo,

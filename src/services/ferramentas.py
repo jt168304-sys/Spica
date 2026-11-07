@@ -224,8 +224,38 @@ def _pasta_imagens():
         return pasta
 
 
-def _imagem_cloudflare(prompt):
-    """FLUX.1 schnell no Cloudflare Workers AI (cota diária grátis). Devolve (bytes, erro)."""
+_MODELO_CF_PRINCIPAL = "@cf/black-forest-labs/flux-2-dev"     # qualidade (imagens pagas por cota, uso pontual)
+_MODELO_CF_RESERVA = "@cf/black-forest-labs/flux-1-schnell"       # reserva mais barata se o principal recusar
+_LIMITE_PIXELS = 2_100_000
+_FORMATOS = {"quadrado": (1024, 1024), "retrato": (864, 1152), "paisagem": (1344, 768),
+             "wallpaper": (1536, 864), "celular": (864, 1536), "banner": (1536, 640)}
+
+
+def _tamanho(largura=None, altura=None, formato=""):
+    """Tamanho final: formato pronto (wallpaper, celular...) ou medidas livres; múltiplos de 8 e dentro do limite."""
+    fmt = (formato or "").lower().strip()
+    if (not largura or not altura) and fmt in _FORMATOS:
+        w, h = _FORMATOS[fmt]
+    else:
+        w, h = int(largura or 1024), int(altura or 1024)
+    w, h = max(256, min(w, 2048)), max(256, min(h, 2048))
+    if w * h > _LIMITE_PIXELS:
+        s = (_LIMITE_PIXELS / (w * h)) ** 0.5
+        w, h = int(w * s), int(h * s)
+    return (w // 8) * 8, (h // 8) * 8
+
+
+def _extrair_imagem(resp):
+    """Aceita a resposta em JSON (base64) ou a imagem direto."""
+    tipo = (resp.headers.get("Content-Type") or "").lower()
+    if "image" in tipo:
+        return resp.content
+    dados = (resp.json().get("result") or {}).get("image") or resp.json().get("image")
+    return base64.b64decode(dados) if dados else None
+
+
+def _imagem_cloudflare(prompt, largura=1024, altura=1024):
+    """Tenta o modelo de qualidade; se recusar, tenta o formato mais simples e depois a reserva barata."""
     try:
         from src.config.settings import Settings
         cfg = Settings()
@@ -236,28 +266,35 @@ def _imagem_cloudflare(prompt):
     if not conta or not token:
         return None, "Cloudflare não configurado"
     import requests
-    url = f"https://api.cloudflare.com/client/v4/accounts/{conta}/ai/run/@cf/black-forest-labs/flux-1-schnell"
-    r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
-                      json={"prompt": prompt, "steps": 8}, timeout=90)
-    if r.status_code != 200:
+    base = f"https://api.cloudflare.com/client/v4/accounts/{conta}/ai/run/"
+    tentativas = [
+        (_MODELO_CF_PRINCIPAL, {"prompt": prompt, "width": largura, "height": altura, "steps": 28}),
+        (_MODELO_CF_PRINCIPAL, {"prompt": prompt, "width": largura, "height": altura}),
+        (_MODELO_CF_RESERVA, {"prompt": prompt, "width": largura, "height": altura, "steps": 8}),
+    ]
+    ultimo = ""
+    for modelo, corpo in tentativas:
+        r = requests.post(base + modelo, headers={"Authorization": f"Bearer {token}"}, json=corpo, timeout=150)
+        if r.status_code == 200:
+            try:
+                dados = _extrair_imagem(r)
+            except Exception as e:
+                dados, ultimo = None, f"resposta inesperada: {e}"
+            if dados:
+                return dados, ""
         motivos = {400: "pedido recusado", 401: "token inválido", 403: "token sem permissão de Workers AI",
                    404: "Account ID errado", 429: "a cota diária do Cloudflare acabou"}
-        try:
-            msg_cf = ((r.json().get("errors") or [{}])[0].get("message") or "")[:90]
-        except Exception:
-            msg_cf = ""
-        return None, f"Cloudflare: {motivos.get(r.status_code, 'erro')} (HTTP {r.status_code}) {msg_cf}".strip()
-    dados = (r.json().get("result") or {}).get("image")
-    if not dados:
-        return None, "Cloudflare respondeu sem imagem"
-    return base64.b64decode(dados), ""
+        ultimo = f"{motivos.get(r.status_code, 'erro')} (HTTP {r.status_code}) em {modelo}"
+        if r.status_code in (401, 403, 404, 429):   # problema de conta ou cota: outro modelo não resolve
+            break
+    return None, "Cloudflare: " + ultimo
 
 
-def _imagem_pollinations(prompt):
+def _imagem_pollinations(prompt, largura=1024, altura=1024):
     """Reserva grátis e sem chave (qualidade menor, com marca d'água)."""
     import requests
     url = ("https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt) +
-           f"?width=768&height=768&model=flux&nologo=true&seed={random.randint(1, 99999)}")
+           f"?width={largura}&height={altura}&model=flux&nologo=true&seed={random.randint(1, 99999)}")
     r = requests.get(url, headers={"User-Agent": UA}, timeout=90)
     tipo = (r.headers.get("Content-Type") or "").lower()
     if r.status_code != 200 or "image" not in tipo or len(r.content) < 5000:
@@ -337,19 +374,46 @@ def _sem_anime(s):
     return ", ".join(t for t in (s or "").split(", ") if not re.search(r"anime|manga|chibi|kawaii|cel shad", t, re.I))
 
 
-def _detectar_categoria(texto, categoria=""):
+_PEDIDO = {"t": ""}      # o que o USUÁRIO escreveu (é a fonte de verdade para anime e pessoas)
+_PALAVRAS_ANIME = ("anime", "manga", "mangá", "chibi", "waifu", "vtuber", "personagem de anime", "kawaii")
+_RE_PESSOA = re.compile(r"\b(voce|você|versao de voce|pessoa|pessoas|homem|homens|mulher|mulheres|menina|menino|garota|garoto|crian[cç]a|criancas|crianças|personagem|personagens|ele|ela|eles|elas|guerreiro|guerreira|cavaleiro|cavaleira|idoso|idosa|retrato|rosto|moça|moco|rapaz|jovem|senhor|senhora|gente|amigo|amiga|familia|família|corpo|modelo|sorrindo|dançando|dancando|vtuber|waifu)\b", re.I)
+_RE_TIRAR_PESSOA = re.compile(r"\b(?:(?:a|an|the)\s+)?(anime style|anime|manga|chibi|kawaii|cel shading|person|people|man|men|woman|women|girl|boy|character|characters|warrior|knight|human|humans|child|children|figure|hands?|face|anime girl|anime boy)\b", re.I)
+
+
+def definir_pedido(texto):
+    """Chamado pelo chat a cada mensagem: guarda o pedido original do usuário."""
+    _PEDIDO["t"] = (texto or "").lower()
+
+
+def _pede_pessoas(texto):
+    return bool(_RE_PESSOA.search(texto or ""))
+
+
+def _pede_anime(texto):
+    t = (texto or "").lower()
+    return any(p in t for p in _PALAVRAS_ANIME)
+
+
+def _tirar_pessoas(texto):
+    limpo = _RE_TIRAR_PESSOA.sub("", texto or "")
+    limpo = re.sub(r"\s{2,}", " ", limpo)
+    return re.sub(r"\s*,\s*(,\s*)*", ", ", limpo).strip(" ,")
+
+
+def _detectar_categoria(texto, categoria="", pedido=""):
+    """Categoria a partir do PEDIDO do usuário. Anime só se ele citar anime, mangá ou chibi."""
     cats = {n: dict(v) for n, v in (_guia_arte().get("categorias") or {}).items()}
     for n, extra in _PALAVRAS_EXTRA.items():
         cats.setdefault(n, {"palavras": [], "tags": ""})
         cats[n]["palavras"] = list(cats[n].get("palavras") or []) + extra
+    base = (pedido or texto or "").lower()
+    if _pede_anime(base):
+        return "anime"
     pedida = (categoria or "").lower().strip()
-    if pedida in cats:
+    if pedida in cats and pedida != "anime":
         return pedida
-    t = (texto + " " + pedida).lower()
-    if any(p in t for p in (cats.get("anime", {}).get("palavras") or ["anime", "mangá", "manga", "chibi"])):
-        return "anime"                      # anime SÓ quando pedirem anime/mangá/personagem de anime
     for nome, item in cats.items():
-        if nome != "anime" and any(p in t for p in item.get("palavras", [])):
+        if nome != "anime" and any(p in base for p in item.get("palavras", [])):
             return nome
     return "livre"
 
@@ -386,7 +450,7 @@ def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fu
     """Prompt final (em inglês). Anime usa os estilos de anime; os outros tipos, as tags da categoria."""
     luz = _luz(luz, assunto)
     g = _guia_arte()
-    cat = _detectar_categoria(" ".join([assunto, acao, enquadramento, estilo, fundo]), categoria)
+    cat = _detectar_categoria(" ".join([assunto, acao, enquadramento, estilo, fundo]), categoria, _PEDIDO["t"])
     _, enq = _escolher(g["enquadramentos"], enquadramento)
     if cat == "anime":
         _, est = _escolher(g["estilos"], estilo, "anime_padrao")
@@ -399,11 +463,15 @@ def montar_prompt_arte(assunto, acao="", enquadramento="", estilo="", luz="", fu
                   g["qualidade_geral"]]
         if item.get("pessoas"):
             partes.append("anatomically correct, natural proportions")
-    return ", ".join(x.strip(" ,") for x in partes if x and str(x).strip(" ,"))[:1800]
+    texto_final = ", ".join(x.strip(" ,") for x in partes if x and str(x).strip(" ,"))
+    sem_pessoas = bool(re.search(r"\bsem (a |o )?(personagem|pessoa|pessoas|gente|ninguem|ninguém)\b", _PEDIDO["t"]))
+    if cat != "anime" and (sem_pessoas or not _pede_pessoas(_PEDIDO["t"])):
+        texto_final = _tirar_pessoas(texto_final) + ", no people, no characters"
+    return texto_final[:1800]
 
 
 def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=None,
-                 fundo=None, variacoes=1, descricao=None, mesma_personagem=False, categoria=None, **_ignorados):
+                 fundo=None, formato=None, largura=None, altura=None, descricao=None, mesma_personagem=False, categoria=None, **_ignorados):
     try:
         base_texto = (assunto or descricao or "").strip()
         sem_pessoas = bool(re.search(r"\bsem (a |o )?(personagem|pessoa|pessoas|gente|ninguem|ninguém)\b|no people|no characters", " ".join(x or "" for x in (assunto, descricao, acao)), re.I))
@@ -435,20 +503,18 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             print(f"[Spica/Mapa] {e}")
         prompt = montar_prompt_arte(base_texto, acao or "", enquadramento or "", estilo or "",
                                     luz or "", fundo or "", categoria or "")
-        try:
-            quantidade = max(1, min(int(variacoes), 2))
-        except (TypeError, ValueError):
-            quantidade = 1
+        quantidade = 1      # uma imagem por pedido (qualidade acima de variações)
+        largura_px, altura_px = _tamanho(largura, altura, formato)
         feitas, motor, falhas = 0, "", []
         for n in range(quantidade):
             dados, erro = None, ""
             for nome, funcao in (("cloudflare", _imagem_cloudflare), ("pollinations", _imagem_pollinations)):
                 try:
-                    dados, erro = funcao(prompt)
+                    dados, erro = funcao(prompt, largura_px, altura_px)
                     if not dados and funcao is _imagem_cloudflare and re.search(r"sensív|sensiv|bloque|filter|safety|nsfw", erro or "", re.I):
                         # filtro achou o prompt sensível: tira pessoas/armas e tenta uma vez
                         seguro = re.sub(r"\b(person|people|man|woman|girl|boy|warrior|knight|sword|swords|weapon|blood|gore|hands?|mãos?|pessoa|guerreir[oa]|espadas?)\b", "object", prompt, flags=re.I)
-                        dados, erro = funcao(seguro)
+                        dados, erro = funcao(seguro, largura_px, altura_px)
                 except Exception as e:
                     dados, erro = None, f"{type(e).__name__}: {e}"
                 if dados:
@@ -791,7 +857,7 @@ FERRAMENTAS = [
             "luz": {"type": "string", "description": "EM INGLÊS: iluminação e clima. Ex.: 'warm sunset light'."},
             "fundo": {"type": "string", "description": "EM INGLÊS: fundo. Prefira simples."},
             "mesma_personagem": {"type": "boolean", "description": "true para outra pose, cena ou ângulo da MESMA personagem da imagem anterior (mantém a aparência)."},
-            "variacoes": {"type": "integer", "description": "1 (padrão) ou 2, só se a pessoa pedir opções."}},
+            "formato": {"type": "string", "enum": ["quadrado", "retrato", "paisagem", "wallpaper", "celular", "banner"], "description": "formato pronto: wallpaper (16:9), celular (vertical), paisagem, retrato, banner ou quadrado (padrão)."}, "largura": {"type": "integer", "description": "largura em pixels, só se a pessoa pedir medidas exatas (múltiplo de 8)."}, "altura": {"type": "integer", "description": "altura em pixels, só se a pessoa pedir medidas exatas (múltiplo de 8)."}},
             "required": ["assunto"]}}},
     {"type": "function", "function": {
         "name": "consultar_anime",
