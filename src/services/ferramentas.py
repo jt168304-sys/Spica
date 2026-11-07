@@ -270,7 +270,8 @@ def _imagem_cloudflare(prompt, largura=1024, altura=1024):
     tentativas = [
         (_MODELO_CF_PRINCIPAL, {"prompt": prompt, "width": largura, "height": altura, "steps": 28}),
         (_MODELO_CF_PRINCIPAL, {"prompt": prompt, "width": largura, "height": altura}),
-        (_MODELO_CF_RESERVA, {"prompt": prompt, "width": largura, "height": altura, "steps": 8}),
+        (_MODELO_CF_RESERVA, {"prompt": prompt, "steps": 8}),      # formato que já funcionou no teste
+        (_MODELO_CF_RESERVA, {"prompt": prompt}),
     ]
     ultimo = ""
     for modelo, corpo in tentativas:
@@ -284,7 +285,11 @@ def _imagem_cloudflare(prompt, largura=1024, altura=1024):
                 return dados, ""
         motivos = {400: "pedido recusado", 401: "token inválido", 403: "token sem permissão de Workers AI",
                    404: "Account ID errado", 429: "a cota diária do Cloudflare acabou"}
-        ultimo = f"{motivos.get(r.status_code, 'erro')} (HTTP {r.status_code}) em {modelo}"
+        try:
+            detalhe = (r.json().get("errors") or [{}])[0].get("message", "")
+        except Exception:
+            detalhe = r.text[:120]
+        ultimo = f"{motivos.get(r.status_code, 'erro')} (HTTP {r.status_code}) em {modelo}: {detalhe[:150]}"
         if r.status_code in (401, 403, 404, 429):   # problema de conta ou cota: outro modelo não resolve
             break
     return None, "Cloudflare: " + ultimo
