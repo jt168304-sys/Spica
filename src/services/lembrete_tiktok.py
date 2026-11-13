@@ -98,3 +98,16 @@ def checar_as_23h():
         dia -= datetime.timedelta(days=1)
     if sequencia >= MIN_DIAS_FOGUINHO:
         _notificar(f"Você ainda não abriu o TikTok hoje e está com {sequencia} dias de foguinho. Quer manter?")
+
+
+def agendar_alarme_23h():
+    """Agenda o lembrete pelo AlarmManager (funciona com o app e o serviço fechados).
+    Pode ser chamada sempre: o Android substitui o agendamento anterior."""
+    try:
+        from jnius import autoclass
+        ctx = autoclass("org.kivy.android.PythonActivity").mActivity
+        autoclass("com.spica.spica.SpicaLembreteReceiver").agendar(ctx)
+        return True
+    except Exception as e:
+        print(f"[Spica/TikTok] agendar alarme: {e}")
+        return False

@@ -50,7 +50,11 @@ if platform == "android":
         voice = None
 
     slog("[FGS] Loop principal de escuta aguardando comandos...")
-    ultimo_check_tiktok = 0
+    try:
+        from src.services.lembrete_tiktok import agendar_alarme_23h
+        agendar_alarme_23h()
+    except Exception as e:
+        slog(f"[FGS] Lembrete TikTok: {e}")
     while True:
         try:
             if ha_pedido() and consumir_pedido():
@@ -76,13 +80,6 @@ if platform == "android":
                 responder("Erro ao ouvir")
             except Exception:
                 pass
-        if time.time() - ultimo_check_tiktok > 60:
-            ultimo_check_tiktok = time.time()
-            try:
-                from src.services.lembrete_tiktok import checar_as_23h
-                checar_as_23h()
-            except Exception as e:
-                slog(f"[FGS] Erro no lembrete do TikTok: {e}")
         time.sleep(0.15)
 else:
     while True:
