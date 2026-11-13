@@ -43,6 +43,7 @@ class SettingsScreen(MDScreen):
         lista.add_widget(self._card_memoria())
         lista.add_widget(self._card_bolha())
 
+        lista.add_widget(self._card_recursos())
         lista.add_widget(self._card_sobre())
 
         scroll.add_widget(lista)
@@ -60,6 +61,19 @@ class SettingsScreen(MDScreen):
     def _botao_principal(self, btn):
         return T.estilizar(btn, md_bg_color=T.MENTA, theme_text_color="Custom",
                            text_color=T.FUNDO, radius=[dp(20)] * 4)
+
+    def _card_recursos(self):
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(136),
+            padding=dp(20), spacing=dp(8), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Recursos da Spica"))
+        card.add_widget(self._descricao("Veja o que ela faz hoje e o que ainda vem.", dp(22)))
+        btn = MDRaisedButton(text="Ver recursos", size_hint_y=None, height=dp(40),
+                             on_release=lambda x: MDApp.get_running_app().navigate_to("ajuda"))
+        self._botao_principal(btn)
+        card.add_widget(btn)
+        return card
 
     def _card_sobre(self):
         card = MDCard(
