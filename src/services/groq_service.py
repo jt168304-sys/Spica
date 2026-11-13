@@ -12,6 +12,10 @@ from src.services.mood_service import MoodService
 import time
 import json
 import random
+
+# Extracao automatica de memoria faz uma chamada extra ao Groq a cada conversa.
+# Desligada para poupar a cota. Os comandos 'lembra que' e 'esquece' continuam funcionando.
+EXTRAIR_MEMORIA_AUTO = False
 try:
     from src.services import cofre as _cofre
 except Exception as _e_cofre:
@@ -392,7 +396,8 @@ class GroqService:
             for caminho in pegar_imagens_geradas():        # o chat troca o marcador pela imagem
                 resposta += f"\n[IMAGEM:{caminho}]"
             if memoria and not caminho_resolvido:
-                memoria.extrair_em_segundo_plano(self, mensagem, resposta)
+                if EXTRAIR_MEMORIA_AUTO:
+                    memoria.extrair_em_segundo_plano(self, mensagem, resposta)
             if _cofre:
                 _cofre.registrar_turno(mensagem, resposta)
             retornar(resposta)
@@ -480,7 +485,7 @@ class GroqService:
         A resposta FINAL de emergência é sempre "limpa": sem histórico de tool_calls
         (evita o 400 'Tool choice is none, but model called a tool')."""
         from src.utils.service_log import slog
-        max_rodadas = 2 if modo_continuo else 4
+        max_rodadas = 2 if modo_continuo else 3
         inicio = time.monotonic()
         base = list(mensagens)      # conversa limpa, sem nada de ferramenta
         coletados = []              # [(nome, resultado_json)] das ferramentas locais

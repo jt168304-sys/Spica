@@ -477,6 +477,7 @@ class ChatScreen(MDScreen):
             return
         self._poll_ligado = True
         Clock.schedule_interval(self._checar_pendentes, 1.0)
+        Clock.schedule_interval(self._sync_campo_nativo, 0.3)
 
     def _checar_pendentes(self, dt):
         """Mostra no chat o que foi falado na escuta contínua (perguntas, respostas e imagens)."""
@@ -506,7 +507,48 @@ class ChatScreen(MDScreen):
         else:
             self._spica("Ola! Sou a Spica\n\nVa em Configuracoes e insira sua chave Groq.")
 
+    def _sync_campo_nativo(self, dt):
+        """Liga o campo nativo do Android sobre o campo do Kivy (teclado com corretor)."""
+        if getattr(self, "_nat_falhou", False):
+            return False
+        try:
+            from src.services.campo_nativo import CampoNativo
+            from kivy.core.window import Window
+            if getattr(self, "_nat", None) is None:
+                self._nat = CampoNativo()
+            wx, wy = self._campo.to_window(*self._campo.pos)
+            w, h = self._campo.size
+            y_android = Window.height - (wy + h)
+            if not getattr(self, "_nat_ligado", False):
+                self._nat.iniciar(wx, y_android, w, h, "Mensagem...")
+                self._nat_ligado = True
+                self._campo.opacity = 0
+                self._campo.disabled = True
+            else:
+                self._nat.atualizar(wx, y_android, w, h)
+            enviado = self._nat.pegar_enviado()
+            if enviado:
+                self._campo.text = enviado
+                self._enviar()
+        except Exception as e:
+            print(f"[Spica/Campo] campo nativo indisponivel, usando o do Kivy: {e}")
+            self._nat_falhou = True
+            self._campo.opacity = 1
+            self._campo.disabled = False
+        return True
+
+    def _puxar_texto_nativo(self):
+        if getattr(self, "_nat_ligado", False) and not getattr(self, "_nat_falhou", False):
+            try:
+                texto = self._nat.pegar_texto().strip()
+                if texto:
+                    self._campo.text = texto
+                    self._nat.limpar()
+            except Exception as e:
+                print(f"[Spica/Campo] puxar texto: {e}")
+
     def _enviar(self):
+        self._puxar_texto_nativo()
         if self._aguardando:
             return
         texto = self._campo.text.strip()
