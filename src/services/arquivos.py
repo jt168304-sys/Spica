@@ -39,3 +39,19 @@ def ler(nome, arquivo, limite=6000):
         return None, "só consigo ler .txt e .md"
     with open(alvo, encoding="utf-8", errors="replace") as arq:
         return arq.read(limite), ""
+
+
+def escrever(nome, conteudo):
+    """Salva uma anotação .txt na pasta textos. Não sobrescreve: cria 'nome 2.txt' se já existir."""
+    import re
+    base = os.path.splitext(os.path.basename(nome or "anotacao"))[0]
+    base = re.sub(r"[^\w\- ]", "", base).strip()[:60] or "anotacao"
+    pasta_textos = pasta("textos")
+    destino = os.path.join(pasta_textos, base + ".txt")
+    i = 2
+    while os.path.exists(destino):
+        destino = os.path.join(pasta_textos, f"{base} {i}.txt")
+        i += 1
+    with open(destino, "w", encoding="utf-8") as arq:
+        arq.write(conteudo or "")
+    return destino

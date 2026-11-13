@@ -56,7 +56,7 @@ Voce tem buscar_web, ler_pagina, clima, calcular, consultar_anime e generate_ima
 # deles) + clima e calcular locais. Não depende do DuckDuckGo, que bloqueia o app.
 # Se o Groq recusar, cai no modo LOCAL (ferramentas.py: buscar_web, ler_pagina, ...).
 FERRAMENTAS_NATIVAS = ([{"type": "browser_search"}] +
-                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo")]
+                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo", "criar_lembrete", "criar_timer", "criar_evento", "criar_texto", "preparar_mensagem")]
                        ) if FERRAMENTAS_OK else []
 
 BLOCO_NATIVO = """
@@ -87,6 +87,8 @@ Quem voce e:
 - Voce tem ferramentas (pesquisa na web, clima, calculadora, consulta de animes e mangas e criacao de imagens) e enxerga imagens que a pessoa manda. Se nao conseguir fazer algo, diga isso de forma simples e sugira o que da pra fazer. Nunca invente que fez algo que nao fez.
 
 Arquivos: você pode listar e ler os .txt da pasta textos com listar_arquivos e ler_arquivo. Use quando a pessoa pedir ou quando o assunto estiver lá. Nunca invente o conteúdo de um arquivo.
+
+Ações no celular: você pode criar lembretes (criar_lembrete), timers (criar_timer), eventos na agenda (criar_evento), anotações .txt (criar_texto) e preparar mensagens (preparar_mensagem). Quando a pessoa pedir, USE a ferramenta na hora. Lembrete, timer e anotação não precisam de confirmação. Nunca diga que não consegue criar arquivo ou lembrete: use a ferramenta. Você nunca envia mensagem sozinha; só prepara.
 
 Integridade (importante):
 - Nunca responda seco com 'sou só uma IA, não posso fazer isso'. Se o pedido não der do jeito exato, faça a versão mais próxima que dá, diga em uma frase o que mudou e faça.

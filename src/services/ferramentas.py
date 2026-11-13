@@ -945,3 +945,58 @@ FERRAMENTAS.extend([
 ])
 _FUNCOES["listar_arquivos"] = listar_arquivos_tool
 _FUNCOES["ler_arquivo"] = ler_arquivo_tool
+
+
+# ---- ações no celular: lembretes, timers, agenda, anotações e mensagens prontas ----
+def _acao_tool(funcao, **kw):
+    try:
+        from src.services import acoes
+        return _json(getattr(acoes, funcao)(**kw))
+    except TypeError as e:
+        return _json({"erro": f"parâmetros incorretos: {e}"})
+    except Exception as e:
+        return _json({"erro": f"não consegui: {type(e).__name__}: {e}"})
+
+
+def criar_lembrete_tool(hora="", mensagem=""):
+    return _acao_tool("criar_lembrete", hora=hora, mensagem=mensagem)
+
+
+def criar_timer_tool(minutos=0, mensagem=""):
+    return _acao_tool("criar_timer", minutos=minutos, mensagem=mensagem)
+
+
+def criar_evento_tool(titulo="", inicio="", minutos=60, descricao=""):
+    return _acao_tool("criar_evento", titulo=titulo, inicio=inicio, minutos=minutos, descricao=descricao)
+
+
+def criar_texto_tool(nome="anotacao", conteudo=""):
+    return _acao_tool("criar_texto", nome=nome, conteudo=conteudo)
+
+
+def preparar_mensagem_tool(texto=""):
+    return _acao_tool("preparar_mensagem", texto=texto)
+
+
+_SCHEMA_ACOES = [
+    ("criar_lembrete", "Cria um lembrete no relógio do celular para um horário. Use quando a pessoa pedir 'me lembra às ...'. Não pede confirmação.",
+     {"hora": {"type": "string", "description": "horário como 15:30 ou 15h"}, "mensagem": {"type": "string", "description": "o que lembrar"}}, ["hora", "mensagem"]),
+    ("criar_timer", "Inicia um timer no relógio do celular. Use para 'timer de X minutos'.",
+     {"minutos": {"type": "number", "description": "duração em minutos"}, "mensagem": {"type": "string"}}, ["minutos"]),
+    ("criar_evento", "Abre a agenda com um evento pronto para a pessoa salvar. Use para 'marca ...' ou 'agenda ...'.",
+     {"titulo": {"type": "string"}, "inicio": {"type": "string", "description": "AAAA-MM-DD HH:MM"},
+      "minutos": {"type": "number", "description": "duração em minutos, padrão 60"}, "descricao": {"type": "string"}}, ["titulo", "inicio"]),
+    ("criar_texto", "Salva uma anotação .txt na pasta textos do app. Use para 'anota aí', 'faz uma lista .txt', 'salva isso'. Nunca diga que não consegue criar arquivo: use esta ferramenta.",
+     {"nome": {"type": "string", "description": "nome curto, sem extensão"}, "conteudo": {"type": "string"}}, ["nome", "conteudo"]),
+    ("preparar_mensagem", "Abre as opções de envio do celular com um texto pronto. A pessoa escolhe o app e envia. Você nunca envia sozinha.",
+     {"texto": {"type": "string"}}, ["texto"]),
+]
+for _nome, _desc, _props, _obrig in _SCHEMA_ACOES:
+    FERRAMENTAS.append({"type": "function", "function": {"name": _nome, "description": _desc,
+                                                         "parameters": {"type": "object", "properties": _props,
+                                                                        "required": _obrig}}})
+_FUNCOES["criar_lembrete"] = criar_lembrete_tool
+_FUNCOES["criar_timer"] = criar_timer_tool
+_FUNCOES["criar_evento"] = criar_evento_tool
+_FUNCOES["criar_texto"] = criar_texto_tool
+_FUNCOES["preparar_mensagem"] = preparar_mensagem_tool

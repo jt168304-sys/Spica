@@ -1,5 +1,4 @@
-# ajuda_screen.py — Tela "Ver recursos": texto com rolagem explicando o que a Spica faz e o que ainda vem.
-from kivy.clock import Clock
+# ajuda_screen.py — Tela "Recursos da Spica": o que funciona hoje e o que vem depois.
 from kivy.effects.scroll import ScrollEffect
 from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
@@ -23,18 +22,19 @@ FUNCIONA_HOJE = [
     ("Cofre de histórias e piadas", "\"Guarda essa piada: ...\". Depois: \"traz aquela piada sobre ...\". Para ver tudo: \"o que tem no meu cofre?\"."),
     ("Arquivos de texto", "Coloque seus .txt na pasta textos (em Android/data/com.spica.spica/files). Depois pergunte: \"o que tem no meu arquivo notas?\"."),
     ("Ver a imagem enviada", "Mande uma foto pelo ícone de imagem e pergunte o que quiser sobre ela."),
+    ("Lembretes", "\"Me lembra às 15h de pagar a conta\". Cria o alarme no relógio do celular, sem tela."),
+    ("Timers", "\"Timer de 25 minutos para estudar\". Inicia no relógio do celular."),
+    ("Anotações", "\"Anota aí: comprar pão e café\" ou \"faz uma lista .txt para estudar\". Salva na pasta textos."),
+    ("Agenda", "\"Marca estudo amanhã às 19h\". Abre a agenda com o evento pronto; você confirma lá."),
+    ("Mensagens prontas", "\"Escreve uma mensagem para ... dizendo ...\". Abre as opções de envio com o texto; você escolhe o app e envia."),
+    ("Lembrete do TikTok às 23h", "Se você não abriu o TikTok hoje e vinha abrindo nos dias anteriores, ela avisa. Precisa de acesso ao uso de apps ligado para a Spica."),
     ("Humor", "A Spica muda a expressão e o tom conforme a conversa. Pedir \"fica feliz\" não muda sozinho."),
 ]
 
 PLANEJADO = [
-    ("Lembretes, alarmes e timers", "\"Me lembra às 15h de pagar a conta\", \"timer de 25 minutos para estudar\". Ela monta e você confirma."),
-    ("Anotações", "\"Anota aí: comprar pão e café\". Salva na pasta de textos."),
-    ("Agenda", "Ela prepara um evento e abre a tela do calendário já preenchida. Você só confirma."),
     ("Cronogramas e rotina", "Um resumo do dia com clima, compromissos e estudo em ciclos de foco e pausa."),
-    ("Mensagens prontas", "Ela escreve o texto e abre o app de mensagem com ele pronto. Você revisa e envia."),
-    ("Análise de mensagens e grupos", "Ela resume o que importa das notificações de grupos. Só lê o que aparece como notificação, e precisa da sua permissão."),
+    ("Análise de mensagens e grupos", "Ela resume o que importa das notificações de grupos. Só lê o que aparece como notificação."),
     ("Sugestões de resposta", "Ela sugere respostas no seu jeito de falar, para qualquer app. Você aprova antes de enviar."),
-    ("Lembrete do TikTok às 23h", "Se você não tiver aberto o app, ela lembra. Precisa da permissão de uso de apps."),
     ("Música", "Sugere trilhas para a cena que você descreve. Tocar exige um serviço de música."),
 ]
 
