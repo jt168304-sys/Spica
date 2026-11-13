@@ -951,11 +951,15 @@ _FUNCOES["ler_arquivo"] = ler_arquivo_tool
 def _acao_tool(funcao, **kw):
     try:
         from src.services import acoes
-        return _json(getattr(acoes, funcao)(**kw))
+        resultado = getattr(acoes, funcao)(**kw)
+        print(f"[Spica/Acao] {funcao} {kw} -> {resultado}")
+        return _json(resultado)
     except TypeError as e:
-        return _json({"erro": f"parâmetros incorretos: {e}"})
+        print(f"[Spica/Acao] {funcao} parametros: {e}")
+        return _json({"ok": False, "erro": f"parâmetros incorretos: {e}"})
     except Exception as e:
-        return _json({"erro": f"não consegui: {type(e).__name__}: {e}"})
+        print(f"[Spica/Acao] {funcao} FALHOU: {type(e).__name__}: {e}")
+        return _json({"ok": False, "erro": f"o celular não aceitou o pedido ({type(e).__name__}: {e})"})
 
 
 def criar_lembrete_tool(hora="", mensagem=""):
