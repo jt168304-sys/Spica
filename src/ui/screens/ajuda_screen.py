@@ -4,6 +4,8 @@ from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.button import MDFlatButton, MDRaisedButton
+from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 from src.ui import tema as T
@@ -54,6 +56,14 @@ class AjudaScreen(MDScreen):
                             scroll_distance=dp(10), effect_cls=ScrollEffect)
         conteudo = MDBoxLayout(orientation="vertical", size_hint_y=None, padding=dp(20), spacing=dp(10))
         conteudo.bind(minimum_height=conteudo.setter("height"))
+        conteudo.add_widget(self._linha("Testar as ações (diagnóstico)", "titulo"))
+        conteudo.add_widget(self._linha("Cada botão roda a ação direto no celular e mostra o resultado ou o erro real.", "corpo"))
+        for nome_botao, chave in (("Testar alarme", "alarme"), ("Testar timer", "timer"),
+                                  ("Testar agenda", "agenda"), ("Testar compartilhar", "mensagem")):
+            botao = MDRaisedButton(text=nome_botao, size_hint_y=None, height=dp(40),
+                                   on_release=lambda x, c=chave: self._testar_acao(c))
+            T.estilizar(botao, md_bg_color=T.MENTA, theme_text_color="Custom", text_color=T.FUNDO)
+            conteudo.add_widget(botao)
         conteudo.add_widget(self._linha("O que ela faz hoje", "titulo"))
         for nome, texto in FUNCIONA_HOJE:
             conteudo.add_widget(self._linha(nome, "item"))
@@ -65,6 +75,27 @@ class AjudaScreen(MDScreen):
         scroll.add_widget(conteudo)
         raiz.add_widget(scroll)
         self.add_widget(raiz)
+
+    def _testar_acao(self, chave):
+        """Roda a ação sem IA e mostra exatamente o que o Android respondeu."""
+        try:
+            from src.services import acoes
+            if chave == "alarme":
+                resultado = acoes.criar_lembrete("09:00", "Teste da Spica")
+            elif chave == "timer":
+                resultado = acoes.criar_timer(1, "Teste da Spica")
+            elif chave == "agenda":
+                resultado = acoes.criar_evento("Teste da Spica", "amanhã às 9h", 30, "teste")
+            else:
+                resultado = acoes.preparar_mensagem("Oi, teste da Spica")
+            texto = f"O Android aceitou o pedido.\n\n{resultado}"
+        except Exception as e:
+            texto = f"ERRO REAL do Android:\n\n{type(e).__name__}: {e}"
+        fechar = MDFlatButton(text="Fechar")
+        dialogo = MDDialog(title=f"Teste: {chave}", text=texto, buttons=[fechar])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
+        fechar.bind(on_release=lambda x: dialogo.dismiss())
+        dialogo.open()
 
     def _linha(self, texto, estilo):
         cores = {"titulo": (T.MENTA, "H6"), "item": (T.CREME, "Subtitle1"), "corpo": (T.TEXTO_2, "Body2")}

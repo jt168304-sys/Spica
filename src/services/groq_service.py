@@ -455,6 +455,35 @@ class GroqService:
         return random.choice(["Pronto, olha como ficou.", "Aqui está, o que achou?",
                               "Saiu assim, quer algum ajuste?", "Prontinho, ficou legal."]) + "\n[HUMOR:feliz]"
 
+    _ACOES_FORCADAS = (
+        ("criar_timer", re.compile(r"\b(timer|temporizador|cronometro|cronômetro)\b", re.I)),
+        ("criar_lembrete", re.compile(r"\b(alarme|despertador|me lembr[ae]|lembrete)\b", re.I)),
+        ("criar_evento", re.compile(r"\b(evento|agenda|compromisso)\b", re.I)),
+        ("criar_texto", re.compile(r"(\.txt\b|\banota(r)?\b)", re.I)),
+        ("preparar_mensagem", re.compile(r"\b(manda|mande|envia|envie|escreve|escreva|cria|crie)\b.*\bmensagem\b|\bmensagem\b.*\b(para|pro|pra)\b", re.I)),
+    )
+    _SO_LER = re.compile(r"\b(o que tem|ler|leia|le o|abre|mostra|lista os)\b", re.I)
+
+    def _ferramenta_forcada(self, texto):
+        """Pedido de ação (alarme, timer, agenda, anotação, mensagem) -> nome da ferramenta que DEVE ser chamada."""
+        if not isinstance(texto, str) or not texto.strip():
+            return None
+        for nome, padrao in self._ACOES_FORCADAS:
+            if padrao.search(texto):
+                if nome == "criar_texto" and self._SO_LER.search(texto):
+                    continue
+                return nome
+        return None
+
+    def _msg_limite(self, detalhe):
+        """Diz se o limite do Groq é por minuto ou DIÁRIO e quando libera."""
+        t = (detalhe or "").lower()
+        if "per day" in t or "tpd" in t or "rpd" in t:
+            m = re.search(r"try again in ([0-9hms\.]+)", t)
+            quando = m.group(1) if m else "algumas horas"
+            return f"Estourei o limite DIARIO do Groq. Libera em cerca de {quando}."
+        return self.MSG_LIMITE
+
     def _pergunta_de_anime(self, texto):
         t = (texto or "").lower()
         return any(p in t for p in self._PALAVRAS_ANIME)
@@ -522,10 +551,12 @@ class GroqService:
             }
             if modo_nativo and modelo.startswith("openai/gpt-oss"):
                 payload["reasoning_effort"] = "low"   # recomendado pelo Groq p/ browser_search
-            forcar = (not forcou_anime and rodada == 0 and not coletados and isinstance(ultimo, str)
-                      and self._pergunta_de_anime(ultimo))
+            nome_forcado = None
+            if not forcou_anime and rodada == 0 and not coletados and isinstance(ultimo, str):
+                nome_forcado = self._ferramenta_forcada(ultimo) or ("consultar_anime" if self._pergunta_de_anime(ultimo) else None)
+            forcar = bool(nome_forcado)
             if forcar:    # pergunta sobre anime/mangá: consulta primeiro o AniList (dados oficiais)
-                payload["tool_choice"] = {"type": "function", "function": {"name": "consultar_anime"}}
+                payload["tool_choice"] = {"type": "function", "function": {"name": nome_forcado}}
                 forcou_anime = True
             status, dados, detalhe, codigo = self._post(requests, payload)
             if status != 200:
@@ -545,7 +576,7 @@ class GroqService:
                         if modo_nativo and not modelo.startswith("openai/gpt-oss"):
                             ir_para_modo_local()      # só os gpt-oss têm a pesquisa nativa
                         continue
-                    return None, self.MSG_LIMITE
+                    return None, self._msg_limite(detalhe)
                 if status == 404 or codigo == "model_not_found":
                     slog(f"Modelo {modelo} indisponível na conta: {detalhe[:120]}")
                     if isinstance(self._modelos_cache, set):
