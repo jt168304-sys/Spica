@@ -77,14 +77,33 @@ class AjudaScreen(MDScreen):
         raiz.add_widget(scroll)
         self.add_widget(raiz)
 
+    def _apk_info(self):
+        """Procura no próprio APK as classes Java próprias do app (diz se o build as incluiu)."""
+        try:
+            import zipfile
+            from jnius import autoclass
+            caminho = str(autoclass("org.kivy.android.PythonActivity").mActivity.getPackageCodePath())
+            achados = {"SpicaCampoTexto": False, "SpicaLembreteReceiver": False}
+            with zipfile.ZipFile(caminho) as pacote:
+                for nome in pacote.namelist():
+                    if nome.startswith("classes") and nome.endswith(".dex"):
+                        dados = pacote.read(nome)
+                        for chave in achados:
+                            if chave.encode() in dados:
+                                achados[chave] = True
+            return "\n\nClasses Java dentro do APK: " + ", ".join(f"{k}={'SIM' if v else 'NAO'}" for k, v in achados.items())
+        except Exception as e:
+            return f"\n\n(não consegui ler o APK: {type(e).__name__}: {e})"
+
     def _testar_campo(self):
         """Mostra se a classe Java do campo nativo está dentro do app e o estado do chat."""
         try:
             from src.services.campo_nativo import CampoNativo
             CampoNativo()
-            texto = "A classe Java do campo nativo ESTÁ no app."
+            texto = "O campo nativo (Python) está disponível no app."
         except Exception as e:
             texto = f"A classe Java do campo nativo NÃO está no app:\n\n{type(e).__name__}: {e}"
+        texto += self._apk_info()
         try:
             app = MDApp.get_running_app()
             tela = app.root.get_screen("chat")
