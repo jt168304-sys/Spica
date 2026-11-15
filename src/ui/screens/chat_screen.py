@@ -532,6 +532,7 @@ class ChatScreen(MDScreen):
                 self._enviar()
         except Exception as e:
             print(f"[Spica/Campo] campo nativo indisponivel, usando o do Kivy: {e}")
+            self._nat_erro = f"{type(e).__name__}: {e}"
             self._nat_falhou = True
             self._campo.opacity = 1
             self._campo.disabled = False

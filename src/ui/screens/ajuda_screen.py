@@ -59,7 +59,8 @@ class AjudaScreen(MDScreen):
         conteudo.add_widget(self._linha("Testar as ações (diagnóstico)", "titulo"))
         conteudo.add_widget(self._linha("Cada botão roda a ação direto no celular e mostra o resultado ou o erro real.", "corpo"))
         for nome_botao, chave in (("Testar alarme", "alarme"), ("Testar timer", "timer"),
-                                  ("Testar agenda", "agenda"), ("Testar compartilhar", "mensagem")):
+                                  ("Testar agenda", "agenda"), ("Testar compartilhar", "mensagem"),
+                                  ("Testar corretor (campo nativo)", "campo")):
             botao = MDRaisedButton(text=nome_botao, size_hint_y=None, height=dp(40),
                                    on_release=lambda x, c=chave: self._testar_acao(c))
             T.estilizar(botao, md_bg_color=T.MENTA, theme_text_color="Custom", text_color=T.FUNDO)
@@ -76,12 +77,39 @@ class AjudaScreen(MDScreen):
         raiz.add_widget(scroll)
         self.add_widget(raiz)
 
+    def _testar_campo(self):
+        """Mostra se a classe Java do campo nativo está dentro do app e o estado do chat."""
+        try:
+            from src.services.campo_nativo import CampoNativo
+            CampoNativo()
+            texto = "A classe Java do campo nativo ESTÁ no app."
+        except Exception as e:
+            texto = f"A classe Java do campo nativo NÃO está no app:\n\n{type(e).__name__}: {e}"
+        try:
+            app = MDApp.get_running_app()
+            tela = app.root.get_screen("chat")
+            texto += (f"\n\nChat: campo nativo ligado = {getattr(tela, '_nat_ligado', False)}; "
+                      f"caiu para o campo comum = {getattr(tela, '_nat_falhou', False)}")
+            if getattr(tela, "_nat_erro", ""):
+                texto += f"\nErro do chat: {tela._nat_erro}"
+        except Exception as e:
+            texto += f"\n\n(não consegui ler o estado do chat: {type(e).__name__})"
+        fechar = MDFlatButton(text="Fechar")
+        dialogo = MDDialog(title="Teste: corretor", text=texto, buttons=[fechar])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
+        fechar.bind(on_release=lambda x: dialogo.dismiss())
+        dialogo.open()
+
     def _testar_acao(self, chave):
         """Roda a ação sem IA e mostra exatamente o que o Android respondeu."""
+        if chave == "campo":
+            return self._testar_campo()
         try:
             from src.services import acoes
             if chave == "alarme":
-                resultado = acoes.criar_lembrete("09:00", "Teste da Spica")
+                import datetime as _dt
+                alvo = _dt.datetime.now() + _dt.timedelta(minutes=2)
+                resultado = acoes.criar_lembrete(alvo.strftime("%H:%M"), "Teste da Spica")
             elif chave == "timer":
                 resultado = acoes.criar_timer(1, "Teste da Spica")
             elif chave == "agenda":
