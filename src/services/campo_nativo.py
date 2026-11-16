@@ -126,7 +126,13 @@ class CampoNativo:
         return self._enviados.pop(0) if self._enviados else ""
 
     def pegar_texto(self):
-        return self._texto_atual
+        """Lê o texto direto do campo (sem cache): o envio pelo botão nunca pega um valor atrasado."""
+        if self._campo is None:
+            return self._texto_atual
+        try:
+            return str(self._campo.getText().toString())
+        except Exception:
+            return self._texto_atual
 
     def limpar(self):
         self._texto_atual = ""
