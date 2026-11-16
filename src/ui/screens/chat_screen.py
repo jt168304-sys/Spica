@@ -520,10 +520,20 @@ class ChatScreen(MDScreen):
             w, h = self._campo.size
             y_android = Window.height - (wy + h)
             if not getattr(self, "_nat_ligado", False):
-                self._nat.iniciar(wx, y_android, w, h, "Mensagem...")
-                self._nat_ligado = True
-                self._campo.opacity = 0
-                self._campo.disabled = True
+                if not getattr(self, "_nat_tentou", False):
+                    self._nat.iniciar(wx, y_android, w, h, "Mensagem...")
+                    self._nat_tentou = True
+                    self._nat_ticks = 0
+                if getattr(self._nat, "erro", ""):
+                    raise RuntimeError(self._nat.erro)
+                if self._nat.pronto():            # só esconde o campo comum quando o nativo EXISTE
+                    self._nat_ligado = True
+                    self._campo.opacity = 0
+                    self._campo.disabled = True
+                else:
+                    self._nat_ticks += 1
+                    if self._nat_ticks > 20:      # ~6 s sem aparecer: volta ao campo comum
+                        raise RuntimeError("o campo nativo não apareceu em 6 segundos")
             else:
                 self._nat.atualizar(wx, y_android, w, h)
             enviado = self._nat.pegar_enviado()
