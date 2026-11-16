@@ -477,7 +477,7 @@ class ChatScreen(MDScreen):
             return
         self._poll_ligado = True
         Clock.schedule_interval(self._checar_pendentes, 1.0)
-        Clock.schedule_interval(self._sync_campo_nativo, 0.3)
+        Clock.schedule_interval(self._sync_campo_nativo, 0.15)
 
     def _checar_pendentes(self, dt):
         """Mostra no chat o que foi falado na escuta contínua (perguntas, respostas e imagens)."""
@@ -516,6 +516,10 @@ class ChatScreen(MDScreen):
             from kivy.core.window import Window
             if getattr(self, "_nat", None) is None:
                 self._nat = CampoNativo()
+            ativa = (self.manager is None) or (self.manager.current == self.name)
+            self._nat.visivel(ativa)         # fora do chat o campo some (não cobre as Configurações)
+            if not ativa:
+                return True
             wx, wy = self._campo.to_window(*self._campo.pos)
             w, h = self._campo.size
             y_android = Window.height - (wy + h)
@@ -536,6 +540,7 @@ class ChatScreen(MDScreen):
                         raise RuntimeError("o campo nativo não apareceu em 6 segundos")
             else:
                 self._nat.atualizar(wx, y_android, w, h)
+            self._nat.sondar()
             enviado = self._nat.pegar_enviado()
             if enviado:
                 self._campo.text = enviado

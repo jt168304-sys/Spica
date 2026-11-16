@@ -1,8 +1,9 @@
 # campo_nativo.py — campo de texto NATIVO do Android (teclado com corretor e sugestões), criado direto
-# pelo Python com pyjnius, sem classe Java própria. Erros da criação (que acontece na thread de tela do
-# Android) são guardados em .erro para o chat poder voltar ao campo comum.
+# pelo Python com pyjnius. SEM callback do Android para o Python (isso derrubava o app): todo acesso ao campo
+# acontece dentro da thread de tela do Android, e o Python só lê variáveis comuns.
+# Enter envia: o campo aceita linha nova e o texto que termina em Enter vai para a fila de envio.
 from android.runnable import run_on_ui_thread
-from jnius import PythonJavaClass, autoclass, cast, java_method
+from jnius import autoclass, cast
 
 
 def _atividade():
@@ -14,32 +15,13 @@ def _cs(texto):
     return cast("java.lang.CharSequence", autoclass("java.lang.String")(str(texto)))
 
 
-class _Ouvinte(PythonJavaClass):
-    """Avisa o Python quando a pessoa toca em Enviar no teclado."""
-    __javainterfaces__ = ["android/widget/TextView$OnEditorActionListener"]
-
-    def __init__(self, fila):
-        super().__init__()
-        self._fila = fila
-
-    @java_method("(Landroid/widget/TextView;ILandroid/view/KeyEvent;)Z")
-    def onEditorAction(self, view, acao, evento):
-        enter = evento is not None and evento.getKeyCode() == 66 and evento.getAction() == 0
-        if acao in (4, 6) or enter:     # 4 = enviar, 6 = concluído
-            texto = str(view.getText().toString()).strip()
-            if texto:
-                self._fila.append(texto)
-                view.setText(_cs(""))
-            return True
-        return False
-
-
 class CampoNativo:
     def __init__(self):
         self._campo = None
         self._quadro = None
-        self._ouvinte = None
         self._enviados = []
+        self._texto_atual = ""
+        self._visivel = True
         self.erro = ""
 
     def pronto(self):
@@ -59,10 +41,8 @@ class CampoNativo:
             Params = autoclass("android.widget.FrameLayout$LayoutParams")   # classe interna: nome com $
             Gravidade = autoclass("android.view.Gravity")
             Tipo = autoclass("android.text.InputType")
-            Editor = autoclass("android.view.inputmethod.EditorInfo")
             campo = EditText(ato)
             campo.setHint(_cs(dica))
-            campo.setSingleLine(True)
             campo.setTextColor(Color.parseColor("#fef4ec"))
             campo.setHintTextColor(Color.parseColor("#a9aeb4"))
             campo.setTextSize(16.0)
@@ -72,16 +52,16 @@ class CampoNativo:
             fundo.setColor(Color.parseColor("#1f2328"))
             fundo.setStroke(3, Color.parseColor("#a8c9bd"))
             campo.setBackground(fundo)
-            campo.setInputType(Tipo.TYPE_CLASS_TEXT | Tipo.TYPE_TEXT_FLAG_AUTO_CORRECT | Tipo.TYPE_TEXT_FLAG_CAP_SENTENCES)
-            campo.setImeOptions(Editor.IME_ACTION_SEND)
-            self._ouvinte = _Ouvinte(self._enviados)      # guarda a referência: senão o Python o descarta
-            campo.setOnEditorActionListener(self._ouvinte)
+            campo.setInputType(Tipo.TYPE_CLASS_TEXT | Tipo.TYPE_TEXT_FLAG_AUTO_CORRECT
+                               | Tipo.TYPE_TEXT_FLAG_CAP_SENTENCES | Tipo.TYPE_TEXT_FLAG_MULTI_LINE)
+            campo.setMaxLines(2)
             quadro = Quadro(ato)
             quadro.addView(campo, Params(-1, -1))
             params = Params(int(w), int(h), Gravidade.TOP | Gravidade.LEFT)
             params.leftMargin = int(x)
             params.topMargin = int(y)
             ato.addContentView(quadro, params)
+            quadro.setVisibility(0 if self._visivel else 8)
             self._campo = campo
             self._quadro = quadro
         except Exception as e:
@@ -102,9 +82,30 @@ class CampoNativo:
             self.erro = f"{type(e).__name__}: {e}"
 
     @run_on_ui_thread
+    def _sondar(self):
+        """Roda na thread de tela: lê o texto, detecta o Enter e guarda tudo em variáveis comuns."""
+        if self._campo is None:
+            return
+        try:
+            texto = str(self._campo.getText().toString())
+            if texto.endswith("\n") and texto.strip():
+                self._enviados.append(texto.strip())
+                self._campo.setText(_cs(""))
+                self._texto_atual = ""
+            else:
+                self._texto_atual = texto
+        except Exception as e:
+            self.erro = f"{type(e).__name__}: {e}"
+
+    @run_on_ui_thread
     def _zerar(self):
         if self._campo is not None:
             self._campo.setText(_cs(""))
+
+    @run_on_ui_thread
+    def _aplicar_visibilidade(self, visivel):
+        if self._quadro is not None:
+            self._quadro.setVisibility(0 if visivel else 8)     # 0 = VISIBLE, 8 = GONE
 
     def iniciar(self, x, y, w, h, dica="Mensagem..."):
         self._montar(x, y, w, h, dica)
@@ -112,11 +113,21 @@ class CampoNativo:
     def atualizar(self, x, y, w, h):
         self._mover(x, y, w, h)
 
+    def sondar(self):
+        if self._campo is not None:
+            self._sondar()
+
+    def visivel(self, mostrar):
+        if mostrar != self._visivel:
+            self._visivel = mostrar
+            self._aplicar_visibilidade(mostrar)
+
     def pegar_enviado(self):
         return self._enviados.pop(0) if self._enviados else ""
 
     def pegar_texto(self):
-        return str(self._campo.getText().toString()) if self._campo is not None else ""
+        return self._texto_atual
 
     def limpar(self):
+        self._texto_atual = ""
         self._zerar()
