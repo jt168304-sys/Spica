@@ -556,6 +556,11 @@ class ChatScreen(MDScreen):
         return True
 
     def _puxar_texto_nativo(self):
+        try:
+            _raw = self._nat._campo.getText().toString() if self._nat._campo is not None else None
+            slog(f"[Spica/Trilha] A raw_do_campo={_raw!r} cache={getattr(self._nat, '_texto_atual', None)!r}")
+        except Exception as _e:
+            slog(f"[Spica/Trilha] A erro_ao_ler_raw={_e!r}")
         if getattr(self, "_nat_ligado", False) and not getattr(self, "_nat_falhou", False):
             try:
                 texto = self._nat.pegar_texto().strip()
