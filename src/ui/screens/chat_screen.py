@@ -1,3 +1,4 @@
+from src.utils.service_log import slog
 # chat_screen.py — Spica v16 (Sincronizado com o Motor de Voz Global)
 import os
 import re
@@ -569,13 +570,17 @@ class ChatScreen(MDScreen):
         if self._aguardando and _tempo.time() - getattr(self, '_aguardando_desde', 0) > 45:
             print('[Spica/Envio] espera presa havia mais de 45 s: liberada')
             self._aguardando = False
-        print(f"[Spica/Envio] toque em enviar: nativo_ligado={getattr(self, '_nat_ligado', None)} "
+        slog(f"[Spica/Envio] toque em enviar: nativo_ligado={getattr(self, '_nat_ligado', None)} "
               f"campo_texto={self._campo.text!r} desabilitado={self._campo.disabled}")
         self._puxar_texto_nativo()
+        slog(f"[Spica/Trilha] 1 pos-puxar: aguardando={self._aguardando} nat_ligado={getattr(self, '_nat_ligado', None)} campo={self._campo.text!r}")
         if self._aguardando:
+            slog('[Spica/Trilha] 2 parou: aguardando=True')
             return
         texto = self._campo.text.strip()
+        slog(f"[Spica/Trilha] 3 texto_final={texto!r}")
         if not texto and not self._imagem_pendente:
+            slog('[Spica/Trilha] 4 parou: texto vazio')
             return
         from src.services.groq_service import GroqService
         if not GroqService.get_instance().disponivel:
