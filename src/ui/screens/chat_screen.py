@@ -451,6 +451,7 @@ class ChatScreen(MDScreen):
         self._interromper_resposta()
         self._usuario(f"{texto}")
         self._aguardando = True
+        self._aguardando_desde = __import__('time').time()
         self._show_typing()
         g = self._geracao
         GroqService.get_instance().perguntar(
@@ -564,6 +565,10 @@ class ChatScreen(MDScreen):
                 print(f"[Spica/Campo] puxar texto: {e}")
 
     def _enviar(self):
+        import time as _tempo
+        if self._aguardando and _tempo.time() - getattr(self, '_aguardando_desde', 0) > 45:
+            print('[Spica/Envio] espera presa havia mais de 45 s: liberada')
+            self._aguardando = False
         print(f"[Spica/Envio] toque em enviar: nativo_ligado={getattr(self, '_nat_ligado', None)} "
               f"campo_texto={self._campo.text!r} desabilitado={self._campo.disabled}")
         self._puxar_texto_nativo()
@@ -583,6 +588,7 @@ class ChatScreen(MDScreen):
         self._limpar_prev()
         self._campo.text = ""
         self._aguardando = True
+        self._aguardando_desde = __import__('time').time()
         self._show_typing()
         g = self._geracao
         GroqService.get_instance().perguntar(
