@@ -17,6 +17,7 @@ except Exception:
     def run_on_ui_thread(func): return func
 
 class TtsService:
+    mudo = False   # True = a Spica não fala (botão de som do chat)
     _instancia = None
 
     @classmethod
@@ -74,6 +75,10 @@ class TtsService:
         self._on_done_speak = on_done
 
     def falar(self, texto, ao_terminar=None):
+        if TtsService.mudo:
+            if ao_terminar:
+                ao_terminar()
+            return
         from src.utils.service_log import slog
         slog(f"falar() chamado, _inicializado={self._inicializado}, platform={platform}")
         if not platform == "android" or not self._inicializado:
