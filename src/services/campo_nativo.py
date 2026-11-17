@@ -46,6 +46,7 @@ class CampoNativo:
             campo.setTextColor(Color.parseColor("#fef4ec"))
             campo.setHintTextColor(Color.parseColor("#a9aeb4"))
             campo.setTextSize(16.0)
+            campo.setGravity(16 | 3)   # CENTER_VERTICAL | LEFT
             campo.setPadding(int(h // 2), 0, int(h // 2), 0)
             fundo = Gradiente()
             fundo.setCornerRadius(float(h) / 2.0)

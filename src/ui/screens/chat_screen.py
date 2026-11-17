@@ -564,6 +564,8 @@ class ChatScreen(MDScreen):
                 print(f"[Spica/Campo] puxar texto: {e}")
 
     def _enviar(self):
+        print(f"[Spica/Envio] toque em enviar: nativo_ligado={getattr(self, '_nat_ligado', None)} "
+              f"campo_texto={self._campo.text!r} desabilitado={self._campo.disabled}")
         self._puxar_texto_nativo()
         if self._aguardando:
             return
