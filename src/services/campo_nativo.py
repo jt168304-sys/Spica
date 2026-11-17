@@ -88,7 +88,7 @@ class CampoNativo:
         if self._campo is None:
             return
         try:
-            texto = str(self._campo.getText().toString())
+            texto = str(self._campo.getText())
             if texto.endswith("\n") and texto.strip():
                 self._enviados.append(texto.strip())
                 self._campo.setText(_cs(""))
@@ -131,7 +131,7 @@ class CampoNativo:
         if self._campo is None:
             return self._texto_atual
         try:
-            return str(self._campo.getText().toString())
+            return str(self._campo.getText())
         except Exception:
             return self._texto_atual
 
