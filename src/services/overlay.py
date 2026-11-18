@@ -482,11 +482,6 @@ class SpicaOverlay:
 
             if not self._fala_dirigida(texto_capturado):
                 slog(f"Fala nao dirigida a Spica, sem resposta: {texto_capturado[:60]!r}")
-                try:
-                    from src.services import chat_bus
-                    chat_bus.publicar("usuario", texto_capturado)
-                except Exception:
-                    pass
                 threading.Timer(0.5, self._ciclo_escuta_continua).start()
                 return
             self._silencios_seguidos = 0
@@ -528,16 +523,48 @@ class SpicaOverlay:
             print(f"[Spica/Overlay] Erro ao processar escuta continua: {e}")
             self._ciclo_escuta_continua()
 
+    # nomes pelos quais a pessoa chama a Spica (o reconhecimento de voz em português erra "Spica")
+    _APELIDOS = {"spica", "espica", "spika", "spyca", "espika", "fia", "filha"}
+    _RE_VERBO = re.compile(r"\b(faz|faca|cria|crie|desenha|desenhe|gera|gere|pesquisa|pesquise|procura|procure|busca|busque|"
+                           r"abre|abra|marca|marque|anota|anote|lembra|lembre|conta|conte|explica|explique|ensina|ensine|"
+                           r"traduz|traduza|calcula|calcule|resume|resuma|escreve|escreva|manda|mande|mostra|mostre|"
+                           r"diz|diga|fala|fale|toca|toque|coloca|coloque|ajuda|ajude|liga|desliga)\b")
+    _RE_PERGUNTA = re.compile(r"\b(qual|quais|quanto|quantos|quando|quem|onde|como|o que|que horas|que dia|"
+                              r"pode|poderia|consegue|sabe|me diz|me fala|me ajuda|me conta|me explica|me mostra)\b")
+    _RE_DOMINIO = re.compile(r"\b(alarme|timer|lembrete|agenda|evento|anotacao|lista|imagem|desenho|foto|mapa|"
+                             r"pesquisa|noticia|clima|previsao|tempo em|dolar|cotacao|temporada|episodio|anime|manga|"
+                             r"traducao|resumo|musica|wallpaper|logo|mensagem|whatsapp|zap|documento|arquivo)\b")
+    _RE_OPINIAO = re.compile(r"\b(o que (voce|vc|tu) acha|(voce|vc|tu) acha|sua opiniao|tua opiniao|me da (uma )?opiniao|"
+                             r"o que acha disso|concorda comigo|me aconselha|me ajuda a decidir|preciso de (uma )?ajuda)\b")
+    _RE_HORAS = re.compile(r"\b(que horas (sao|e)|que dia (e|eh) hoje)\b")
+    _RE_PEDIDO_DIRETO = re.compile(r"\b(me lembra|me lembre|me avisa|me avise|me acorda|me desperta)\b")
+
+    @staticmethod
+    def _normalizar(texto):
+        import unicodedata
+        t = unicodedata.normalize("NFD", (texto or "").lower())
+        return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
     def _fala_dirigida(self, texto):
-        """Decide se a fala é para a Spica: chamou pelo nome, ou ela acabou de falar e a pessoa
-        respondeu em poucas palavras (conversa em andamento). Conversa entre outras pessoas fica sem resposta."""
-        t = (texto or "").lower()
-        if any(_parece_spica(p) for p in re.findall(r"[a-záéíóúâêôãõç]+", t)):
+        """Decide se a fala é para a Spica: chamou por um nome, está pedindo algo ou buscando opinião, ou é a resposta
+        a uma pergunta dela. Conversa solta com outras pessoas é ignorada."""
+        t = self._normalizar(texto)
+        palavras = re.findall(r"[a-z]+", t)
+        if self._APELIDOS & set(palavras) or any(_parece_spica(p) for p in palavras):
             return True
-        # sem o nome, só conta como fala para ela se ela acabou de FAZER uma pergunta e a pessoa respondeu logo
+        # resposta curta logo depois de uma pergunta dela
         perguntou = getattr(self, "_ultima_resposta_pergunta", False)
         recente = time.time() - getattr(self, "_ultima_resposta_t", 0) < 12
-        return bool(perguntou and recente and len(t.split()) <= 10)
+        if perguntou and recente and len(palavras) <= 10:
+            return True
+        if self._RE_OPINIAO.search(t) or self._RE_HORAS.search(t) or self._RE_PEDIDO_DIRETO.search(t):
+            return True
+        tem_pedido = bool(self._RE_VERBO.search(t) or self._RE_PERGUNTA.search(t))
+        if tem_pedido and self._RE_DOMINIO.search(t):
+            return True
+        if tem_pedido and re.search(r"\b(voce|vc|tu)\b", t):
+            return True
+        return False
 
     def _puxar_assunto_sozinha(self):
         """Depois de muito tempo sem ouvir nada, ela puxa um assunto por conta propria."""

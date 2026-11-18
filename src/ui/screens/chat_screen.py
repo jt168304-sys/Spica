@@ -432,6 +432,9 @@ class ChatScreen(MDScreen):
         self._indicador.height = 0
 
     def _toggle_som(self):
+        slog(f"[Spica/Som] toque no botao: som_ativo ANTES={getattr(self, '_som_ativo', None)}")
+        Clock.schedule_once(lambda dt: slog(f"[Spica/Som] 0.5s depois do toque: som_ativo={self._som_ativo} "
+                                           f"icone={self._btn_som.icon} mudo_tts={getattr(__import__('src.services.tts_service', fromlist=['TtsService']).TtsService, 'mudo', None)}"), 0.5)
         from src.services.tts_service import TtsService
         self._som_ativo = not self._som_ativo
         TtsService.mudo = not self._som_ativo
@@ -470,6 +473,7 @@ class ChatScreen(MDScreen):
         self._hide_typing()
         self._aguardando = False
         texto = self._mostrar_resposta(texto)
+        slog(f"[Spica/Som] vai falar? som_ativo={self._som_ativo} mudo_tts={getattr(__import__('src.services.tts_service', fromlist=['TtsService']).TtsService, 'mudo', None)} texto={bool(texto)}")
         if self._som_ativo and texto:
             self._tts.falar(texto)
 
@@ -622,6 +626,7 @@ class ChatScreen(MDScreen):
         self._hide_typing()
         self._aguardando = False
         texto = self._mostrar_resposta(texto)
+        slog(f"[Spica/Som] vai falar? som_ativo={self._som_ativo} mudo_tts={getattr(__import__('src.services.tts_service', fromlist=['TtsService']).TtsService, 'mudo', None)} texto={bool(texto)}")
         if self._som_ativo and texto:
             Clock.schedule_once(lambda dt: self._tts.falar(texto), 0.3)
 
