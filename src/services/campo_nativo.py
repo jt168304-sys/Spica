@@ -23,6 +23,8 @@ class CampoNativo:
         self._texto_atual = ""
         self._visivel = True
         self.erro = ""
+        self.erro_teclado = ""
+        self.teclado_px = 0
 
     def pronto(self):
         """True só quando o campo já foi criado e colocado na tela."""
@@ -65,6 +67,10 @@ class CampoNativo:
             quadro.setVisibility(0 if self._visivel else 8)
             self._campo = campo
             self._quadro = quadro
+            try:
+                ato.getWindow().setSoftInputMode(48)    # SOFT_INPUT_ADJUST_NOTHING: não empurra a tela
+            except Exception as e_modo:
+                self.erro_teclado = f"modo do teclado: {type(e_modo).__name__}: {e_modo}"
         except Exception as e:
             self.erro = f"{type(e).__name__}: {e}"
 
@@ -95,8 +101,24 @@ class CampoNativo:
                 self._texto_atual = ""
             else:
                 self._texto_atual = texto
+            self._medir_teclado()
         except Exception as e:
             self.erro = f"{type(e).__name__}: {e}"
+
+    def _medir_teclado(self):
+        """Altura do teclado acima da barra de navegação (px). Roda na thread de tela."""
+        try:
+            decor = _atividade().getWindow().getDecorView()
+            insets = decor.getRootWindowInsets()
+            if insets is None:
+                return
+            Tipo = autoclass("android.view.WindowInsets$Type")
+            ime = int(insets.getInsets(Tipo.ime()).bottom)
+            nav = int(insets.getInsets(Tipo.navigationBars()).bottom)
+            self.teclado_px = max(0, ime - nav) if ime > 0 else 0
+        except Exception as e:
+            self.erro_teclado = f"{type(e).__name__}: {e}"
+            self.teclado_px = 0
 
     @run_on_ui_thread
     def _zerar(self):

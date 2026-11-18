@@ -369,7 +369,6 @@ class ChatScreen(MDScreen):
         )
         T.icone(self._btn_som)
         barra.add_widget(self._btn_som)
-        self._configurar_barra_mudo(self._btn_som)
 
         btn_enviar = MDIconButton(
             icon="send", 
@@ -380,6 +379,7 @@ class ChatScreen(MDScreen):
         barra.add_widget(btn_enviar)
 
         raiz.add_widget(barra)
+        self._raiz = raiz
         self.add_widget(raiz)
 
     # ── Microfone ─────────────────────────────────────────────────────────────
@@ -431,40 +431,17 @@ class ChatScreen(MDScreen):
         self._indicador.text = ""
         self._indicador.height = 0
 
-    def _configurar_barra_mudo(self, btn):
-        """Risco vermelho diagonal sobre o ícone de som, visível quando a Spica está muda."""
-        from kivy.graphics import Color, Line
-        from kivy.uix.widget import Widget
-        riscado = Widget(size_hint=(None, None), opacity=0)
-
-        def _desenhar(*a):
-            riscado.pos = btn.pos
-            riscado.size = btn.size
-            riscado.canvas.clear()
-            cx, cy = btn.x + btn.width / 2, btn.y + btn.height / 2
-            m = min(btn.width, btn.height) * 0.30
-            with riscado.canvas:
-                Color(0.92, 0.22, 0.22, 1)
-                Line(points=[cx - m, cy + m, cx + m, cy - m], width=dp(2.6), cap="round")
-
-        btn.bind(pos=_desenhar, size=_desenhar)
-        btn.add_widget(riscado)
-        btn._riscado = riscado
-        _desenhar()
-
     def _toggle_som(self):
         from src.services.tts_service import TtsService
         self._som_ativo = not self._som_ativo
         TtsService.mudo = not self._som_ativo
         if not self._som_ativo:
-            self._btn_som.icon = "volume-high"
-            T.icone(self._btn_som, T.TEXTO_2[:3] + [0.5])
-            self._btn_som._riscado.opacity = 1
+            self._btn_som.icon = "volume-off"          # ícone próprio de mudo (alto-falante cortado)
+            T.icone(self._btn_som, [0.92, 0.35, 0.35, 1])
             self._tts.parar()
         else:
             self._btn_som.icon = "volume-high"
             T.icone(self._btn_som)
-            self._btn_som._riscado.opacity = 0
 
     def _voz_recebida(self, texto):
         self._parar_mic()
@@ -552,7 +529,7 @@ class ChatScreen(MDScreen):
             w, _h = self._campo.size
             h = dp(40)
             wy = wy + (self._campo.height - h) / 2
-            y_android = Window.height - (wy + h)
+            y_android = Window.height - (wy + h) + dp(5)     # um pouco mais para baixo
             if not getattr(self, "_nat_ligado", False):
                 if not getattr(self, "_nat_tentou", False):
                     self._nat.iniciar(wx, y_android, w, h, "Mensagem...")
@@ -571,6 +548,10 @@ class ChatScreen(MDScreen):
             else:
                 self._nat.atualizar(wx, y_android, w, h)
             self._nat.sondar()
+            kb = int(getattr(self._nat, 'teclado_px', 0))
+            if getattr(self, '_raiz', None) is not None and getattr(self, '_kb_aplicado', None) != kb:
+                self._kb_aplicado = kb
+                self._raiz.padding = [0, 0, 0, kb]      # o chat encolhe: a barra fica acima do teclado
             enviado = self._nat.pegar_enviado()
             if enviado:
                 self._campo.text = enviado
