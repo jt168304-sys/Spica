@@ -432,6 +432,12 @@ class ChatScreen(MDScreen):
         self._indicador.height = 0
 
     def _toggle_som(self):
+        import time as _t_dup
+        _agora_dup = _t_dup.monotonic()
+        if _agora_dup - getattr(self, '_ult_toggle_som', 0) < 0.4:
+            slog('[Spica/Toque] toque duplicado ignorado em _toggle_som')
+            return
+        self._ult_toggle_som = _agora_dup
         slog(f"[Spica/Som] toque no botao: som_ativo ANTES={getattr(self, '_som_ativo', None)}")
         Clock.schedule_once(lambda dt: slog(f"[Spica/Som] 0.5s depois do toque: som_ativo={self._som_ativo} "
                                            f"icone={self._btn_som.icon} mudo_tts={getattr(__import__('src.services.tts_service', fromlist=['TtsService']).TtsService, 'mudo', None)}"), 0.5)
@@ -584,6 +590,12 @@ class ChatScreen(MDScreen):
                 print(f"[Spica/Campo] puxar texto: {e}")
 
     def _enviar(self):
+        import time as _t_dup
+        _agora_dup = _t_dup.monotonic()
+        if _agora_dup - getattr(self, '_ult_enviar', 0) < 0.4:
+            slog('[Spica/Toque] toque duplicado ignorado em _enviar')
+            return
+        self._ult_enviar = _agora_dup
         import time as _tempo
         if self._aguardando and _tempo.time() - getattr(self, '_aguardando_desde', 0) > 45:
             print('[Spica/Envio] espera presa havia mais de 45 s: liberada')
