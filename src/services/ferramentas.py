@@ -1004,3 +1004,45 @@ _FUNCOES["criar_timer"] = criar_timer_tool
 _FUNCOES["criar_evento"] = criar_evento_tool
 _FUNCOES["criar_texto"] = criar_texto_tool
 _FUNCOES["preparar_mensagem"] = preparar_mensagem_tool
+
+
+# ---- criar arquivos de verdade (txt, md, csv, json, html, pdf) e partes de textos grandes ----
+def criar_arquivo_tool(nome="", conteudo="", formato="txt", modo="criar"):
+    try:
+        from src.services import arquivos
+        return _json(arquivos.criar_arquivo(nome, conteudo, formato, modo))
+    except Exception as e:
+        return _json({"ok": False, "erro": f"{type(e).__name__}: {e}"})
+
+
+def converter_para_pdf_tool(arquivo=""):
+    try:
+        from src.services import arquivos
+        return _json(arquivos.converter_para_pdf(arquivo))
+    except Exception as e:
+        return _json({"ok": False, "erro": f"{type(e).__name__}: {e}"})
+
+
+FERRAMENTAS.extend([
+    {"type": "function", "function": {
+        "name": "criar_arquivo",
+        "description": ("Cria um arquivo na pasta textos do app: txt, md, csv, json, html ou pdf. "
+                        "Use sempre que a pessoa pedir um arquivo. O conteudo precisa ter quebras de linha reais "
+                        "(parágrafos separados). Textos grandes: mande em partes; a primeira com modo criar, "
+                        "as seguintes com modo acrescentar, usando o mesmo nome e formato. Nunca diga que não consegue criar arquivo."),
+        "parameters": {"type": "object", "properties": {
+            "nome": {"type": "string", "description": "nome curto, sem extensão"},
+            "conteudo": {"type": "string", "description": "texto completo, com quebras de linha reais"},
+            "formato": {"type": "string", "enum": ["txt", "md", "csv", "json", "html", "pdf"]},
+            "modo": {"type": "string", "enum": ["criar", "acrescentar"],
+                     "description": "criar (padrão) ou acrescentar (parte seguinte de um texto grande)"}},
+            "required": ["nome", "conteudo"]}}},
+    {"type": "function", "function": {
+        "name": "converter_para_pdf",
+        "description": "Converte um arquivo .txt ou .md já criado na pasta textos em PDF.",
+        "parameters": {"type": "object", "properties": {
+            "arquivo": {"type": "string", "description": "nome do arquivo, ex.: estudo ou estudo.txt"}},
+            "required": ["arquivo"]}}},
+])
+_FUNCOES["criar_arquivo"] = criar_arquivo_tool
+_FUNCOES["converter_para_pdf"] = converter_para_pdf_tool

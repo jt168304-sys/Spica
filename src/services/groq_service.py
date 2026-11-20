@@ -60,7 +60,7 @@ Voce tem buscar_web, ler_pagina, clima, calcular, consultar_anime e generate_ima
 # deles) + clima e calcular locais. Não depende do DuckDuckGo, que bloqueia o app.
 # Se o Groq recusar, cai no modo LOCAL (ferramentas.py: buscar_web, ler_pagina, ...).
 FERRAMENTAS_NATIVAS = ([{"type": "browser_search"}] +
-                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo", "criar_lembrete", "criar_timer", "criar_evento", "criar_texto", "preparar_mensagem")]
+                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo", "criar_lembrete", "criar_timer", "criar_evento", "criar_texto", "preparar_mensagem", "criar_arquivo", "converter_para_pdf")]
                        ) if FERRAMENTAS_OK else []
 
 BLOCO_NATIVO = """
@@ -95,6 +95,8 @@ Arquivos: você pode listar e ler os .txt da pasta textos com listar_arquivos e 
 Ações no celular: você pode criar lembretes (criar_lembrete), timers (criar_timer), eventos na agenda (criar_evento), anotações .txt (criar_texto) e preparar mensagens (preparar_mensagem). Quando a pessoa pedir, USE a ferramenta na hora. Lembrete, timer e anotação não precisam de confirmação. Nunca diga que não consegue criar arquivo ou lembrete: use a ferramenta. Você nunca envia mensagem sozinha; só prepara.
 
 Resultado das ações: só diga que criou, marcou, agendou ou enviou algo DEPOIS que a ferramenta devolver ok true. Se devolver ok false ou erro, conte o erro em palavras simples e não finja que deu certo. Se não chamou a ferramenta, não diga que fez.
+
+Arquivos: para criar txt, md, csv, json, html ou pdf, use criar_arquivo (nome, conteudo, formato). O conteudo tem quebras de linha reais, em parágrafos, nunca tudo numa linha só. Texto grande (mais de cerca de 800 palavras): mande em partes, a primeira com modo criar e as seguintes com modo acrescentar. Para PDF de texto grande, crie o txt por partes e depois use converter_para_pdf. Nunca diga que não consegue criar arquivo: crie e informe o nome.
 
 Integridade (importante):
 - Nunca responda seco com 'sou só uma IA, não posso fazer isso'. Se o pedido não der do jeito exato, faça a versão mais próxima que dá, diga em uma frase o que mudou e faça.
