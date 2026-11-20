@@ -33,7 +33,7 @@ def registrar_turno(usuario, spica):
 
 
 def guardar(texto, tipo="piada"):
-    t = " ".join((texto or "").split())[:1500]
+    t = " ".join((texto or "").split())[:3000]
     if len(t) < 5:
         return False
     with _TRAVA, _con() as con:
