@@ -62,6 +62,16 @@ def escrever(nome, conteudo):
 def _normalizar_texto(conteudo):
     t = str(conteudo or "")
     t = t.replace("\r\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    
+    # Separa o texto em parágrafos se não houver quebras de linha e o texto for maior que 300 caracteres
+    if "\n" not in t and len(t) > 300:
+        frases = t.split(". ")
+        paragrafos = []
+        for i in range(0, len(frases), 4):
+            paragrafo = ". ".join(frases[i:i + 4])
+            paragrafos.append(paragrafo)
+        t = "\n\n".join(paragrafos)
+    
     return t
 
 
