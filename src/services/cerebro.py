@@ -101,9 +101,34 @@ def refinar_prompt_imagem(pedido, prompt_en):
     return prompt_en
 
 
+REVISOR = ("Você é um revisor rigoroso. Verifique: 1) o texto atende a TODOS os pontos do pedido; "
+           "2) está completo, sem trechos cortados nem resumidos; 3) está em parágrafos reais. "
+           "Se tudo estiver certo, responda somente APROVADO. Caso contrário, responda REPROVADO e liste "
+           "até 5 falhas objetivas.")
+
+
+def _log(msg):
+    try:
+        from src.utils.service_log import slog
+        slog(f"[Spica/Cerebro] {msg}")
+    except Exception:
+        print(f"[Spica/Cerebro] {msg}")
+
+
+def _revisar(pedido, texto):
+    return _cf([
+        {"role": "system", "content": REVISOR},
+        {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{texto}"},
+    ], max_tokens=400)
+
+
+def _aprovado(revisao):
+    return (revisao or "").strip().upper().startswith("APROVADO")
+
+
 def colaborar_texto(pedido):
-    """O Groq escreve o texto completo; o Cloudflare revisa; se reprovar, o Groq corrige uma vez.
-    Devolve (texto, relatório curto)."""
+    """O Groq escreve; o Cloudflare revisa com rigor. Se reprovar, o Groq corrige e o Cloudflare revisa de novo.
+    Se a segunda revisão também reprovar, o texto sai marcado como NÃO APROVADO. Devolve (texto, relatório)."""
     rascunho = _groq([
         {"role": "system", "content": "Você escreve textos completos e detalhados, em parágrafos reais, sem resumir e sem deixar tudo numa linha só."},
         {"role": "user", "content": pedido},
@@ -111,21 +136,35 @@ def colaborar_texto(pedido):
     if not rascunho:
         raise RuntimeError("o Groq não devolveu texto")
     if not cf_disponivel():
+        _log("revisão pulada: Cloudflare sem limite hoje ou não configurado")
         return rascunho, "revisão pulada (Cloudflare sem limite hoje ou não configurado)"
     try:
-        revisao = _cf([
-            {"role": "system", "content": "Você revisa um texto escrito por outro modelo. Responda APROVADO se o texto estiver completo e correto para o pedido. Caso contrário, liste no máximo 5 pontos do que falta ou está errado."},
-            {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{rascunho}"},
-        ], max_tokens=400)
+        rev1 = _revisar(pedido, rascunho)
     except Exception as e:
+        _log(f"revisão indisponível: {e}")
         return rascunho, f"revisão indisponível ({e})"
-    if revisao.upper().startswith("APROVADO"):
+    if _aprovado(rev1):
+        _log("aprovado na 1ª revisão")
         return rascunho, "aprovado pela revisão do Cloudflare"
+    _log("reprovado na 1ª revisão; o Groq corrige")
     try:
         corrigido = _groq([
             {"role": "system", "content": "Você corrige um texto seguindo a revisão. Devolva o texto completo, sem comentários."},
-            {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{rascunho}\n\nRevisão:\n{revisao}"},
-        ], max_tokens=2500)
-        return (corrigido or rascunho), "corrigido após a revisão do Cloudflare"
+            {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{rascunho}\n\nRevisão:\n{rev1}"},
+        ], max_tokens=2500) or rascunho
     except Exception as e:
-        return rascunho, f"correção falhou ({e}); usei o rascunho"
+        _log(f"correção falhou: {e}")
+        return rascunho, f"NÃO REVISADO: a correção falhou ({e}); usei o rascunho"
+    if not cf_disponivel():
+        _log("corrigido, mas sem nova revisão (limite do Cloudflare)")
+        return corrigido, "corrigido, mas sem nova revisão (limite do Cloudflare)"
+    try:
+        rev2 = _revisar(pedido, corrigido)
+    except Exception as e:
+        _log(f"segunda revisão falhou: {e}")
+        return corrigido, f"corrigido; a 2ª revisão falhou ({e})"
+    if _aprovado(rev2):
+        _log("aprovado na 2ª revisão")
+        return corrigido, "corrigido e aprovado na 2ª revisão do Cloudflare"
+    _log("reprovado na 2ª revisão")
+    return corrigido, "NÃO APROVADO pela revisão do Cloudflare após a correção. Falhas: " + (rev2 or "")[:300]

@@ -5,47 +5,33 @@ from kivy.effects.scroll import ScrollEffect
 
 
 class _RolagemDiag(ScrollView):
-    """Rolagem que registra no spica_service_log o arrasto inteiro: quem pegou o toque, os movimentos e a posição final."""
-
-    @staticmethod
-    def _quem(touch):
-        nomes = []
-        for ref in getattr(touch, "grab_list", []):
-            obj = ref() if callable(ref) else ref
-            nomes.append(type(obj).__name__ if obj is not None else "?")
-        return nomes
+    """Rolagem com arrasto próprio: o toque é capturado no início do arrasto e a posição é calculada pelo
+    deslocamento do dedo. Não depende do ScrollEffect, que travava depois do primeiro arrasto. Toques curtos
+    continuam chegando aos botões."""
 
     def on_touch_down(self, touch):
+        # arrasto próprio
         resultado = super().on_touch_down(touch)
-        if self.collide_point(*touch.pos):
-            touch.ud["_rol_y0"] = self.scroll_y
-            touch.ud["_rol_n"] = 0
-            try:
-                from src.utils.service_log import slog
-                slog(f"[Spica/Rolagem] DOWN pos={touch.pos} grab={self._quem(touch)} consumido={resultado} scroll_y={self.scroll_y:.3f}")
-            except Exception:
-                pass
+        if self.collide_point(*touch.pos) and self.children:
+            touch.grab(self)
+            touch.ud["_rol_y"] = touch.y
+            touch.ud["_rol_s"] = self.scroll_y
         return resultado
 
     def on_touch_move(self, touch):
-        resultado = super().on_touch_move(touch)
-        if "_rol_n" in touch.ud:
-            touch.ud["_rol_n"] += 1
-            if touch.ud["_rol_n"] in (1, 10, 30):
-                try:
-                    from src.utils.service_log import slog
-                    slog(f"[Spica/Rolagem] MOVE n={touch.ud['_rol_n']} dy={touch.y - touch.oy:.1f} scroll_y={self.scroll_y:.3f} consumido={resultado}")
-                except Exception:
-                    pass
-        return resultado
+        if touch.grab_current is self and "_rol_y" in touch.ud:
+            conteudo = self.children[0].height
+            visivel = self.height
+            if conteudo > visivel:
+                dy = touch.y - touch.ud["_rol_y"]
+                self.scroll_y = min(1.0, max(0.0, touch.ud["_rol_s"] - dy / (conteudo - visivel)))
+            return True
+        return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
-        if "_rol_n" in touch.ud:
-            try:
-                from src.utils.service_log import slog
-                slog(f"[Spica/Rolagem] UP moves={touch.ud['_rol_n']} scroll_y {touch.ud.get('_rol_y0', 0):.3f} -> {self.scroll_y:.3f}")
-            except Exception:
-                pass
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            return True
         return super().on_touch_up(touch)
 from kivy.uix.switch import Switch
 from kivy.clock import Clock
