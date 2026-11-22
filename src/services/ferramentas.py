@@ -508,6 +508,7 @@ def gerar_imagem(assunto=None, acao=None, enquadramento=None, estilo=None, luz=N
             print(f"[Spica/Mapa] {e}")
         prompt = montar_prompt_arte(base_texto, acao or "", enquadramento or "", estilo or "",
                                     luz or "", fundo or "", categoria or "")
+        prompt = _cerebro_refinar_prompt(base_texto, prompt)
         quantidade = 1      # uma imagem por pedido (qualidade acima de variações)
         largura_px, altura_px = _tamanho(largura, altura, formato)
         feitas, motor, falhas = 0, "", []
@@ -1046,3 +1047,38 @@ FERRAMENTAS.extend([
 ])
 _FUNCOES["criar_arquivo"] = criar_arquivo_tool
 _FUNCOES["converter_para_pdf"] = converter_para_pdf_tool
+
+
+# ---- colaboração Groq + Cloudflare (texto completo e revisão de prompt de imagem) ----
+def criar_arquivo_colaborativo_tool(nome="", pedido="", formato="txt"):
+    try:
+        from src.services import arquivos, cerebro
+        texto, relatorio = cerebro.colaborar_texto(pedido)
+        info = arquivos.criar_arquivo(nome, texto, formato, "criar")
+        info["revisao"] = relatorio
+        return _json(info)
+    except Exception as e:
+        return _json({"ok": False, "erro": f"{type(e).__name__}: {e}"})
+
+
+def _cerebro_refinar_prompt(pedido, prompt):
+    try:
+        from src.services import cerebro
+        return cerebro.refinar_prompt_imagem(pedido, prompt)
+    except Exception as e:
+        print(f"[Spica/Cerebro] {e}")
+        return prompt
+
+
+FERRAMENTAS.append({"type": "function", "function": {
+    "name": "criar_arquivo_colaborativo",
+    "description": ("Para textos detalhados, completos ou com muitas informações (pesquisas, relatórios, "
+                    "estudos, PDFs longos), use esta ferramenta no lugar de criar_arquivo: o Groq escreve o "
+                    "texto completo e o Cloudflare revisa antes de gravar. 'pedido' é o que a pessoa pediu, "
+                    "com todos os detalhes."),
+    "parameters": {"type": "object", "properties": {
+        "nome": {"type": "string", "description": "nome curto, sem extensão"},
+        "pedido": {"type": "string", "description": "o pedido completo, com os detalhes"},
+        "formato": {"type": "string", "enum": ["txt", "md", "html", "pdf"]}},
+        "required": ["nome", "pedido"]}}})
+_FUNCOES["criar_arquivo_colaborativo"] = criar_arquivo_colaborativo_tool

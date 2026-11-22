@@ -1,7 +1,7 @@
 # mood_service.py — Sistema de humor/expressões da Spica
 # A IA se autoclassifica no fim de cada resposta com uma tag tipo [HUMOR:surpresa],
 # que é lida aqui, removida do texto (o usuário nunca vê/ouve a tag), e traduzida
-# pra uma expressão do modelo Live2D via o assets/live2d/humor.json (editável).
+# pra uma expressão do modelo Live2D via o assets/expressoes/humor.json (editável).
 import os
 import re
 import json

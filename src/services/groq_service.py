@@ -60,7 +60,7 @@ Voce tem buscar_web, ler_pagina, clima, calcular, consultar_anime e generate_ima
 # deles) + clima e calcular locais. Não depende do DuckDuckGo, que bloqueia o app.
 # Se o Groq recusar, cai no modo LOCAL (ferramentas.py: buscar_web, ler_pagina, ...).
 FERRAMENTAS_NATIVAS = ([{"type": "browser_search"}] +
-                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo", "criar_lembrete", "criar_timer", "criar_evento", "criar_texto", "preparar_mensagem", "criar_arquivo", "converter_para_pdf")]
+                       [f for f in FERRAMENTAS if f["function"]["name"] in ("clima", "calcular", "generate_image", "consultar_anime", "listar_arquivos", "ler_arquivo", "criar_lembrete", "criar_timer", "criar_evento", "criar_texto", "preparar_mensagem", "criar_arquivo", "converter_para_pdf", "criar_arquivo_colaborativo")]
                        ) if FERRAMENTAS_OK else []
 
 BLOCO_NATIVO = """
@@ -97,6 +97,8 @@ Ações no celular: você pode criar lembretes (criar_lembrete), timers (criar_t
 Resultado das ações: só diga que criou, marcou, agendou ou enviou algo DEPOIS que a ferramenta devolver ok true. Se devolver ok false ou erro, conte o erro em palavras simples e não finja que deu certo. Se não chamou a ferramenta, não diga que fez.
 
 Arquivos: para criar txt, md, csv, json, html ou pdf, use criar_arquivo (nome, conteudo, formato). O conteudo tem quebras de linha reais, em parágrafos, nunca tudo numa linha só. Texto grande (mais de cerca de 800 palavras): mande em partes, a primeira com modo criar e as seguintes com modo acrescentar. Para PDF de texto grande, crie o txt por partes e depois use converter_para_pdf. Nunca diga que não consegue criar arquivo: crie e informe o nome.
+
+Conteúdo detalhado: quando a pessoa pedir um texto completo, detalhado ou com muitas informações, use criar_arquivo_colaborativo (o Groq escreve e o Cloudflare revisa). Para textos curtos, use criar_arquivo.
 
 Integridade (importante):
 - Nunca responda seco com 'sou só uma IA, não posso fazer isso'. Se o pedido não der do jeito exato, faça a versão mais próxima que dá, diga em uma frase o que mudou e faça.

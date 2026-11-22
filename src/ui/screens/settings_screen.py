@@ -2,6 +2,20 @@
 from kivy.metrics import dp
 from kivy.uix.scrollview import ScrollView
 from kivy.effects.scroll import ScrollEffect
+
+
+class _RolagemDiag(ScrollView):
+    """Rolagem que registra no spica_service_log quem recebe o toque, para achar o que bloqueia o arrasto."""
+    def on_touch_down(self, touch):
+        resultado = super().on_touch_down(touch)
+        if self.collide_point(*touch.pos):
+            try:
+                from src.utils.service_log import slog
+                quem = [type(w).__name__ for w in getattr(touch, "grab_list", [])]
+                slog(f"[Spica/Rolagem] toque em {touch.pos} grab={quem} consumido={resultado}")
+            except Exception:
+                pass
+        return resultado
 from kivy.uix.switch import Switch
 from kivy.clock import Clock
 from kivymd.uix.screen import MDScreen
@@ -30,7 +44,7 @@ class SettingsScreen(MDScreen):
             esquerda=("arrow-left", lambda: MDApp.get_running_app().navigate_to("chat")),
         ))
 
-        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True, bar_width=dp(6),
+        scroll = _RolagemDiag(do_scroll_x=False, do_scroll_y=True, bar_width=dp(6),
                             scroll_type=["content", "bars"], scroll_timeout=150,
                             scroll_distance=dp(10), effect_cls=ScrollEffect)
         # BoxLayout com altura igual à soma dos cards (o MDList não se estica e travava a rolagem)
@@ -38,8 +52,7 @@ class SettingsScreen(MDScreen):
         lista.bind(minimum_height=lista.setter("height"))
 
         # Adicionando os cards
-        lista.add_widget(self._card_api_key())
-        lista.add_widget(self._card_cloudflare())
+        lista.add_widget(self._card_apis())
         lista.add_widget(self._card_memoria())
         lista.add_widget(self._card_bolha())
 
@@ -85,40 +98,6 @@ class SettingsScreen(MDScreen):
         card.add_widget(self._descricao("VTuber-IA • Python + KivyMD + Groq", dp(22)))
         return card
 
-    def _card_api_key(self):
-        card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(124),
-            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
-        )
-        card.add_widget(self._titulo("Groq API Key"))
-        btn = MDRaisedButton(
-            text="Configurar Chave API",
-            size_hint_y=None, height=dp(40),
-            on_release=lambda x: self._dialogo_api_key()
-        )
-        self._botao_principal(btn)
-        card.add_widget(btn)
-        return card
-
-    def _card_cloudflare(self):
-        app = MDApp.get_running_app()
-        pronto = bool(app.settings.get("cf_account", "") and app.settings.get("cf_token", ""))
-        card = MDCard(
-            orientation="vertical", size_hint_y=None, height=dp(225),
-            padding=dp(20), spacing=dp(10), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
-        )
-        card.add_widget(self._titulo("Imagens (Cloudflare)"))
-        card.add_widget(self._descricao(
-            "Cria imagens com FLUX (cota diária grátis). " + ("Configurado." if pronto else "Falta configurar."), dp(44)))
-        btn = MDRaisedButton(text="Configurar Cloudflare", size_hint_y=None, height=dp(40),
-                             on_release=lambda x: self._dialogo_cloudflare())
-        self._botao_principal(btn)
-        card.add_widget(btn)
-        btn_teste = MDFlatButton(text="Testar conexão", on_release=lambda x: self._testar_cloudflare())
-        T.estilizar(btn_teste, theme_text_color="Custom", text_color=T.MENTA)
-        card.add_widget(btn_teste)
-        return card
-
     def _testar_cloudflare(self):
         """Gera uma imagem pequena de teste e mostra o resultado (ou o motivo da falha)."""
         import threading
@@ -138,40 +117,6 @@ class SettingsScreen(MDScreen):
             Clock.schedule_once(lambda dt: toast(msg), 0)
 
         threading.Thread(target=trabalho, daemon=True).start()
-
-    def _dialogo_cloudflare(self):
-        from kivymd.uix.dialog import MDDialog
-        from kivymd.uix.textfield import MDTextField
-
-        app = MDApp.get_running_app()
-        caixa = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None, height=dp(150))
-        campo_conta = MDTextField(hint_text="Account ID (32 caracteres)",
-                                  text=app.settings.get("cf_account", ""), mode="rectangle")
-        campo_token = MDTextField(hint_text="API Token (Workers AI)",
-                                  text=app.settings.get("cf_token", ""), mode="rectangle", password=True)
-        for campo in (campo_conta, campo_token):
-            T.estilizar(campo, line_color_normal=T.BORDA, line_color_focus=T.MENTA,
-                        text_color_normal=T.CREME, text_color_focus=T.CREME,
-                        hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
-            caixa.add_widget(campo)
-
-        def salvar(*a):
-            app.settings.set("cf_account", campo_conta.text.strip())
-            app.settings.set("cf_token", campo_token.text.strip())
-            dialogo.dismiss()
-            self.clear_widgets()
-            Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
-
-        btn_cancelar = MDFlatButton(text="Cancelar")
-        btn_salvar = MDFlatButton(text="Salvar")
-        T.estilizar(btn_cancelar, theme_text_color="Custom", text_color=T.TEXTO_2)
-        T.estilizar(btn_salvar, theme_text_color="Custom", text_color=T.MENTA)
-        dialogo = MDDialog(title="Cloudflare (imagens)", type="custom", content_cls=caixa,
-                           buttons=[btn_cancelar, btn_salvar])
-        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
-        btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
-        btn_salvar.bind(on_release=salvar)
-        dialogo.open()
 
     def _card_memoria(self):
         try:
@@ -359,24 +304,49 @@ class SettingsScreen(MDScreen):
         if cfg["chave"] == "theme_mode":
             MDApp.get_running_app().toggle_theme()
 
-    def _dialogo_api_key(self):
+    def _card_apis(self):
+        app = MDApp.get_running_app()
+        groq_ok = bool((app.settings.get("api_key", "") or "").strip())
+        cf_ok = bool((app.settings.get("cf_account", "") or "").strip() and (app.settings.get("cf_token", "") or "").strip())
+        card = MDCard(
+            orientation="vertical", size_hint_y=None, height=dp(230),
+            padding=dp(20), spacing=dp(8), radius=[dp(16)], elevation=0, md_bg_color=T.SUPERFICIE,
+        )
+        card.add_widget(self._titulo("Chaves das IAs"))
+        card.add_widget(self._descricao(
+            f"Groq (conversa): {'configurada' if groq_ok else 'pendente'}\n"
+            f"Cloudflare (imagens e revisão): {'configurado' if cf_ok else 'pendente'}", dp(44)))
+        btn = MDRaisedButton(text="Configurar APIs", size_hint_y=None, height=dp(40),
+                             on_release=lambda x: self._dialogo_apis())
+        self._botao_principal(btn)
+        card.add_widget(btn)
+        btn_teste = MDFlatButton(text="Testar Cloudflare", on_release=lambda x: self._testar_cloudflare())
+        T.estilizar(btn_teste, theme_text_color="Custom", text_color=T.MENTA)
+        card.add_widget(btn_teste)
+        return card
+
+    def _dialogo_apis(self):
         from kivymd.uix.dialog import MDDialog
         from kivymd.uix.textfield import MDTextField
 
         app = MDApp.get_running_app()
-
-        campo = MDTextField(
-            hint_text="Cole sua Groq API key aqui",
-            text=app.settings.get("api_key", ""),
-            mode="rectangle",
-            password=True,
-        )
-        T.estilizar(campo, line_color_normal=T.BORDA, line_color_focus=T.MENTA,
-                    text_color_normal=T.CREME, text_color_focus=T.CREME,
-                    hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
+        caixa = MDBoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None, height=dp(300))
+        campo_groq = MDTextField(hint_text="Groq API Key (conversa)",
+                                 text=app.settings.get("api_key", ""), mode="rectangle", password=True)
+        campo_conta = MDTextField(hint_text="Cloudflare Account ID",
+                                  text=app.settings.get("cf_account", ""), mode="rectangle")
+        campo_token = MDTextField(hint_text="Cloudflare API Token (Workers AI)",
+                                  text=app.settings.get("cf_token", ""), mode="rectangle", password=True)
+        for campo in (campo_groq, campo_conta, campo_token):
+            T.estilizar(campo, line_color_normal=T.BORDA, line_color_focus=T.MENTA,
+                        text_color_normal=T.CREME, text_color_focus=T.CREME,
+                        hint_text_color_normal=T.TEXTO_2, hint_text_color_focus=T.MENTA)
+            caixa.add_widget(campo)
 
         def salvar(*a):
-            app.settings.set("api_key", campo.text.strip())
+            app.settings.set("api_key", campo_groq.text.strip())
+            app.settings.set("cf_account", campo_conta.text.strip())
+            app.settings.set("cf_token", campo_token.text.strip())
             dialogo.dismiss()
             self.clear_widgets()
             Clock.schedule_once(lambda dt: self._construir_layout(), 0.1)
@@ -385,14 +355,9 @@ class SettingsScreen(MDScreen):
         btn_salvar = MDFlatButton(text="Salvar")
         T.estilizar(btn_cancelar, theme_text_color="Custom", text_color=T.TEXTO_2)
         T.estilizar(btn_salvar, theme_text_color="Custom", text_color=T.MENTA)
-
-        dialogo = MDDialog(
-            title="Groq API Key",
-            type="custom",
-            content_cls=campo,
-            buttons=[btn_cancelar, btn_salvar],
-        )
-        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)  # MDDialog exige 4 valores
+        dialogo = MDDialog(title="Chaves das IAs", type="custom", content_cls=caixa,
+                           buttons=[btn_cancelar, btn_salvar])
+        T.estilizar(dialogo, md_bg_color=T.SUPERFICIE, radius=[dp(20)] * 4)
         btn_cancelar.bind(on_release=lambda x: dialogo.dismiss())
         btn_salvar.bind(on_release=salvar)
         dialogo.open()
