@@ -94,6 +94,7 @@ def _pdf_bytes(titulo, texto):
     paginas = [linhas[i:i + por_pagina] for i in range(0, len(linhas), por_pagina)]
 
     def esc(s):
+        s = _normalizar_unicode(s)
         b = s.encode("cp1252", "replace").decode("latin-1")
         return b.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
@@ -152,7 +153,7 @@ def criar_arquivo(nome, conteudo, formato="txt", modo="criar"):
     destino = _caminho_livre(pasta_textos, base, formato)
     if formato == "pdf":
         with open(destino, "wb") as arq:
-            arq.write(_pdf_bytes(base, texto))
+            arq.write(_pdf_bytes(base, _limpar_markdown(texto)))
     else:
         with open(destino, "w", encoding="utf-8") as arq:
             arq.write(texto)
@@ -175,7 +176,41 @@ def converter_para_pdf(arquivo):
         texto = arq.read()
     destino = _caminho_livre(pasta_textos, base, "pdf")
     with open(destino, "wb") as arq:
-        arq.write(_pdf_bytes(base, texto))
+        arq.write(_pdf_bytes(base, _limpar_markdown(texto)))
     return {"ok": True, "arquivo": os.path.basename(destino),
             "resultado": f"PDF criado: {os.path.basename(destino)}",
             "tamanho_bytes": os.path.getsize(destino)}
+
+
+_SUBSTITUICOES = {
+    "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2212": "-", "\u2032": "'", "\u2033": '"',
+    "\u00a0": " ", "\u200b": "", "\u2026": "...", "\u2265": ">=", "\u2264": "<=", "\u2192": "->", "\u2713": "OK",
+}
+
+
+def _normalizar_unicode(texto):
+    t = str(texto or "")
+    for de, para in _SUBSTITUICOES.items():
+        t = t.replace(de, para)
+    return t
+
+
+def _limpar_markdown(texto):
+    """Tira a marcação de markdown que não faz sentido num PDF: títulos viram linha em destaque, negrito sai,
+    linhas de separador somem, marcadores viram bolinha."""
+    import re as _re
+    t = _normalizar_unicode(texto)
+    linhas = []
+    for l in t.split("\n"):
+        s = l.strip()
+        if _re.fullmatch(r"[-=*_ ]{3,}", s):
+            linhas.append("")
+            continue
+        s = _re.sub(r"^#{1,6}\s*", "", s)
+        s = _re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+        s = _re.sub(r"__(.+?)__", r"\1", s)
+        s = _re.sub(r"`([^`]+)`", r"\1", s)
+        s = _re.sub(r"^\s*[-*]\s+", "\u2022 ", s)
+        linhas.append(s)
+    saida = "\n".join(linhas)
+    return _re.sub(r"\n{3,}", "\n\n", saida).strip()

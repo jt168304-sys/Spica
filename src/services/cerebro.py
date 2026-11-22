@@ -101,10 +101,22 @@ def refinar_prompt_imagem(pedido, prompt_en):
     return prompt_en
 
 
-REVISOR = ("Você é um revisor rigoroso. Verifique: 1) o texto atende a TODOS os pontos do pedido; "
-           "2) está completo, sem trechos cortados nem resumidos; 3) está em parágrafos reais. "
-           "Se tudo estiver certo, responda somente APROVADO. Caso contrário, responda REPROVADO e liste "
-           "até 5 falhas objetivas.")
+import re as _re
+
+REVISOR = (
+    "Você é um revisor exigente. Analise o texto em relação ao pedido e responda EXATAMENTE neste formato:\n"
+    "VEREDITO: APROVADO ou REPROVADO\n"
+    "FALHAS:\n- itens que não atendem ao pedido, estão incompletos, resumidos ou mal organizados (vazio se nenhum)\n"
+    "FATOS_A_CONFIRMAR:\n- afirmações específicas (datas, números, nomes, lançamentos, recursos) que o texto não sustenta "
+    "com o próprio pedido (vazio se nenhuma)\n"
+    "MELHORIAS:\n- pelo menos 2 sugestões concretas para o Groq aplicar (estrutura, profundidade, clareza, exemplos, ordem)\n"
+    "Regras: REPROVADO se houver qualquer falha ou fato a confirmar. Não reescreva o texto. Não elogie."
+)
+
+GROQ_SISTEMA = (
+    "Você escreve textos completos e detalhados, em parágrafos reais, sem resumir. Não invente datas, números, nomes, "
+    "lançamentos nem recursos: se algo não for certo, escreva [a confirmar]. Não use markdown (sem #, sem **, sem ---)."
+)
 
 
 def _log(msg):
@@ -119,18 +131,29 @@ def _revisar(pedido, texto):
     return _cf([
         {"role": "system", "content": REVISOR},
         {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{texto}"},
-    ], max_tokens=400)
+    ], max_tokens=700)
 
 
-def _aprovado(revisao):
-    return (revisao or "").strip().upper().startswith("APROVADO")
+def _secao(rev, nome):
+    m = _re.search(nome + r":\s*\n((?:\s*-.*\n?)*)", rev or "", _re.I)
+    return [l.strip()[1:].strip() for l in (m.group(1).splitlines() if m else []) if l.strip().startswith("-") and l.strip()[1:].strip()]
+
+
+def _problemas(rev):
+    """Lista de falhas e fatos a confirmar. Vazia só se o revisor não apontou nada."""
+    return _secao(rev, "FALHAS") + _secao(rev, "FATOS_A_CONFIRMAR")
+
+
+def _melhorias(rev):
+    return _secao(rev, "MELHORIAS")
 
 
 def colaborar_texto(pedido):
-    """O Groq escreve; o Cloudflare revisa com rigor. Se reprovar, o Groq corrige e o Cloudflare revisa de novo.
-    Se a segunda revisão também reprovar, o texto sai marcado como NÃO APROVADO. Devolve (texto, relatório)."""
+    """O Groq escreve; o Cloudflare revisa com rigor e sempre traz melhorias; o Groq aplica as melhorias; o Cloudflare
+    revisa de novo. Só sai como aprovado se a segunda revisão não apontar falhas nem fatos a confirmar.
+    Devolve (texto, relatório)."""
     rascunho = _groq([
-        {"role": "system", "content": "Você escreve textos completos e detalhados, em parágrafos reais, sem resumir e sem deixar tudo numa linha só."},
+        {"role": "system", "content": GROQ_SISTEMA},
         {"role": "user", "content": pedido},
     ], max_tokens=2500)
     if not rascunho:
@@ -143,14 +166,16 @@ def colaborar_texto(pedido):
     except Exception as e:
         _log(f"revisão indisponível: {e}")
         return rascunho, f"revisão indisponível ({e})"
-    if _aprovado(rev1):
-        _log("aprovado na 1ª revisão")
-        return rascunho, "aprovado pela revisão do Cloudflare"
-    _log("reprovado na 1ª revisão; o Groq corrige")
+    _log(f"revisão 1: falhas/fatos={len(_problemas(rev1))} melhorias={len(_melhorias(rev1))}")
+    plano = "\n".join(["Falhas e fatos a corrigir:"] + ["- " + p for p in _problemas(rev1)]
+                      + ["Melhorias a aplicar:"] + ["- " + m for m in _melhorias(rev1)])
     try:
         corrigido = _groq([
-            {"role": "system", "content": "Você corrige um texto seguindo a revisão. Devolva o texto completo, sem comentários."},
-            {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{rascunho}\n\nRevisão:\n{rev1}"},
+            {"role": "system", "content": (
+                "Você reescreve o texto aplicando a revisão. Obrigatório: 1) corrija todas as falhas; 2) aplique todas as "
+                "melhorias; 3) para cada fato a confirmar, remova-o ou escreva [a confirmar]; 4) não invente nada; "
+                "5) sem markdown; parágrafos separados por linha em branco. Devolva só o texto final.")},
+            {"role": "user", "content": f"Pedido: {pedido}\n\nTexto:\n{rascunho}\n\n{plano}"},
         ], max_tokens=2500) or rascunho
     except Exception as e:
         _log(f"correção falhou: {e}")
@@ -163,8 +188,9 @@ def colaborar_texto(pedido):
     except Exception as e:
         _log(f"segunda revisão falhou: {e}")
         return corrigido, f"corrigido; a 2ª revisão falhou ({e})"
-    if _aprovado(rev2):
+    pend = _problemas(rev2)
+    if not pend:
         _log("aprovado na 2ª revisão")
-        return corrigido, "corrigido e aprovado na 2ª revisão do Cloudflare"
-    _log("reprovado na 2ª revisão")
-    return corrigido, "NÃO APROVADO pela revisão do Cloudflare após a correção. Falhas: " + (rev2 or "")[:300]
+        return corrigido, f"aprovado na 2ª revisão do Cloudflare ({len(_melhorias(rev1))} melhorias aplicadas)"
+    _log(f"NÃO APROVADO na 2ª revisão: {len(pend)} pendência(s)")
+    return corrigido, "NÃO APROVADO pela revisão do Cloudflare. Pendências: " + "; ".join(pend)[:400]
